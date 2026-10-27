@@ -1,0 +1,35 @@
+演示用典型表情照片（亚洲人脸，表情夸张，已按 FER 核对，点选或直接上传均可）
+
+命名规则：序号-汉字标签-中文名-英文id[-b|-c].jpg
+每种情绪三张：A 主套、B 对照（-b）、C 对照（-c）。
+
+A 组 01–07（主演示）：
+  01-喜-喜悦-happy.jpg
+  02-怒-愤怒-angry.jpg
+  03-哀-悲伤-sad.jpg
+  04-惧-恐惧-fear.jpg
+  05-惊-惊讶-surprise.jpg
+  06-厌-厌恶-disgust.jpg
+  07-中性-平静-neutral.jpg
+
+B 组 08–14（第二套，文件名带 -b）：
+  08-喜-喜悦-happy-b.jpg
+  09-怒-愤怒-angry-b.jpg
+  10-哀-悲伤-sad-b.jpg
+  11-惧-恐惧-fear-b.jpg
+  12-惊-惊讶-surprise-b.jpg
+  13-厌-厌恶-disgust-b.jpg
+  14-中性-平静-neutral-b.jpg
+
+C 组 15–21（第三套，文件名带 -c）：
+  15-喜-喜悦-happy-c.jpg
+  16-怒-愤怒-angry-c.jpg
+  17-哀-悲伤-sad-c.jpg
+  18-惧-恐惧-fear-c.jpg
+  19-惊-惊讶-surprise-c.jpg
+  20-厌-厌恶-disgust-c.jpg
+  21-中性-平静-neutral-c.jpg
+
+同目录还有 happy.jpg / angry.jpg 等短名，内容和 A 组相同，方便按英文快速找。
+
+演示建议：切到「上传照片」，按 01→07 走完七种情绪，再点 08 或 15 看同一情绪的另一张脸。

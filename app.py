@@ -286,7 +286,7 @@ def track():
 
     rec = get_recognizer()
     face_mode = _read_face_mode()
-    result = rec.predict_bytes(frames[0], want_crop=False, mode=face_mode)
+    result = rec.predict_track_bytes(frames[0], mode=face_mode)
     result["track"] = True
     return jsonify(result)
 
@@ -413,7 +413,13 @@ def lyrics_api(song_id: str):
 
     title = (request.args.get("title") or "").strip()
     artist = (request.args.get("artist") or "").strip()
-    return jsonify(get_lyrics(song_id, title=title, artist=artist))
+    duration = 0.0
+    raw_dur = (request.args.get("duration") or "").strip()
+    try:
+        duration = float(raw_dur or 0.0)
+    except ValueError:
+        duration = 0.0
+    return jsonify(get_lyrics(song_id, title=title, artist=artist, duration=duration))
 
 
 @app.route("/api/history")

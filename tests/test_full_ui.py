@@ -73,10 +73,14 @@ def main() -> int:
             bool(live_box and live_box["width"] >= 88 and live_box["height"] <= 56),
             str(live_box),
         )
-        page.locator(".live-wrap").hover()
+        page.locator("#live-toggle").hover()
+        page.wait_for_timeout(180)
+        hint_on_switch = page.evaluate("() => getComputedStyle(document.querySelector('#live-hint')).opacity")
+        chk("悬停开关不显示说明", hint_on_switch == "0", hint_on_switch)
+        page.locator("#live-hint-btn").hover()
         page.wait_for_timeout(180)
         hint_opacity = page.evaluate("() => getComputedStyle(document.querySelector('#live-hint')).opacity")
-        chk("悬停显示实时说明", hint_opacity == "1")
+        chk("悬停问号显示实时说明", hint_opacity == "1")
         page.locator("#stage").screenshot(path=str(OUT / "live-hint-hover.png"))
         page.mouse.move(8, 8)
         page.wait_for_timeout(180)

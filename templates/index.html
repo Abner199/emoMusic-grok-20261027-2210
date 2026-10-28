@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>当AI遇见旋律：从表情感知到智能音乐推荐</title>
-  <meta name="description" content="心弦 EmoTune：本机识别七类基本情绪，并把此刻的表情换成刚好的一首歌。" />
+  <meta name="description" content="当AI遇见旋律：本机识别七类基本情绪，并把此刻的表情换成刚好的一首歌。" />
   <meta property="og:title" content="当AI遇见旋律：从表情感知到智能音乐推荐" />
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}?v=50" />
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v=50" />
@@ -12,14 +12,14 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=50" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=52" />
 </head>
 <body data-emotion="idle">
   <div class="grain" aria-hidden="true"></div>
   <div class="glow" aria-hidden="true"></div>
 
   <header class="top">
-    <a class="brand" href="/" aria-label="心弦首页">
+    <a class="brand" href="/" aria-label="当AI遇见旋律首页">
       <span class="mark" aria-hidden="true">
         <svg viewBox="0 0 48 48" width="30" height="30" fill="none">
           <rect x="2.2" y="2.2" width="43.6" height="43.6" rx="11.5" stroke="currentColor" stroke-width="1.35" opacity=".5"/>
@@ -31,8 +31,8 @@
         </svg>
       </span>
       <span class="brand-text">
-        <strong>心弦</strong>
-        <em>EmoTune</em>
+        <strong>当AI遇见旋律</strong>
+        <em>表情配歌</em>
       </span>
     </a>
     <p class="tagline">把此刻的表情，换成一首刚好的歌</p>
@@ -275,8 +275,8 @@
   </aside>
 
   <dialog id="about-dialog">
-    <h2>关于心弦</h2>
-    <p>心弦用摄像头、照片、视频或屏幕画面识别七类基本情绪，再按你选的推荐方式播放歌曲。</p>
+    <h2>关于当AI遇见旋律</h2>
+    <p>它用摄像头、照片、视频或屏幕画面识别七类基本情绪，再按你选的推荐方式播放歌曲。</p>
     <ul>
       <li>算法、理论与完整使用说明在独立页面：点顶部「说明」，或打开 <a href="/guide">/guide</a>。人脸 YuNet + MobileFaceNet FER（RAF-DB 88.27%）并在单人精检中与 HSEmotion EfficientNet-B0 融合，曲调 Thayer + Krumhansl，推荐默认同频余弦，也可选修复、先同频再修复等。</li>
       <li>推荐方式可在歌曲区点选：同频、修复、先同频再修复，以及对比、回暖、降唤醒、升效价、强化、平衡。</li>
@@ -293,6 +293,6 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=50"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=51"></script>
 </body>
 </html>

@@ -1,8 +1,45 @@
 # -*- coding: utf-8 -*-
-"""本地曲库 30 秒试听对应的逐行歌词，按 currentTime 对齐。"""
+"""本地曲库 30 秒试听对应的逐行歌词；能联网时用 QQ 官方 LRC 对齐预览窗口。"""
 from __future__ import annotations
 
-from backend.songbook import VOCAL_SONGBOOK, pretty_text, title_key
+import base64
+import html
+import json
+import logging
+import re
+import threading
+import time
+from difflib import SequenceMatcher
+from urllib.parse import quote
+
+import requests
+
+from backend.songbook import VOCAL_SONGBOOK, fold_zh, is_vocal_song, pretty_text, title_key
+
+logger = logging.getLogger("emotune.lyrics")
+_LRC_LINE = re.compile(r"\[(\d{1,3}):(\d{2}(?:\.\d+)?)\]")
+_CREDIT = re.compile(
+    r"^(词|曲|编曲|作词|作曲|制作人|监制|演唱|编舞|录音|混音|母带|音频|吉他|和声|出品|后期|弦乐|"
+    r"lyric|lyrics|compose|composer|produced|recorded|mixed|master)[:：]",
+    re.I,
+)
+_SKIP_TITLE = re.compile(r"(live|dj|钢琴|伴奏|remix|instrumental|beat|翻唱|夜店)", re.I)
+_SESSION = requests.Session()
+_SESSION.trust_env = False
+_SESSION.headers.update(
+    {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        ),
+        "Referer": "https://y.qq.com/",
+        "Accept": "application/json,text/plain,*/*",
+    }
+)
+_CACHE_LOCK = threading.Lock()
+_OFFICIAL: dict[str, list[dict]] = {}
+_OFFICIAL_AT: dict[str, float] = {}
+_QQ_TIMEOUT = 4.0
 
 MELODY_LINE = "纯旋律 · 无歌词"
 EMPTY_LINE = "暂无歌词"
@@ -2958,6 +2995,7 @@ LYRICS: dict[str, list[dict]] = {
 
 _BY_ID = {spec["id"]: spec for spec in VOCAL_SONGBOOK}
 _BY_TITLE = {title_key(spec["title"]): spec["id"] for spec in VOCAL_SONGBOOK}
+_PUNCT = re.compile(r"[\s\W_]+", re.UNICODE)
 
 
 def _is_melody(song_id: str, title: str) -> bool:
@@ -2966,26 +3004,357 @@ def _is_melody(song_id: str, title: str) -> bool:
     return sid.startswith("local-") or "旋律" in name or "室内乐" in name
 
 
-def get_lyrics(song_id: str = "", title: str = "", artist: str = "") -> dict:
+def _is_credit_payload(payload: str) -> bool:
+    text = (payload or "").strip()
+    if not text:
+        return True
+    if _CREDIT.match(text):
+        return True
+    if ":" in text or "：" in text:
+        left = re.split(r"[:：]", text, 1)[0]
+        keys = ("词", "曲", "编", "录音", "混音", "母带", "音频", "吉他", "和声", "出品", "后期", "工作室", "制作", "贝斯", "键盘", "鼓手")
+        if len(left) <= 12 and any(k in left for k in keys):
+            return True
+    return False
+
+
+def _norm_text(s: str) -> str:
+    t = fold_zh(pretty_text(s or "")).lower()
+    return _PUNCT.sub("", t)
+
+
+def _sim(a: str, b: str) -> float:
+    na, nb = _norm_text(a), _norm_text(b)
+    if not na or not nb:
+        return 0.0
+    if na == nb:
+        return 1.0
+    if na in nb or nb in na:
+        return 0.86
+    return SequenceMatcher(None, na, nb).ratio()
+
+
+def _artist_hit(want: str, got: str) -> bool:
+    a, b = fold_zh(want or ""), fold_zh(got or "")
+    if not a or not b:
+        return False
+    if a in b or b in a:
+        return True
+    return _sim(a, b) >= 0.62
+
+
+def _as_json(text: str):
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    if raw[0] in "{[":
+        return json.loads(raw)
+    i = raw.find("(")
+    j = raw.rfind(")")
+    if i >= 0 and j > i:
+        return json.loads(raw[i + 1 : j])
+    return json.loads(raw)
+
+
+def _parse_lrc(raw: str) -> list[dict]:
+    if not raw:
+        return []
+    text = html.unescape(str(raw))
+    text = re.sub(r"<[^>]+>", "", text)
+    offset = 0.0
+    rows: list[tuple[float, str]] = []
+    for line in text.replace("\r", "\n").split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+        off = re.match(r"\[offset:([+-]?\d+(?:\.\d+)?)\]", line, re.I)
+        if off:
+            offset = float(off.group(1)) / 1000.0
+            continue
+        stamps = list(_LRC_LINE.finditer(line))
+        if not stamps:
+            continue
+        payload = line[stamps[-1].end() :].strip().strip("/|")
+        if not payload or payload in {MELODY_LINE, EMPTY_LINE, "…", "..."}:
+            continue
+        if _is_credit_payload(payload):
+            continue
+        for m in stamps:
+            mm = int(m.group(1))
+            ss = float(m.group(2))
+            t = mm * 60.0 + ss + offset
+            rows.append((max(0.0, t), payload))
+    rows.sort(key=lambda x: x[0])
+    out = []
+    seen = set()
+    for t, payload in rows:
+        key = (round(t, 2), payload)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"t": round(float(t), 2), "text": payload})
+    return out
+
+
+def _qq_mid_from_id(song_id: str) -> str:
     sid = (song_id or "").strip()
-    lines = LYRICS.get(sid)
-    if lines is None:
-        mapped = _BY_TITLE.get(title_key(title))
+    if sid.startswith("qq-") and len(sid) > 3:
+        return sid[3:]
+    return ""
+
+
+def _search_qq(title: str, artist: str) -> str:
+    title = (title or "").strip()
+    artist = (artist or "").strip()
+    if not title:
+        return ""
+    q = f"{title} {artist}".strip()
+    url = (
+        "https://c.y.qq.com/soso/fcgi-bin/client_search_cp"
+        f"?p=1&n=8&w={quote(q)}&format=json&inCharset=utf8&outCharset=utf-8"
+    )
+    try:
+        r = _SESSION.get(url, timeout=_QQ_TIMEOUT)
+        if r.status_code != 200:
+            return ""
+        data = _as_json(r.text) or {}
+        items = (((data.get("data") or {}).get("song") or {}).get("list") or [])
+    except Exception:
+        logger.debug("QQ 歌词搜索失败", exc_info=True)
+        return ""
+    best_mid = ""
+    best_score = -1
+    want_key = title_key(title)
+    for item in items:
+        mid = (item.get("songmid") or "").strip()
+        name = (item.get("songname") or "").strip()
+        if not mid or not name:
+            continue
+        singers = item.get("singer") or []
+        who = " / ".join(s.get("name") or "" for s in singers if s.get("name"))
+        if _SKIP_TITLE.search(name) or not is_vocal_song(name, who):
+            continue
+        score = 0
+        if title_key(name) == want_key:
+            score += 50
+        else:
+            score += int(round(42 * _sim(name, title)))
+        if _artist_hit(artist, who):
+            score += 40
+        elif artist:
+            score += int(round(18 * _sim(artist, who)))
+        if score > best_score:
+            best_score = score
+            best_mid = mid
+    if best_score < 40:
+        return ""
+    return best_mid
+
+
+def _fetch_qq_lrc(mid: str) -> str:
+    if not mid:
+        return ""
+    url = (
+        "https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg"
+        f"?songmid={quote(mid)}&g_tk=5381&format=json&inCharset=utf8"
+        "&outCharset=utf-8&nobase64=1"
+    )
+    try:
+        r = _SESSION.get(url, timeout=_QQ_TIMEOUT)
+        if r.status_code != 200:
+            return ""
+        data = _as_json(r.text) or {}
+        raw = data.get("lyric") or data.get("lyrics") or ""
+        if not raw and data.get("retcode") not in (0, "0", None):
+            return ""
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", "ignore")
+        raw = str(raw or "")
+        stripped = raw.lstrip()
+        if stripped and not stripped.startswith("[") and "[" not in stripped[:80]:
+            try:
+                dec = base64.b64decode(raw).decode("utf-8", "ignore")
+                if "[" in dec:
+                    raw = dec
+            except Exception:
+                pass
+        return raw
+    except Exception:
+        logger.debug("QQ 歌词拉取失败", exc_info=True)
+        return ""
+
+
+def _is_heading(payload: str, title: str, artist: str) -> bool:
+    n = _norm_text(payload)
+    if not n:
+        return True
+    title_n = _norm_text(title)
+    artist_n = _norm_text(artist)
+    both_n = _norm_text(f"{title}{artist}") if title and artist else ""
+    if title_n and n == title_n:
+        return True
+    if both_n and (n == both_n or both_n in n and len(n) <= len(both_n) + 16):
+        return True
+    if title_n and artist_n and n.startswith(title_n) and artist_n in n and len(n) < len(title_n) + len(artist_n) + 16:
+        return True
+    if title_n and any(sep in payload for sep in (" - ", " — ", "–")):
+        left = payload.replace("—", "-").replace("–", "-").split("-", 1)[0]
+        if _sim(left, title) >= 0.8:
+            return True
+    return False
+
+
+def _official_lines(title: str, artist: str, mid: str = "") -> list[dict]:
+    key = f"{title_key(title)}|{fold_zh(artist or '')}|{mid}"
+    now = time.time()
+    with _CACHE_LOCK:
+        cached = _OFFICIAL.get(key)
+        cached_at = _OFFICIAL_AT.get(key, 0.0)
+        ttl = 1800.0 if cached else 45.0
+        if cached is not None and now - cached_at < ttl:
+            return cached
+    got_mid = mid or _search_qq(title, artist)
+    raw = _fetch_qq_lrc(got_mid) if got_mid else ""
+    lines = _parse_lrc(raw)
+    filtered = [row for row in lines if not _is_heading(row["text"], title, artist)]
+    with _CACHE_LOCK:
+        _OFFICIAL[key] = filtered
+        _OFFICIAL_AT[key] = now
+    return filtered
+
+
+def _shift_window(lines: list[dict], start: float, preview_s: float) -> list[dict]:
+    if not lines or preview_s <= 0:
+        return []
+    end = start + preview_s
+    out = []
+    prev = None
+    for row in lines:
+        t = float(row.get("t") or 0.0)
+        if t < start - 0.35:
+            prev = row
+            continue
+        if t > end + 0.45:
+            break
+        out.append({"t": round(max(0.0, t - start), 2), "text": row["text"]})
+    if out and out[0]["t"] > 0.8 and prev:
+        out.insert(0, {"t": 0.0, "text": prev["text"]})
+    elif not out and prev:
+        out = [{"t": 0.0, "text": prev["text"]}]
+    return out
+
+
+def _best_anchor(official: list[dict], local: list[dict]) -> float | None:
+    loc = [
+        x.get("text") or ""
+        for x in (local or [])
+        if (x.get("text") or "") not in {EMPTY_LINE, MELODY_LINE} and len(x.get("text") or "") >= 4
+    ]
+    if not loc or not official:
+        return None
+    window_n = min(len(loc), 6)
+    best_i, best_s = 0, -1.0
+    for i in range(len(official)):
+        acc = 0.0
+        n = 0
+        for j in range(window_n):
+            if i + j >= len(official):
+                break
+            acc += _sim(loc[j], official[i + j]["text"])
+            n += 1
+        if n:
+            s = acc / n
+            if s > best_s:
+                best_s, best_i = s, i
+    if best_s >= 0.48:
+        return float(official[best_i]["t"])
+    for row in official:
+        if _sim(loc[0], row["text"]) >= 0.52:
+            return float(row["t"])
+    return None
+
+
+def _align_preview(official: list[dict], local: list[dict], preview_s: float) -> list[dict]:
+    if not official or preview_s <= 0:
+        return []
+    start = _best_anchor(official, local)
+    if start is None:
+        start = float(official[0]["t"])
+    return _shift_window(official, start, preview_s)
+
+
+def get_lyrics(song_id: str = "", title: str = "", artist: str = "", duration: float = 0.0) -> dict:
+    orig_sid = (song_id or "").strip()
+    sid = orig_sid
+    spec = _BY_ID.get(sid) or {}
+    title_in = pretty_text(spec.get("title") or title)
+    artist_in = pretty_text(spec.get("artist") or artist)
+    local_lines = LYRICS.get(sid)
+    if local_lines is None:
+        mapped = _BY_TITLE.get(title_key(title_in or title))
         if mapped:
             sid = mapped
-            lines = LYRICS.get(sid)
+            spec = _BY_ID.get(sid) or spec
+            title_in = pretty_text(spec.get("title") or title_in)
+            artist_in = pretty_text(spec.get("artist") or artist_in)
+            local_lines = LYRICS.get(sid)
+    if _is_melody(sid, title_in):
+        return {
+            "ok": True,
+            "id": sid or song_id,
+            "title": title_in,
+            "artist": artist_in,
+            "lines": [{"t": 0.0, "text": MELODY_LINE}],
+            "timed": False,
+            "source": "empty",
+        }
+    try:
+        preview_s = float(duration or 0.0)
+    except (TypeError, ValueError):
+        preview_s = 0.0
+    if preview_s <= 1.0 and (
+        orig_sid.startswith("vocal-") or orig_sid.startswith("itunes-") or orig_sid.startswith("local-")
+    ):
+        preview_s = 30.0
+    official: list[dict] = []
+    try:
+        official = _official_lines(title_in, artist_in, _qq_mid_from_id(sid))
+    except Exception:
+        logger.debug("官方歌词失败", exc_info=True)
+        official = []
+    lines = None
+    source = "local"
+    if official:
+        if 0 < preview_s <= 42:
+            aligned = _align_preview(official, local_lines or [], preview_s)
+            if aligned and len(aligned) >= 2:
+                lines = aligned
+                source = "qq"
+            elif local_lines and len(local_lines) > 1:
+                lines = local_lines
+                source = "local"
+            else:
+                lines = _shift_window(official, float(official[0]["t"]), preview_s) or official
+                source = "qq"
+        else:
+            lines = official
+            source = "qq"
     if not lines:
-        text = MELODY_LINE if _is_melody(sid, title) else EMPTY_LINE
-        lines = [{"t": 0.0, "text": text}]
-    spec = _BY_ID.get(sid) or {}
-    timed = len(lines) > 1
+        if local_lines:
+            lines = local_lines
+            source = "local"
+        else:
+            lines = [{"t": 0.0, "text": EMPTY_LINE}]
+            source = "empty"
+    timed = len(lines) > 1 or (len(lines) == 1 and float(lines[0].get("t") or 0) > 0)
     return {
         "ok": True,
         "id": sid or song_id,
-        "title": pretty_text(spec.get("title") or title),
-        "artist": pretty_text(spec.get("artist") or artist),
+        "title": title_in,
+        "artist": artist_in,
         "lines": lines,
         "timed": timed,
+        "source": source,
     }
 
 

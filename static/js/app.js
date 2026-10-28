@@ -134,6 +134,9 @@
     trackOn: false,
     trackBusy: false,
     overlaySmooth: [],
+    overlayTarget: [],
+    overlayRaf: 0,
+    overlayMiss: 0,
     lastOverlay: { id: "idle", color: "#c4a574" },
     lastVote: null,
     facePop: null,
@@ -1156,6 +1159,8 @@
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
     state.overlaySmooth = [];
+    state.overlayTarget = [];
+    state.overlayMiss = 0;
     state.lastOverlay = { id: "idle", color: EMO_HEX.idle };
     state.lastVote = null;
     const hud = $("#live-emo-hud");
@@ -1212,17 +1217,36 @@
     state.lastVote = vote;
   }
 
-  function drawFaceOverlay(data) {
-    const canvas = ui.overlay;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    sizeFaceOverlay();
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    updateLiveHud(data);
-    if (!data || !data.ok) {
-      state.overlaySmooth = [];
-      return;
-    }
+  function cloneOverlayItem(item) {
+    return {
+      box: item.box ? { x: item.box.x, y: item.box.y, w: item.box.w, h: item.box.h } : item.box,
+      primary: item.primary,
+      emo: item.emo,
+    };
+  }
+
+  function blendOverlay(prev, target, t) {
+    const used = new Set();
+    return (target || []).map((item) => {
+      let best = -1;
+      let bestIou = 0.22;
+      (prev || []).forEach((p, i) => {
+        if (used.has(i) || !p || !p.box || !item.box) return;
+        const v = boxIou(p.box, item.box);
+        if (v > bestIou) {
+          bestIou = v;
+          best = i;
+        }
+      });
+      if (best >= 0) {
+        used.add(best);
+        return { box: lerpBox(prev[best].box, item.box, t), primary: item.primary, emo: item.emo };
+      }
+      return cloneOverlayItem(item);
+    });
+  }
+
+  function mapTrackItems(data) {
     const imageSize = (data.face && data.face.image_size) || [ui.shot.width, ui.shot.height];
     const raw = (data.faces && data.faces.length
       ? data.faces
@@ -1240,33 +1264,19 @@
         emo: f.emotion || data.emotion || {},
       });
     });
-    if (!mapped.length) {
-      state.overlaySmooth = [];
-      return;
-    }
-    const prev = Array.isArray(state.overlaySmooth) ? state.overlaySmooth : [];
-    const used = new Set();
-    mapped.forEach((item) => {
-      let best = -1;
-      let bestIou = 0.28;
-      prev.forEach((p, i) => {
-        if (used.has(i) || !p || !p.box) return;
-        const v = boxIou(p.box, item.box);
-        if (v > bestIou) {
-          bestIou = v;
-          best = i;
-        }
-      });
-      if (best >= 0) {
-        used.add(best);
-        item.box = lerpBox(prev[best].box, item.box, 0.42);
-      }
-    });
-    state.overlaySmooth = mapped;
-    const majority = data.emotion || {};
+    return mapped;
+  }
+
+  function paintFaceOverlay() {
+    const canvas = ui.overlay;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    sizeFaceOverlay();
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const mapped = state.overlaySmooth || [];
+    if (!mapped.length) return;
+    const majority = state.lastOverlay || {};
     const majorityId = majority.id || "idle";
-    const majorityColor = emoHex(majorityId, majority.color);
-    state.lastOverlay = { id: majorityId, color: majorityColor };
     mapped.forEach((item) => {
       const box = item.box;
       const emo = item.emo || {};
@@ -1319,11 +1329,64 @@
     });
   }
 
+  function ensureOverlayPump() {
+    if (state.overlayRaf) return;
+    const step = () => {
+      state.overlayRaf = 0;
+      if (!state.trackOn) return;
+      const target = state.overlayTarget || [];
+      if (target.length && (state.overlaySmooth || []).length) {
+        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, 0.4);
+      } else if (target.length) {
+        state.overlaySmooth = target.map(cloneOverlayItem);
+      }
+      paintFaceOverlay();
+      if (state.trackOn) state.overlayRaf = requestAnimationFrame(step);
+    };
+    state.overlayRaf = requestAnimationFrame(step);
+  }
+
+  function drawFaceOverlay(data) {
+    updateLiveHud(data);
+    if (!data || !data.ok) {
+      state.overlayMiss += 1;
+      if (state.overlayMiss >= 4) {
+        state.overlayTarget = [];
+        state.overlaySmooth = [];
+        paintFaceOverlay();
+      }
+      return;
+    }
+    const mapped = mapTrackItems(data);
+    if (!mapped.length) {
+      state.overlayMiss += 1;
+      if (state.overlayMiss >= 4) {
+        state.overlayTarget = [];
+        state.overlaySmooth = [];
+        paintFaceOverlay();
+      }
+      return;
+    }
+    state.overlayMiss = 0;
+    state.overlayTarget = mapped;
+    if (!state.overlaySmooth.length) {
+      state.overlaySmooth = mapped.map(cloneOverlayItem);
+    } else {
+      state.overlaySmooth = blendOverlay(state.overlaySmooth, mapped, 0.72);
+    }
+    paintFaceOverlay();
+    ensureOverlayPump();
+  }
+
   function stopTrackLoop() {
     state.trackOn = false;
     if (state.trackTimer) {
       clearTimeout(state.trackTimer);
       state.trackTimer = 0;
+    }
+    if (state.overlayRaf) {
+      cancelAnimationFrame(state.overlayRaf);
+      state.overlayRaf = 0;
     }
     state.trackBusy = false;
   }
@@ -1332,6 +1395,7 @@
     if (state.facePopActive) return;
     if (state.trackOn) return;
     state.trackOn = true;
+    ensureOverlayPump();
     const tick = async () => {
       state.trackTimer = 0;
       if (!state.trackOn) return;
@@ -1339,14 +1403,14 @@
       if (!liveOk) {
         clearFaceOverlay();
         if (state.trackOn && isLiveMode() && frameReady()) {
-          state.trackTimer = setTimeout(tick, 400);
+          state.trackTimer = setTimeout(tick, 120);
         }
         return;
       }
-      if (!state.trackBusy && !state.recognizing) {
+      if (!state.trackBusy) {
         state.trackBusy = true;
         try {
-          const blob = await captureBlob(0.92, 1280);
+          const blob = await captureBlob(0.72, 640);
           if (blob && state.trackOn && isLiveMode()) {
             const fd = new FormData();
             fd.append("image", blob, "track.jpg");
@@ -1365,10 +1429,10 @@
         }
       }
       if (state.trackOn && isLiveMode() && frameReady()) {
-        state.trackTimer = setTimeout(tick, state.live ? 420 : 280);
+        state.trackTimer = setTimeout(tick, 50);
       }
     };
-    state.trackTimer = setTimeout(tick, 120);
+    state.trackTimer = setTimeout(tick, 40);
   }
 
   function showPanel(mode) {
@@ -1851,9 +1915,24 @@
     next.textContent = i + 1 < lines.length ? lines[i + 1].text || "" : "";
   }
 
+  function lyricDuration(song) {
+    const d = Number(audio && audio.duration);
+    if (d && isFinite(d) && d > 1) return d;
+    const id = (song && song.id) || "";
+    if (/^(vocal|itunes|local)-/.test(id)) return 30;
+    return 0;
+  }
+
+  function lyricBucket(dur) {
+    if (dur > 42) return "f";
+    if (dur > 1) return "p";
+    return "u";
+  }
+
   async function loadLyrics(song) {
     const token = (state.lyricToken += 1);
-    const key = `${song.id || ""}|${song.title || ""}`;
+    const dur = lyricDuration(song);
+    const key = `${song.id || ""}|${song.title || ""}|${lyricBucket(dur)}`;
     if (lyricCache.has(key)) {
       state.lyricLines = lyricCache.get(key);
       renderLyric(audio.currentTime || 0);
@@ -1865,6 +1944,7 @@
       const q = new URLSearchParams({
         title: song.title || "",
         artist: song.artist || "",
+        duration: String(dur || 0),
       });
       const data = await (await fetch(`/api/lyrics/${encodeURIComponent(song.id || "unknown")}?${q}`)).json();
       if (token !== state.lyricToken) return;
@@ -2642,6 +2722,10 @@
       if (song) state.failed.add(songKey(song));
       noteOnlinePlayFail(song);
       playNext();
+    });
+    audio.addEventListener("loadedmetadata", () => {
+      const song = state.songs[state.index];
+      if (song) loadLyrics(song);
     });
     audio.addEventListener("timeupdate", () => {
       if (state.lyricsOn) renderLyric(audio.currentTime || 0);

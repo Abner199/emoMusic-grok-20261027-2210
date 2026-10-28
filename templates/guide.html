@@ -4,19 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>当AI遇见旋律：算法、理论与使用说明</title>
-  <meta name="description" content="心弦的使用方法、人脸情绪识别、旋律曲调分析，以及多种可选推荐策略的理论说明。" />
+  <meta name="description" content="当AI遇见旋律的使用方法、人脸情绪识别、旋律曲调分析，以及多种可选推荐策略的理论说明。" />
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}?v=50" />
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v=50" />
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}?v=50" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=50" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=52" />
 </head>
 <body class="guide-page">
   <div class="grain" aria-hidden="true"></div>
   <header class="top">
-    <a class="brand" href="/" aria-label="心弦首页">
+    <a class="brand" href="/" aria-label="当AI遇见旋律首页">
       <span class="mark" aria-hidden="true">
         <svg viewBox="0 0 48 48" width="30" height="30" fill="none">
           <rect x="2.2" y="2.2" width="43.6" height="43.6" rx="11.5" stroke="currentColor" stroke-width="1.35" opacity=".5"/>
@@ -27,7 +27,7 @@
           <circle cx="24" cy="25.2" r="1.05" fill="currentColor"/>
         </svg>
       </span>
-      <span class="brand-text"><strong>心弦</strong><em>说明</em></span>
+      <span class="brand-text"><strong>当AI遇见旋律</strong><em>说明</em></span>
     </a>
     <p class="tagline">算法 · 理论 · 使用，都写在这一页</p>
     <nav class="top-actions guide-nav">
@@ -43,7 +43,7 @@
 
   <article class="guide-shell">
     <section class="panel guide-hero" id="top">
-      <p class="algo-kicker">心弦 EmoTune · 独立说明页</p>
+      <p class="algo-kicker">当AI遇见旋律 · 独立说明页</p>
       <h1>把表情换成歌之前，先把方法讲清楚</h1>
       <p>主页只做识别和播放。算法是怎么做的、为什么这样推荐、界面怎么用，都在这一页。三套核心方法都在本机跑：人脸不上传，曲调不靠云端，推荐方式可以自己选。</p>
     </section>
@@ -163,7 +163,7 @@
         <li>本地曲库按七类情绪分好，每类 40 首华语校园热歌（少量英文），共 280 首 30 秒人声试听。缺文件时按规则生成旋律兜底，断网也能连播。</li>
         <li>默认走在线接口，并行检索苹果音乐、网易云、咪咕、酷狗、QQ 音乐、酷我；可手动关掉「在线曲库」。在线长时间播不了会提示并切回本地。</li>
         <li>在线试听经本机 <code>/api/stream</code> 同源代理，播放器才能画实时波形和频率。</li>
-        <li>歌词按曲目准备 0–30 秒逐行文本，随进度显示，可关。</li>
+        <li>歌词能联网时用 QQ 官方 LRC，并按 30 秒试听窗口对齐；断网用本机词。可关。</li>
       </ul>
     </section>
 
@@ -174,10 +174,10 @@
       </div>
       <ol>
         <li>新电脑安装 Python 3.10 或 3.11，以及 Chrome / Edge。</li>
-        <li>克隆仓库并回到本快照：<code>git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git</code> 后执行 <code>git checkout snapshot-20261028-0951</code>。</li>
+        <li>克隆仓库并回到本快照：<code>git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git</code> 后执行 <code>git checkout snapshot-20261028-1043</code>。</li>
         <li>在项目目录执行 <code>python -m pip install -r requirements.txt</code>，再 <code>python app.py</code> 或双击 <code>run.bat</code>。</li>
         <li>浏览器打开 <code>http://127.0.0.1:5000</code>。摄像头必须用 127.0.0.1 或 localhost。端口被占用时：<code>set EMOTUNE_PORT=18765</code> 再启动。</li>
-        <li>若要带走旧足迹，把原来电脑的 <code>data/history.json</code>、<code>data/prefs.json</code>、<code>static/history/</code> 一并拷过来。这三处不进 GitHub。</li>
+        <li>若要带走旧足迹：整夹拷贝，或旧电脑运行 <code>tools\pack-local-data.bat</code>，新电脑把 zip 放到 <code>data\</code> 再运行 <code>tools\unpack-local-data.bat</code>。<code>data/history.json</code>、<code>data/prefs.json</code>、<code>static/history/</code> 不进 GitHub。</li>
         <li>核对：<code>python tests/selfcheck.py</code>。详细说明见项目根目录 <code>SETUP.md</code> 与 <code>VERSION.md</code>。</li>
       </ol>
     </section>

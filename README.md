@@ -2,9 +2,9 @@
 
 品牌 **心弦 EmoTune**。
 
-> **当前快照** 2026-10-28 09:51 · 标签 `snapshot-20261028-0951` · 仓库 [emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)  
-> 换电脑逐步启动见 [SETUP.md](SETUP.md)。固定版本、上一版 224 首快照与如何继续开发见 [VERSION.md](VERSION.md)。  
-> 静态介绍页：https://emomusic-grok-20261028.surge.sh
+> **当前快照** 2026-10-28 10:43 · 标签 `snapshot-20261028-1043` · 仓库 [emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)  
+> 换电脑逐步启动（含情绪足迹打包）见 [SETUP.md](SETUP.md)。固定版本、上一版快照与如何继续开发见 [VERSION.md](VERSION.md)。  
+> 静态介绍页：https://emomusic-grok-20261028-1043.surge.sh
 
 本机人脸情绪识别歌曲推荐。用摄像头、照片、本地视频或屏幕画面识别七类基本情绪（喜、怒、哀、惧、惊、厌、中性），再按情绪播放匹配的华语校园热歌。
 
@@ -44,8 +44,8 @@
 | 推荐 | 九种可选策略（默认同频 ISO + 余弦）；完整理论见 `/guide` |
 | 本地音频 | iTunes 香港/台湾/美国店 30 秒有人声试听缓存（m4a） |
 | 在线音乐 | 苹果音乐、网易云、咪咕、酷狗、QQ 音乐、酷我（默认开启）；经本机 `/api/stream` 代理试听 |
-| 歌词 | 本机按曲目准备的 0–30 秒逐行歌词 |
-| 历史 | 全局列表全部保留：表情图标、人脸截图、播过的歌；随项目目录一起复制 |
+| 歌词 | 能联网时用 QQ 官方 LRC 并对齐 30 秒试听；断网用本机词 |
+| 历史 | 全局列表全部保留：表情图标、人脸截图、播过的歌；不进 GitHub，换电脑用打包脚本或整夹拷贝 |
 
 识别在 CPU 上通常几十到一百毫秒；默认走在线热歌，接口总耗时目标不超过 3 秒。
 
@@ -73,7 +73,7 @@ python app.py
 
 摄像头必须用 `http://127.0.0.1:5000`（或 localhost / HTTPS）打开。请用 Chrome 或 Edge。
 
-换一台电脑：优先按 [SETUP.md](SETUP.md) 克隆标签 `snapshot-20261028-0951`；或把整个 `emoMusic` 文件夹拷过去再 `python app.py`。示例表情和本地曲库在项目里。情绪足迹（`data/history.json`、`static/history/`）不进 GitHub，需要的话请单独拷贝。
+换一台电脑：优先按 [SETUP.md](SETUP.md) 克隆标签 `snapshot-20261028-1043`；或把整个 `emoMusic` 文件夹拷过去再 `python app.py`。示例表情和本地曲库在项目里。情绪足迹（`data/history.json`、`static/history/`）不进 GitHub：旧电脑运行 `tools\pack-local-data.bat`，新电脑解包 `tools\unpack-local-data.bat`。
 
 ## 使用
 
@@ -133,9 +133,11 @@ emoMusic/
     recommender.py       本地曲库 + 在线 API
     strategy.py          九种推荐方式与理论
     songbook.py          280 首按情绪分类的有人声曲目
-    lyrics.py            实时歌词
+    lyrics.py            官方 LRC + 本机词
     assets.py            模型下载与曲库缓存
     history.py           全局持久历史
+  tools/
+    pack_local_data.py   打包 / 恢复本机足迹（不进 Git）
   templates/index.html
   templates/guide.html   算法、理论、使用说明
   templates/face.html    独立人脸窗
@@ -202,7 +204,7 @@ python tests/test_full_ui.py
 实时捕捉会锁定短暂表情的歌单。脸松开后仍继续播；做出另一种明显表情才会切。点「识别此刻」会截图识别，并关闭实时捕捉。
 
 **换电脑后历史没了**  
-请复制整个项目文件夹，不要只拷 `app.py`。历史在 `data/history.json` 和 `static/history/`。情绪足迹会全部保存，不会自动丢掉旧记录。
+只克隆仓库不会带足迹。请复制整个项目文件夹，或按 [SETUP.md](SETUP.md) 第 6 节打包 `data/history.json` 与 `static/history/`。情绪足迹会全部保存在本机，不会自动丢掉旧记录。
 
 **相同情绪又播到同一首歌**  
 新识别会优先跳过这个情绪已经听过的歌；点足迹回放当时的歌不受这个限制。全部听过之后会从最早听过的歌再轮一圈。

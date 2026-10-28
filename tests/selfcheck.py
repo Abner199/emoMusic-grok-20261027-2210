@@ -427,6 +427,11 @@ def main() -> int:
                 str((tracked or {}).get("emotion")),
             )
             fails += not _ok(
+                "track 实时路径够快",
+                float((tracked or {}).get("elapsed_ms") or 999) < 180,
+                str((tracked or {}).get("elapsed_ms")),
+            )
+            fails += not _ok(
                 "识别返回人脸票数",
                 isinstance(body.get("vote"), dict) and int((body.get("vote") or {}).get("total") or 0) >= 1,
                 str(body.get("vote")),

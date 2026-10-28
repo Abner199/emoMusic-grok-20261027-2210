@@ -27,6 +27,9 @@
     trackBusy: false,
     recognizing: false,
     overlaySmooth: [],
+    overlayTarget: [],
+    overlayRaf: 0,
+    overlayMiss: 0,
     theme: localStorage.getItem("emotune-theme") || "night",
     onlineOn: localStorage.getItem("emotune-online") !== "0",
     faceMode: params.get("mode") || localStorage.getItem("emotune-face-mode") || "solo",
@@ -273,6 +276,10 @@
   function stopCamera() {
     state.trackOn = false;
     if (state.trackTimer) clearTimeout(state.trackTimer);
+    if (state.overlayRaf) {
+      cancelAnimationFrame(state.overlayRaf);
+      state.overlayRaf = 0;
+    }
     if (state.liveTimer) clearInterval(state.liveTimer);
     if (state.stream) state.stream.getTracks().forEach((t) => t.stop());
     state.stream = null;
@@ -324,33 +331,21 @@
     document.body.dataset.emotion = emo.id || "idle";
   }
 
-  function draw(data) {
-    const ctx = overlay.getContext("2d");
-    const sized = sizeOverlay();
-    if (!sized) return;
-    ctx.clearRect(0, 0, overlay.width, overlay.height);
-    updateHud(data);
-    if (!data || !data.ok) {
-      state.overlaySmooth = [];
-      return;
-    }
-    const imageSize = (data.face && data.face.image_size) || [shot.width, shot.height];
-    const list = (data.faces && data.faces.length ? data.faces : data.face ? [{ ...data.face, primary: true, emotion: data.emotion }] : []).filter((f) => f && f.box);
-    const mapped = list
-      .map((f) => {
-        const box = mapBox(f.box, imageSize, sized, state.mirror);
-        if (!box) return null;
-        const emo = f.emotion || data.emotion || {};
-        return { box, emo, primary: !!f.primary };
-      })
-      .filter(Boolean);
-    const prev = state.overlaySmooth || [];
+  function cloneOverlayItem(item) {
+    return {
+      box: item.box ? { x: item.box.x, y: item.box.y, w: item.box.w, h: item.box.h } : item.box,
+      primary: item.primary,
+      emo: item.emo,
+    };
+  }
+
+  function blendOverlay(prev, target, t) {
     const used = new Set();
-    mapped.forEach((item) => {
+    return (target || []).map((item) => {
       let best = -1;
-      let bestIou = 0.28;
-      prev.forEach((p, i) => {
-        if (used.has(i)) return;
+      let bestIou = 0.22;
+      (prev || []).forEach((p, i) => {
+        if (used.has(i) || !p || !p.box || !item.box) return;
         const v = iou(p.box, item.box);
         if (v > bestIou) {
           bestIou = v;
@@ -359,14 +354,22 @@
       });
       if (best >= 0) {
         used.add(best);
-        item.box = lerpBox(prev[best].box, item.box, 0.46);
+        return { box: lerpBox(prev[best].box, item.box, t), primary: item.primary, emo: item.emo };
       }
+      return cloneOverlayItem(item);
     });
-    state.overlaySmooth = mapped;
+  }
+
+  function paintOverlay() {
+    const ctx = overlay.getContext("2d");
+    const sized = sizeOverlay();
+    if (!sized) return;
+    ctx.clearRect(0, 0, overlay.width, overlay.height);
+    const mapped = state.overlaySmooth || [];
     mapped.forEach((item) => {
       const { box, emo, primary } = item;
-      const id = emo.id || "idle";
-      const color = emoHex(id, emo.color);
+      const id = (emo && emo.id) || "idle";
+      const color = emoHex(id, emo && emo.color);
       const radius = Math.max(8, box.w * 0.08);
       ctx.save();
       roundRectPath(ctx, box.x, box.y, box.w, box.h, radius);
@@ -377,8 +380,10 @@
       ctx.globalAlpha = primary ? 1 : 0.82;
       ctx.stroke();
       const meta = EMO_META[id] || {};
-      const pct = Math.round((emo.prob || 0) * 100);
-      const label = [meta.zh || emo.zh || "", meta.name || emo.name || "", pct ? `${pct}%` : ""].filter(Boolean).join(" ");
+      const pct = Math.round(((emo && emo.prob) || 0) * 100);
+      const label = [meta.zh || (emo && emo.zh) || "", meta.name || (emo && emo.name) || "", pct ? `${pct}%` : ""]
+        .filter(Boolean)
+        .join(" ");
       if (label) {
         const fontPx = Math.max(13, Math.min(22, box.w * 0.16));
         ctx.font = `700 ${fontPx}px "Noto Sans SC","Microsoft YaHei",sans-serif`;
@@ -405,6 +410,66 @@
     });
   }
 
+  function ensureOverlayPump() {
+    if (state.overlayRaf) return;
+    const step = () => {
+      state.overlayRaf = 0;
+      if (!state.trackOn) return;
+      const target = state.overlayTarget || [];
+      if (target.length && (state.overlaySmooth || []).length) {
+        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, 0.4);
+      } else if (target.length) {
+        state.overlaySmooth = target.map(cloneOverlayItem);
+      }
+      paintOverlay();
+      if (state.trackOn) state.overlayRaf = requestAnimationFrame(step);
+    };
+    state.overlayRaf = requestAnimationFrame(step);
+  }
+
+  function draw(data) {
+    updateHud(data);
+    if (!data || !data.ok) {
+      state.overlayMiss += 1;
+      if (state.overlayMiss >= 4) {
+        state.overlayTarget = [];
+        state.overlaySmooth = [];
+        paintOverlay();
+      }
+      return;
+    }
+    const sized = sizeOverlay();
+    if (!sized) return;
+    const imageSize = (data.face && data.face.image_size) || [shot.width, shot.height];
+    const list = (data.faces && data.faces.length ? data.faces : data.face ? [{ ...data.face, primary: true, emotion: data.emotion }] : []).filter((f) => f && f.box);
+    const mapped = list
+      .map((f) => {
+        const box = mapBox(f.box, imageSize, sized, state.mirror);
+        if (!box) return null;
+        const emo = f.emotion || data.emotion || {};
+        return { box, emo, primary: !!f.primary };
+      })
+      .filter(Boolean);
+    if (!mapped.length) {
+      state.overlayMiss += 1;
+      if (state.overlayMiss >= 4) {
+        state.overlayTarget = [];
+        state.overlaySmooth = [];
+        paintOverlay();
+      }
+      return;
+    }
+    state.overlayMiss = 0;
+    state.overlayTarget = mapped;
+    if (!state.overlaySmooth.length) {
+      state.overlaySmooth = mapped.map(cloneOverlayItem);
+    } else {
+      state.overlaySmooth = blendOverlay(state.overlaySmooth, mapped, 0.72);
+    }
+    paintOverlay();
+    ensureOverlayPump();
+  }
+
   function faceHeaders(extra) {
     const headers = {
       "X-Emo-Online": state.onlineOn ? "1" : "0",
@@ -417,13 +482,14 @@
   function startTrack() {
     if (state.trackOn) return;
     state.trackOn = true;
+    ensureOverlayPump();
     const tick = async () => {
       state.trackTimer = 0;
       if (!state.trackOn || !cameraReady()) return;
-      if (!state.trackBusy && !state.recognizing) {
+      if (!state.trackBusy) {
         state.trackBusy = true;
         try {
-          const blob = await captureBlob(0.92, 1280);
+          const blob = await captureBlob(0.72, 640);
           if (blob && state.trackOn) {
             const fd = new FormData();
             fd.append("image", blob, "track.jpg");
@@ -445,9 +511,9 @@
           state.trackBusy = false;
         }
       }
-      if (state.trackOn && cameraReady()) state.trackTimer = setTimeout(tick, state.live ? 420 : 260);
+      if (state.trackOn && cameraReady()) state.trackTimer = setTimeout(tick, 50);
     };
-    state.trackTimer = setTimeout(tick, 80);
+    state.trackTimer = setTimeout(tick, 40);
   }
 
   async function recognize(source) {

@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=50" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=52" />
 </head>
 <body class="face-page" data-emotion="idle">
   <header class="face-top">
@@ -25,7 +25,7 @@
           <circle cx="24" cy="25.2" r="1.05" fill="currentColor"/>
         </svg>
       </span>
-      <span class="brand-text"><strong>心弦</strong><em>人脸窗</em></span>
+      <span class="brand-text"><strong>当AI遇见旋律</strong><em>人脸窗</em></span>
     </a>
     <p class="face-lead" id="face-lead">默认单人精检只认近景主脸。切到多人远场后可同时框出多张脸和远景小脸，歌曲按人数最多的情绪来。</p>
     <div class="face-actions">
@@ -70,6 +70,6 @@
     <div class="vote-bar" id="vote-bar" hidden></div>
   </section>
   <p class="hint" id="face-hint">YuNet 检测 · MobileFaceNet 逐脸识别 · 单人精检只取主脸 · 多人远场按多数票推荐</p>
-  <script src="{{ url_for('static', filename='js/face.js') }}?v=50"></script>
+  <script src="{{ url_for('static', filename='js/face.js') }}?v=51"></script>
 </body>
 </html>

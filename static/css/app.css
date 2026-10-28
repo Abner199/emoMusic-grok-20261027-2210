@@ -494,9 +494,11 @@ label.primary {
   cursor: help;
 }
 .hint-dot:hover,
-.live-wrap:focus-within .hint-dot {
+.hint-dot:focus,
+.hint-dot:focus-visible {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  outline: none;
 }
 .live-hint {
   position: absolute;
@@ -521,8 +523,9 @@ label.primary {
   transform: translateY(6px);
   transition: opacity 160ms ease, transform 160ms ease, visibility 160ms ease;
 }
-.live-wrap:hover ~ .live-hint,
-.live-wrap:focus-within ~ .live-hint {
+.live-wrap:has(.hint-dot:hover) ~ .live-hint,
+.live-wrap:has(.hint-dot:focus) ~ .live-hint,
+.live-wrap:has(.hint-dot:focus-visible) ~ .live-hint {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);

@@ -127,7 +127,7 @@ def main() -> int:
         page.route("**/api/recognize**", handle_recognize)
         page.goto(BASE, wait_until="domcontentloaded", timeout=20000)
         page.wait_for_selector("#live-hint", state="attached")
-        page.locator(".live-wrap").hover()
+        page.locator("#live-hint-btn").hover()
         page.wait_for_timeout(180)
         live_hint = page.locator("#live-hint").text_content() or ""
         hold_note = page.locator("#hold-note").inner_text()

@@ -189,7 +189,9 @@ class EmotionRecognizer:
             raise FileNotFoundError(f"缺少表情识别模型: {fer_path}")
 
         # Windows 下 OpenCV C++ 读盘不支持中文路径，改为内存加载
-        yunet_buf = np.frombuffer(yunet_path.read_bytes(), dtype=np.uint8).copy()
+        yunet_bytes = yunet_path.read_bytes()
+        yunet_buf = np.frombuffer(yunet_bytes, dtype=np.uint8).copy()
+        tracker_buf = np.frombuffer(yunet_bytes, dtype=np.uint8).copy()
         fer_buf = np.frombuffer(fer_path.read_bytes(), dtype=np.uint8).copy()
         self.detector = cv2.FaceDetectorYN.create(
             "onnx",
@@ -200,6 +202,16 @@ class EmotionRecognizer:
             float(YUNET_NMS),
             50,
         )
+        # 独立检测器给实时框用，避免和精检抢同一把 YuNet
+        self.tracker = cv2.FaceDetectorYN.create(
+            "onnx",
+            tracker_buf,
+            np.array([], dtype=np.uint8),
+            (640, 640),
+            0.50,
+            0.3,
+            16,
+        )
         self.net = cv2.dnn.readNetFromONNX(fer_buf)
         self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
         self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
@@ -208,6 +220,8 @@ class EmotionRecognizer:
         self.hse = None
         self.hse_input = "input"
         self._lock = threading.RLock()
+        self._track_lock = threading.Lock()
+        self._last_track_faces: list[dict] = []
         self._load_hsemotion()
         logger.info("情绪识别模型已加载")
 
@@ -750,6 +764,146 @@ class EmotionRecognizer:
             "face_mode": cfg["id"],
             "elapsed_ms": round(elapsed, 1),
         }
+
+    def _detect_faces_fast(self, image_bgr: np.ndarray, mode: str | None = None) -> list[dict]:
+        """实时框：缩小图、单次 YuNet，不做精检双阈值 / Haar / 远景放大。"""
+        cfg = face_mode_cfg(mode)
+        solo = cfg["id"] == "solo"
+        max_side = 640 if solo else 800
+        img, scale = resize_for_detect(image_bgr, max_side)
+        inv = 1.0 / scale if scale else 1.0
+        h, w = img.shape[:2]
+        if h < 12 or w < 12:
+            return []
+        score = 0.50 if solo else 0.38
+        score_min = 0.42 if solo else 0.30
+        min_face = 24.0 if solo else 14.0
+        top_k = 8 if solo else 16
+        self.tracker.setScoreThreshold(float(score))
+        self.tracker.setNMSThreshold(0.3)
+        if hasattr(self.tracker, "setTopK"):
+            self.tracker.setTopK(int(top_k))
+        self.tracker.setInputSize((w, h))
+        _, faces = self.tracker.detect(img)
+        results = self._parse_yunet(faces, inv, score_min, min_face)
+        results.sort(key=lambda f: (f["area"], f["score"]), reverse=True)
+        limit = 1 if solo else int(cfg.get("face_max") or FACE_MAX)
+        return self._prune_faces(results, min_face)[:limit]
+
+    def _reuse_track_emotion(self, face: dict) -> Optional[dict]:
+        best = None
+        best_iou = 0.32
+        for prev in self._last_track_faces:
+            v = self._box_iou(face["box"], prev.get("box") or [0, 0, 0, 0])
+            if v > best_iou:
+                best_iou = v
+                best = prev
+        if best and best.get("emotion"):
+            return dict(best["emotion"])
+        if len(self._last_track_faces) == 1 and self._last_track_faces[0].get("emotion"):
+            return dict(self._last_track_faces[0]["emotion"])
+        return None
+
+    def predict_track_bgr(self, image_bgr: np.ndarray, mode: str | None = None) -> dict:
+        t0 = time.perf_counter()
+        cfg = face_mode_cfg(mode)
+        empty = {
+            "ok": False,
+            "elapsed_ms": 0,
+            "faces": [],
+            "vote": None,
+            "face_mode": cfg["id"],
+            "track": True,
+        }
+        if image_bgr is None or image_bgr.size == 0:
+            empty.update({"error": "图像为空", "code": "NO_IMAGE"})
+            return empty
+        with self._track_lock:
+            faces = self._detect_faces_fast(image_bgr, cfg["id"])
+        if not faces:
+            elapsed = (time.perf_counter() - t0) * 1000.0
+            hint = (
+                "未检测到清晰近景人脸。请正对镜头、光线均匀；若要检远景或多张脸，请切到「多人远场」。"
+                if cfg["id"] == "solo"
+                else "未检测到人脸。请正对镜头、保证光线充足，或换一张更清晰的正面照片。"
+            )
+            self._last_track_faces = []
+            empty.update(
+                {
+                    "error": hint,
+                    "code": "NO_FACE",
+                    "elapsed_ms": round(elapsed, 1),
+                    "face_count": 0,
+                }
+            )
+            return empty
+        classified = []
+        got_fer = self._lock.acquire(blocking=True, timeout=0.02)
+        try:
+            for face in faces:
+                emo = self.classify_face(image_bgr, face, precision=False) if got_fer else None
+                if emo is None:
+                    emo = self._reuse_track_emotion(face)
+                if emo is None:
+                    meta = EMOTIONS["neutral"]
+                    emo = {
+                        "id": "neutral",
+                        "zh": meta["zh"],
+                        "name": meta["name"],
+                        "prob": 0.0,
+                        "color": meta["color"],
+                    }
+                classified.append({**face, "emotion": emo})
+        finally:
+            if got_fer:
+                self._lock.release()
+        if cfg.get("majority") and len(classified) > 1:
+            emotion, vote, primary = self._majority(classified)
+        else:
+            primary = max(classified, key=lambda f: (float(f.get("area") or 0.0), float(f.get("score") or 0.0)))
+            emotion = dict(primary["emotion"])
+            vote = {
+                "id": emotion["id"],
+                "zh": emotion["zh"],
+                "name": emotion["name"],
+                "total": len(classified),
+                "majority": 1,
+                "counts": {emotion["id"]: 1},
+                "mode": cfg["id"],
+            }
+        vote["mode"] = cfg["id"]
+        elapsed = (time.perf_counter() - t0) * 1000.0
+        h, w = image_bgr.shape[:2]
+        boxes = [self._public_face(item, item is primary) for item in classified]
+        self._last_track_faces = classified
+        return {
+            "ok": True,
+            "emotion": emotion,
+            "vote": vote,
+            "face": {
+                "box": [round(v, 1) for v in primary["box"]],
+                "score": round(float(primary["score"]), 3),
+                "image_size": [int(w), int(h)],
+                "crop": "",
+            },
+            "faces": boxes,
+            "face_count": len(classified),
+            "face_mode": cfg["id"],
+            "elapsed_ms": round(elapsed, 1),
+            "track": True,
+        }
+
+    def predict_track_bytes(self, data: bytes, mode: str | None = None) -> dict:
+        img = decode_image(data)
+        if img is None:
+            return {
+                "ok": False,
+                "error": "无法解析图像，请使用 JPG / PNG / WEBP",
+                "code": "BAD_IMAGE",
+                "track": True,
+                "faces": [],
+            }
+        return self.predict_track_bgr(img, mode=mode)
 
     def predict_bytes(self, data: bytes, want_crop: bool = True, mode: str | None = None) -> dict:
         img = decode_image(data)

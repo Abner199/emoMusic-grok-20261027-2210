@@ -1,21 +1,46 @@
 # 当AI遇见旋律：换电脑完整部署说明
 
-品牌 **心弦 EmoTune**。本页写给要把**这一版原样**装到另一台 Windows 电脑、并从零跑起来的人，**包含情绪足迹怎么带走**。固定版本、标签和如何回到某一版，见 [VERSION.md](VERSION.md)。
+品牌 **心弦 EmoTune**。本页写给要把**讲座这一版原样**装到另一台 Windows 电脑、并从零跑起来的人，**包含情绪足迹怎么带走**。固定版本、标签和如何回到某一版，见 [VERSION.md](VERSION.md)。
 
-当前快照：**2026-10-28 11:05** · 标签 `snapshot-20261028-1105` · 仓库 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）
+**当前快照（今天讲座版本）：2026-10-28 12:52**  
+标签 `snapshot-20261028-1252` · 仓库 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）
 
-静态介绍页（不能跑摄像头）：https://emomusic-grok-20261028-1105.surge.sh
+静态介绍页（不能跑摄像头）：https://emomusic-grok-20261028-1252.surge.sh
 
-**运行方式：conda 新建环境 `emotune`，Python 3.12。** 不要把依赖装进系统 Python。推理只用 **CPU 版** `onnxruntime`（pip 包名就是 `onnxruntime`）。
+**运行方式：conda 新建空环境 `emotune`，Python 3.12。** 不要把依赖装进系统 Python，也不要装进已经有 `datasets` / `fastapi` / `jax` / `kaggle` 的旧环境。推理只用 **CPU 版** `onnxruntime`（pip 包名就是 `onnxruntime`）。
+
+---
+
+## 讲座当天 10 分钟清单
+
+在**已经装好 conda** 的 Windows 上：
+
+```bat
+git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
+cd emoMusic-grok-20261027-2210
+git checkout snapshot-20261028-1252
+```
+
+双击 `tools\setup-conda.bat`，等它打印 `PASS onnxruntime CPU`。再双击 `run.bat`。
+
+浏览器（Chrome / Edge）打开：
+
+**http://127.0.0.1:5000**
+
+网页标题应为：`当AI遇见旋律：从表情感知到智能音乐推荐`。
+
+演示：切「照片」→ 点选 `static/demo` 里已命名的表情（01 喜 … 07 中性），或开摄像头正对镜头。检测方式默认「单人精检」。
+
+要连旧电脑的足迹：先在旧电脑打包（第 8 节），再在新电脑解包，然后刷新「历史」。
 
 ---
 
 ## 0. 先弄清两件事
 
 1. **识曲必须在本机跑 Flask。** Surge 只放介绍页，没有 Python、没有 ONNX、没有摄像头。
-2. **情绪足迹不进 GitHub。** 仓库里故意没有你的人脸截图和听歌记录。换电脑要「连历史一起原样」，必须把本机数据单独带走，见第 7 节。
+2. **情绪足迹不进 GitHub。** 仓库里故意没有你的人脸截图和听歌记录。换电脑要「连历史一起原样」，必须把本机数据单独带走，见第 8 节。
 
-克隆仓库 = 代码 + 模型 + 280 首试听 + 演示图。  
+克隆仓库 = 代码 + 三个 ONNX + 280 首试听 + 演示图。  
 克隆仓库 **再** 解入足迹包 = 和旧电脑一样能认出人、能播、能看到以前的足迹。
 
 ---
@@ -25,7 +50,7 @@
 | 项 | 要求 |
 | --- | --- |
 | 系统 | Windows 10 或 11，64 位 |
-| Python | **3.12**（推荐且已验证 3.12.16）。用 conda 新建环境安装，见第 2、4 节 |
+| Python | **3.12**（推荐且已验证 3.12.16）。用 conda **新建空环境** 安装，见第 2、4 节 |
 | conda | **Miniconda3** 或 Anaconda3（64 位）。环境名固定为 `emotune` |
 | Git | 从 GitHub 克隆时需要 [Git for Windows](https://git-scm.com/download/win) |
 | 浏览器 | Chrome 或 Edge（摄像头、屏幕分享用） |
@@ -45,7 +70,7 @@
 | 3.13 / 3.14 | 未作为本项目部署路径验证，不要用来还原这一版 |
 | 3.9 及以下 | 不要用 |
 
-依赖用 pip 装进 conda 环境：Flask 3.x、OpenCV 4.x（不要 5）、NumPy 1.24–2.x、Pillow、requests、SciPy、**CPU 版** onnxruntime。`requirements.txt` 已写上限，避免误装 OpenCV 5 或 GPU 版 onnxruntime。
+依赖用 pip 装进 **空的** conda 环境：Flask 3.x、OpenCV 4.x（不要 5）、NumPy 1.24–2.x、Pillow、requests、SciPy、**CPU 版** onnxruntime。`requirements.txt` 已写上限，避免误装 OpenCV 5 或 GPU 版 onnxruntime。
 
 ---
 
@@ -76,16 +101,17 @@ conda tos accept
 
 ## 3. 把项目放到新电脑
 
-任选一种。**推荐 A（Git 克隆固定标签）**，这样一定是这一版。**方式 B（整夹拷贝）** 会连足迹一起带走，适合 U 盘搬家。仓库已公开，克隆一般不用登录。
+任选一种。**讲座 / 原版还原推荐 A**（Git 克隆固定标签）。**方式 B** 会连足迹一起带走，适合 U 盘搬家。仓库已公开，克隆一般不用登录。
 
-### 方式 A：从 GitHub 克隆这一版（推荐，不含旧足迹）
+### 方式 A：从 GitHub 克隆讲座这一版（不含旧足迹）
 
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
+git checkout snapshot-20261028-1252
 ```
 
-默认就是 `main`，含 **CPU 版 onnxruntime** 核对脚本。若只要 11:05 那一版代码，再执行 `git checkout snapshot-20261028-1105`（该标签不移动）。
+`main` 一般已指向同一提交；用标签可以精确钉在讲座这一版，以后 `main` 再往前走也不怕。
 
 ### 方式 B：U 盘 / 网盘拷整个文件夹（连历史一起）
 
@@ -105,29 +131,32 @@ OpenCV 读 ONNX 已按内存加载，中文路径可用。
 | `static/models/` | 三个人脸 ONNX，缺了不能识别 |
 | `static/audio/` | 本地 280 首试听 |
 | `static/covers/` | 封面 |
-| `static/demo/` | 演示表情图 |
+| `static/demo/` | 演示表情图（讲座点选用） |
 | `data/history.json` | **情绪足迹索引（历史）** |
 | `static/history/` | **足迹里的人脸截图** |
 | `data/prefs.json` | 主题、检测方式等本机偏好 |
 | `requirements.txt` | pip 依赖清单（含 CPU 版 onnxruntime） |
 | `tools/setup-conda.bat` | 一键创建 conda 环境 |
 | `tools/verify_cpu.py` | 核对 onnxruntime 是 CPU 包 |
+| `tools/pack_local_data.py` | 打包 / 解包足迹 |
 
 不要指望拷来的 `.venv` 或别人电脑上的 conda 环境能直接用。新电脑按第 4 节**新建** `emotune`。
 
-### 方式 C：Git 克隆 + 单独恢复足迹（推荐给「代码用仓库、历史用打包」）
+### 方式 C：Git 克隆 + 单独恢复足迹（代码用仓库、历史用打包）
 
-1. 在**旧电脑**项目根目录打包足迹（见第 7 节）。
-2. 在**新电脑**按方式 A 克隆（默认 `main`，含 CPU 核对）。
+1. 在**旧电脑**项目根目录打包足迹（见第 8 节）。
+2. 在**新电脑**按方式 A 克隆并检出 `snapshot-20261028-1252`。
 3. 按第 4、5 节建好 conda 环境。
 4. 把 `emotune-local-data.zip` 拷到新项目的 `data\` 下，运行解包脚本。
-5. 再启动 Flask。
+5. 再启动 Flask，打开页面点「历史」。
 
 ---
 
-## 4. 用 conda 新建虚拟环境（必须）
+## 4. 用 conda 新建虚拟环境（必须、必须是空的）
 
 环境名：**`emotune`**。Python：**3.12**。在**项目根目录**（能看见 `app.py` 的那一层）操作。
+
+**不要**在 `base`、系统 Python、或已经装了 `datasets` / `fastapi` / `jax` / `kaggle` 的环境里 `pip install -r requirements.txt`。那样会出现一长串 `dependency resolver` 冲突（缺 `typing_extensions`、`httpx`、`tqdm` 等）。那些包不是本项目的依赖，**不要为了消警告去装它们**。正确做法是新建空的 `emotune`。
 
 ### 4.1 一键脚本（推荐）
 
@@ -145,7 +174,7 @@ conda activate emotune
 python --version
 ```
 
-`python --version` 必须是 `Python 3.12.x`。若不是，先 `conda deactivate`，确认提示符带 `(emotune)` 后再试。
+提示符必须带 `(emotune)`。`python --version` 必须是 `Python 3.12.x`。若不是，先 `conda deactivate` 再激活。
 
 也可用环境文件（效果相同，仍是 3.12 + 同一份 requirements）：
 
@@ -159,6 +188,7 @@ conda activate emotune
 ```bat
 conda activate emotune
 python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+python tools\verify_cpu.py
 ```
 
 ### 4.3 确认环境位置
@@ -307,7 +337,7 @@ conda activate emotune
 python tests/selfcheck.py
 ```
 
-关注：示例图 28 张都能识别；「单人精检稳健测试 ≥90%」；说明页含 HSEmotion 与 TTA；本地曲库 280 首。
+关注：`onnxruntime 为 pip CPU 包` PASS；示例图 28 张都能识别；「单人精检稳健测试 ≥90%」；说明页含 HSEmotion 与 TTA；本地曲库 280 首。
 
 服务已启动时（端口换成你的）：
 
@@ -319,6 +349,8 @@ python tests/test_full_ui.py
 若本机开了 Clash 等代理，自检里「离线推荐 <1s」或个别在线接口可能变慢，把终端代理关掉再测，或把浏览器设为「绕过 127.0.0.1」。Playwright 测试已加 `--no-proxy-server`。
 
 页面上再点一次「历史」：若按第 8 节恢复过足迹，应能看到旧记录、人脸截图和播过的歌。
+
+讲座演示建议再点一次照片页的 `01-喜`、`03-哀`、`05-惊`，确认情绪大字和推荐歌单会跟着变。
 
 ---
 
@@ -349,7 +381,7 @@ python tools\pack_local_data.py
 
 或双击 `tools\pack-local-data.bat`。
 
-会生成 `data\emotune-local-data.zip`（含 `history.json`、`prefs.json`、全部历史人脸图）。把这个 zip 拷到 U 盘或网盘。
+会生成 `data\emotune-local-data.zip`（含 `history.json`、`prefs.json`、全部历史人脸图）。把这个 zip 拷到 U 盘或网盘。zip **不要**提交到 GitHub。
 
 **在新电脑**（已经按方式 A 检出本快照、建好 `emotune`）：
 
@@ -363,7 +395,7 @@ python tools\pack_local_data.py --unpack data\emotune-local-data.zip
 
 或双击 `tools\unpack-local-data.bat`。
 
-3. 启动 `python app.py`，浏览器打开页面，点「历史」。
+3. 启动 `python app.py`，浏览器打开页面，点「历史」。应能看到旧记录、人脸截图、当时播过的歌和歌曲情绪标签。
 
 可重复解包：后解的文件覆盖同名文件。建议先停掉 Flask 再解包。
 
@@ -397,38 +429,44 @@ python tools\pack_local_data.py --unpack data\emotune-local-data.zip
 
 ---
 
-## 9. 日常使用要点
+## 9. 日常使用 / 讲座演示要点
 
 1. 检测方式默认 **单人精检**（近景一张脸，高精度）。课堂合影再切 **多人远场**。
 2. 四种输入：摄像头、照片（JPG/PNG/WEBP）、本地视频、屏幕分享。
 3. 「实时捕捉」可持续识曲；「识别此刻」截一帧并关掉实时捕捉。问号上的说明要**把鼠标放到问号上**才出现。
-4. 默认在线曲库；关掉「在线曲库」只用本地 280 首。在线长时间失败会自动切本地。
+4. 默认在线曲库；关掉「在线曲库」只用本地 280 首。在线长时间失败会自动切本地。讲座现场网络不稳时，先关掉「在线曲库」。
 5. 歌词能联网时用官方词并对齐 30 秒试听；断网用本地词。
 6. 完整算法说明：http://127.0.0.1:5000/guide
+7. 演示图在 `static/demo/`，文件名已按中文情绪命名（每种三张）。
 
 ---
 
 ## 10. 从固定版本恢复 / 继续开发
 
-回到**这一版**（仍用 conda 环境 `emotune`）：
+回到**讲座这一版**（仍用 conda 环境 `emotune`）：
 
 ```bat
 git fetch --tags
-git checkout snapshot-20261028-1105
+git checkout snapshot-20261028-1252
 conda activate emotune
 python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+python tools\verify_cpu.py
 python app.py
 ```
 
 若新电脑还没有环境：先 `tools\setup-conda.bat`。
 
-回到 2026-10-28 10:43（conda 文档之前的一版，标签里仍写系统 Python 3.10/3.11）：
+回到 2026-10-28 11:05（conda 3.12 文档版，CPU 包尚未打进该标签）：
+
+```bat
+git checkout snapshot-20261028-1105
+```
+
+回到 2026-10-28 10:43：
 
 ```bat
 git checkout snapshot-20261028-1043
 ```
-
-那一版也可以在现在的 `emotune`（3.12）里运行；请仍用 conda，不要退回系统 Python。
 
 回到 2026-10-28 09:51：
 
@@ -442,17 +480,19 @@ git checkout snapshot-20261028-0951
 git checkout snapshot-20261027-2210
 ```
 
+旧标签也可以在现在的 `emotune`（3.12）里运行；请仍用 conda，不要退回系统 Python。讲座请用 `snapshot-20261028-1252`。
+
 在本快照上继续改代码（不要直接改标签指向的提交）：
 
 ```bat
-git checkout -b dev/continue snapshot-20261028-1105
+git checkout -b dev/continue snapshot-20261028-1252
 conda activate emotune
 ```
 
 对比当前与本快照：
 
 ```bat
-git diff snapshot-20261028-1105
+git diff snapshot-20261028-1252
 ```
 
 更完整的标签说明见 [VERSION.md](VERSION.md)。
@@ -463,15 +503,15 @@ git diff snapshot-20261028-1105
 
 识别和播放跑在本机 Flask 上，**Surge 不能跑 Python / ONNX / 摄像头**。
 
-本快照的静态介绍：
+本快照（讲座版本）的静态介绍：
 
-https://emomusic-grok-20261028-1105.surge.sh
+https://emomusic-grok-20261028-1252.surge.sh
 
-上一版介绍页仍在：https://emomusic-grok-20261028-1043.surge.sh （对应 `snapshot-20261028-1043`）
+上一版介绍页仍在：https://emomusic-grok-20261028-1105.surge.sh （对应 `snapshot-20261028-1105`）
 
 那一页不能代替 `python app.py`。真正用摄像头识曲，仍按上面第 6 步在本机、conda 环境里启动。
 
-域名规则：`emomusic-grok-版本号.surge.sh`，必须小写。本版版本号为 `20261028-1105`。
+域名规则：`emomusic-grok-版本号.surge.sh`，必须小写。本版版本号为 `20261028-1252`。
 
 ---
 
@@ -486,7 +526,7 @@ https://emomusic-grok-20261028-1105.surge.sh
 **python --version 显示 3.11 或别的，不是 3.12**  
 没有 `conda activate emotune`。激活后提示符应变为 `(emotune)`。`run.bat` 不依赖激活，它直接调用环境里的 `python.exe`。
 
-**创建环境时提示 Terms of Service**  
+**创建环境时提示 Terms of Service**
 
 ```bat
 conda tos accept
@@ -495,6 +535,16 @@ conda tos accept
 **pip 很慢或超时**  
 使用清华源（第 5 节）。关掉系统代理后再试。
 
+**pip 报 dependency resolver / anyio / datasets / fastapi / jax / kaggle 缺依赖**  
+装进了已经很满的旧环境（或 `base`）。不要去补装那些包。新建空环境：
+
+```bat
+conda deactivate
+conda create -n emotune python=3.12 pip -y
+conda activate emotune
+python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
 **提示缺少人脸检测模型**  
 把 `static/models/` 三个 `.onnx` 拷齐，或联网后重新 `python app.py`。
 
@@ -502,7 +552,7 @@ conda tos accept
 切到「单人精检」，正对镜头、光线均匀、脸足够大。远景合影请切「多人远场」。
 
 **在线歌一直失败**  
-关掉系统代理后再试，或关闭「在线曲库」用本地歌。
+关掉系统代理后再试，或关闭「在线曲库」用本地歌。讲座现场建议先关在线。
 
 **换电脑后历史是空的**  
 只克隆了仓库。按第 8 节解包或拷贝 `data/history.json` 与 `static/history/`。

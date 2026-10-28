@@ -1,12 +1,168 @@
 # 心弦 EmoTune 固定版本
 
-仓库始终是 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)。下面每一版都有独立 Git 标签，互不覆盖。
+仓库始终是 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（已公开）。下面每一版都有独立 Git 标签，互不覆盖。
 
-换电脑的逐步说明（含情绪足迹怎么带走）见 [SETUP.md](SETUP.md)。
+换电脑的逐步说明（conda 环境 `emotune` + Python 3.12 + 情绪足迹）见 [SETUP.md](SETUP.md)。
 
 ---
 
-## 当前快照 2026-10-28 10:43
+## 当前快照 2026-10-28 11:05
+
+| 项 | 内容 |
+| --- | --- |
+| 快照时间 | **2026-10-28 11:05**（本地） |
+| 仓库 | [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开） |
+| Git 标签 | `snapshot-20261028-1105` |
+| 发布名 | 心弦 EmoTune 快照 2026-10-28 11:05 |
+| 分支 | `main` |
+| Surge 介绍页 | https://emomusic-grok-20261028-1105.surge.sh |
+| Python | **3.12**（conda 新建环境 `emotune`，已验证 3.12.16） |
+| 网页标题 | 当AI遇见旋律：从表情感知到智能音乐推荐 |
+
+本仓库 `main` 指向这一版。克隆后默认已在该版本；用标签可以随时精确回到此刻。
+
+上一版 `snapshot-20261028-1043`、`snapshot-20261028-0951` 与更早的 `snapshot-20261027-2210`（224 首）仍然保留，不会被本标签覆盖。
+
+### 这一版相对上一版做了什么
+
+- 仓库改为公开，克隆一般不用登录
+- **部署必须用 conda 新建环境 `emotune`，Python 3.12**（不要用系统 Python 全局 pip）
+- `environment.yml`、`tools/setup-conda.bat`、`run.bat` 会定位该环境
+- `SETUP.md` 按「Miniconda → 克隆 → 建环境 → 装依赖 → 启动 → 带走足迹」重写
+- `requirements.txt` 限制 Flask 3.x、OpenCV 4.x（避免误装 OpenCV 5）
+
+功能与 10:43 快照相同：官方歌词对齐、快速人脸框、问号悬停说明、足迹打包、本地 280 首。
+
+MobileFaceNet 在 RAF-DB 上的公开评测仍是 **88.27%**。本机 ≥90% 是示例图稳健测试目标。
+
+### 未写入 Git 的本机数据
+
+- `data/history.json` 情绪足迹索引
+- `static/history/*.jpg` 历史人脸截图
+- `data/prefs.json` 本机主题偏好
+- `data/emotune-local-data.zip` 足迹打包（若生成过）
+
+conda 环境 `emotune` 在用户目录，也不进 GitHub。换电脑要重新 `conda create`。
+
+换电脑带走足迹：整夹拷贝，或旧电脑 `tools\pack-local-data.bat`，新电脑解包。
+
+### 快速恢复这一版
+
+环境：Windows 10/11，**Miniconda3 / Anaconda3**，conda 环境 `emotune`，**Python 3.12**，Chrome 或 Edge。逐步说明见 [SETUP.md](SETUP.md)。
+
+```bat
+git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
+cd emoMusic-grok-20261027-2210
+git checkout snapshot-20261028-1105
+conda create -n emotune python=3.12 pip -y
+conda activate emotune
+python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+python app.py
+```
+
+也可双击 `tools\setup-conda.bat` 再建环境，再双击 `run.bat`。
+
+浏览器打开 [http://127.0.0.1:5000](http://127.0.0.1:5000)。摄像头必须用这个地址（或 localhost）。
+
+若 5000 已被占用：
+
+```bat
+conda activate emotune
+set EMOTUNE_PORT=18765
+python app.py
+```
+
+然后打开 [http://127.0.0.1:18765](http://127.0.0.1:18765)。
+
+启动日志应含 `Python 3.12.x` 以及 conda 环境路径。本快照已含三个 ONNX 和 280 首 m4a。
+
+恢复旧足迹（可选）：
+
+```bat
+conda activate emotune
+python tools\pack_local_data.py --unpack data\emotune-local-data.zip
+```
+
+### 核对这一版还在
+
+```bat
+conda activate emotune
+python tests/selfcheck.py
+```
+
+服务已启动时：
+
+```bat
+set EMOTUNE_BASE=http://127.0.0.1:5000
+python tests/test_full_ui.py
+```
+
+`test_full_ui.py` 需要 Playwright：`python -m pip install playwright` 后执行 `python -m playwright install chromium`。
+
+### 从这一版继续开发
+
+```bat
+git fetch --tags
+git checkout snapshot-20261028-1105
+git checkout -b dev/continue snapshot-20261028-1105
+conda activate emotune
+```
+
+改代码、自检、提交、推送：
+
+```bat
+python tests/selfcheck.py
+git add -A
+git commit -m "说明这次改了什么"
+git push -u origin dev/continue
+```
+
+`git add -A` 不会提交足迹文件。不要把 `data/history.json`、`static/history/`、`data/emotune-local-data.zip` 加进去。conda 环境也不要提交。
+
+合并到 `main` 后，原来的标签 `snapshot-20261028-1105`、`snapshot-20261028-1043`、`snapshot-20261028-0951` 与 `snapshot-20261027-2210` 仍然指向各自快照。
+
+随时回到这一版：
+
+```bat
+git fetch --tags
+git switch --detach snapshot-20261028-1105
+conda activate emotune
+```
+
+在快照上再开新线：
+
+```bat
+git checkout -b recover/20261028-1105 snapshot-20261028-1105
+```
+
+对比当前代码和本快照：
+
+```bat
+git diff snapshot-20261028-1105
+```
+
+### 本机已有项目目录时
+
+```bat
+cd /d E:\F_当AI遇见旋律\Grok20261023_当AI遇见旋律\emoMusic
+git checkout snapshot-20261028-1105
+conda activate emotune
+python app.py
+```
+
+远程地址应指向 `https://github.com/Abner199/emoMusic-grok-20261027-2210.git`。
+
+### Surge 介绍页
+
+https://emomusic-grok-20261028-1105.surge.sh
+
+域名规则：`emomusic-grok-版本号.surge.sh`，本版版本号为 `20261028-1105`。必须小写。不能跑摄像头。
+
+上一版介绍页仍在：https://emomusic-grok-20261028-1043.surge.sh
+
+---
+
+## 上一版快照 2026-10-28 10:43
 
 | 项 | 内容 |
 | --- | --- |
@@ -18,9 +174,9 @@
 | Surge 介绍页 | https://emomusic-grok-20261028-1043.surge.sh |
 | 网页标题 | 当AI遇见旋律：从表情感知到智能音乐推荐 |
 
-本仓库 `main` 指向这一版。克隆后默认已在该版本；用标签可以随时精确回到此刻。
+当时仓库尚未改为公开部署路径。本地曲库 **280** 首。Python 文档仍写 3.10/3.11、系统 `pip`，没有 conda 环境 `emotune`。功能上已有官方歌词对齐、快速人脸框和足迹打包。
 
-上一版 `snapshot-20261028-0951` 与更早的 `snapshot-20261027-2210`（224 首）仍然保留，不会被本标签覆盖。
+上一版 `snapshot-20261028-0951` 与更早的 `snapshot-20261027-2210`（224 首）仍然保留。
 
 ### 这一版相对上一版做了什么
 
@@ -53,7 +209,7 @@ MobileFaceNet 在 RAF-DB 上的公开评测仍是 **88.27%**。本机 ≥90% 是
 
 ### 快速恢复这一版
 
-环境：Windows 10/11，Python 3.10 或 3.11（已验证 3.11），Chrome 或 Edge。逐步说明见 [SETUP.md](SETUP.md)。
+环境：Windows 10/11；这一版文档写的是系统 Python 3.10/3.11。现在请仍用 conda 环境 `emotune`（Python 3.12）来运行它。逐步说明见当前 [SETUP.md](SETUP.md)。
 
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git

@@ -4,6 +4,8 @@ __pycache__/
 .venv/
 venv/
 env/
+.conda/
+conda-env/
 data/history.json
 data/prefs.json
 data/sessions/

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>当AI遇见旋律：从表情感知到智能音乐推荐</title>
-  <meta name="description" content="心弦 EmoTune 快照 20261028-1043。本机人脸情绪识别，智能推荐刚好的一首歌。Surge 本页只是介绍，识曲请在本机启动 Flask。" />
+  <meta name="description" content="心弦 EmoTune 快照 20261028-1105。conda 环境 emotune，Python 3.12。Surge 本页只是介绍，识曲请在本机启动 Flask。" />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png" />
   <link rel="apple-touch-icon" href="apple-touch-icon.png" />
@@ -51,18 +51,19 @@
   <main class="wrap">
     <a class="brand" href="https://github.com/Abner199/emoMusic-grok-20261027-2210">
       <img src="apple-touch-icon.png" width="52" height="52" alt="心弦" />
-      <span><strong>心弦</strong><em>EmoTune · 20261028-1043</em></span>
+      <span><strong>心弦</strong><em>EmoTune · 20261028-1105</em></span>
     </a>
     <h1>当AI遇见旋律：从表情感知到智能音乐推荐</h1>
     <p class="lead">本机识别喜、怒、哀、惧、惊、厌、中性七类表情，再按你选的方式推荐刚好的一首歌。摄像头、照片、视频、屏幕都能用。识别在你自己的电脑上完成。</p>
     <div class="meta">
-      <span class="chip">快照 2026-10-28 10:43</span>
-      <span class="chip">标签 snapshot-20261028-1043</span>
-      <span class="chip">域名 emomusic-grok-20261028-1043</span>
+      <span class="chip">快照 2026-10-28 11:05</span>
+      <span class="chip">标签 snapshot-20261028-1105</span>
+      <span class="chip">Python 3.12 · conda emotune</span>
+      <span class="chip">域名 emomusic-grok-20261028-1105</span>
     </div>
     <div class="actions">
       <a class="btn primary" href="https://github.com/Abner199/emoMusic-grok-20261027-2210">打开 GitHub 仓库</a>
-      <a class="btn ghost" href="https://github.com/Abner199/emoMusic-grok-20261027-2210/releases/tag/snapshot-20261028-1043">查看本版 Release</a>
+      <a class="btn ghost" href="https://github.com/Abner199/emoMusic-grok-20261027-2210/releases/tag/snapshot-20261028-1105">查看本版 Release</a>
     </div>
 
     <div class="note">
@@ -71,11 +72,11 @@
 
     <h2>在新电脑上启动</h2>
     <ol>
-      <li>安装 Python 3.10 或 3.11（勾选 Add to PATH），以及 Chrome / Edge。</li>
+      <li>安装 Miniconda3（Windows 64 位）以及 Chrome / Edge。</li>
       <li><code>git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git</code></li>
-      <li><code>cd emoMusic-grok-20261027-2210</code> 然后 <code>git checkout snapshot-20261028-1043</code></li>
-      <li><code>python -m pip install -r requirements.txt</code></li>
-      <li><code>python app.py</code> 或双击 <code>run.bat</code></li>
+      <li><code>cd emoMusic-grok-20261027-2210</code> 然后 <code>git checkout snapshot-20261028-1105</code></li>
+      <li>双击 <code>tools\setup-conda.bat</code>，或 <code>conda create -n emotune python=3.12 pip -y</code> 后 <code>conda activate emotune</code> 再 <code>pip install -r requirements.txt</code></li>
+      <li>双击 <code>run.bat</code>，或 <code>python app.py</code></li>
       <li>浏览器打开 <code>http://127.0.0.1:5000</code>。摄像头必须用这个地址。</li>
     </ol>
     <p class="lead">逐步说明、端口占用、足迹怎么拷，见仓库里的 <code>SETUP.md</code> 与 <code>VERSION.md</code>。</p>
@@ -92,7 +93,7 @@
     <p class="lead">完整部署步骤（含历史记录）见仓库 <code>SETUP.md</code>。</p>
 
     <footer>
-      私有仓库 · 标签 <code>snapshot-20261028-1043</code> · 上一版 <code>snapshot-20261028-0951</code> 与 <code>snapshot-20261027-2210</code>（224 首）仍可检出。<br />
+      公开仓库 · Python 3.12 · conda 环境 <code>emotune</code> · 标签 <code>snapshot-20261028-1105</code> · 上一版 <code>snapshot-20261028-1043</code> 仍可检出。<br />
       <a href="https://github.com/Abner199/emoMusic-grok-20261027-2210">github.com/Abner199/emoMusic-grok-20261027-2210</a>
     </footer>
   </main>

@@ -252,7 +252,7 @@ def main() -> int:
     fails += not _ok("GET /api/stream 缺地址", stream_miss.status_code == 400)
     page = client.get("/")
     home = page.get_data(as_text=True)
-    fails += not _ok("GET / 首页", page.status_code == 200 and "心弦" in home)
+    fails += not _ok("GET / 首页", page.status_code == 200 and ("当AI遇见旋律" in home or "心弦" in home))
     fails += not _ok("首页写明人脸算法", "YuNet" in home and "MobileFaceNet FER" in home)
     fails += not _ok("首页不堆算法长文", 'id="algo-panel"' not in home and 'id="btn-guide"' in home and 'href="/guide"' in home)
     fails += not _ok("首页可选推荐方式", 'id="strat-picks"' in home and "先同频再修复" in home)

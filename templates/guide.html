@@ -173,9 +173,9 @@
         <p class="meta">完整步骤见仓库里的 SETUP.md</p>
       </div>
       <ol>
-        <li>新电脑安装 Python 3.10 或 3.11，以及 Chrome / Edge。</li>
-        <li>克隆仓库并回到本快照：<code>git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git</code> 后执行 <code>git checkout snapshot-20261028-1043</code>。</li>
-        <li>在项目目录执行 <code>python -m pip install -r requirements.txt</code>，再 <code>python app.py</code> 或双击 <code>run.bat</code>。</li>
+        <li>新电脑安装 Miniconda3（或 Anaconda3）以及 Chrome / Edge。Python 用 conda 环境里的 <strong>3.12</strong>，不要用系统 Python。</li>
+        <li>克隆仓库并回到本快照：<code>git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git</code> 后执行 <code>git checkout snapshot-20261028-1105</code>。</li>
+        <li>双击 <code>tools\setup-conda.bat</code>，或 <code>conda create -n emotune python=3.12 pip -y</code> 后 <code>conda activate emotune</code>，再 <code>python -m pip install -r requirements.txt</code>。启动：<code>python app.py</code> 或双击 <code>run.bat</code>。</li>
         <li>浏览器打开 <code>http://127.0.0.1:5000</code>。摄像头必须用 127.0.0.1 或 localhost。端口被占用时：<code>set EMOTUNE_PORT=18765</code> 再启动。</li>
         <li>若要带走旧足迹：整夹拷贝，或旧电脑运行 <code>tools\pack-local-data.bat</code>，新电脑把 zip 放到 <code>data\</code> 再运行 <code>tools\unpack-local-data.bat</code>。<code>data/history.json</code>、<code>data/prefs.json</code>、<code>static/history/</code> 不进 GitHub。</li>
         <li>核对：<code>python tests/selfcheck.py</code>。详细说明见项目根目录 <code>SETUP.md</code> 与 <code>VERSION.md</code>。</li>

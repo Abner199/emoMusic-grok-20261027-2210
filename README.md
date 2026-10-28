@@ -2,9 +2,9 @@
 
 品牌 **心弦 EmoTune**。
 
-> **当前快照** 2026-10-28 10:43 · 标签 `snapshot-20261028-1043` · 仓库 [emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)  
-> 换电脑逐步启动（含情绪足迹打包）见 [SETUP.md](SETUP.md)。固定版本、上一版快照与如何继续开发见 [VERSION.md](VERSION.md)。  
-> 静态介绍页：https://emomusic-grok-20261028-1043.surge.sh
+> **当前快照** 2026-10-28 11:05 · 标签 `snapshot-20261028-1105` · 仓库 [emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）  
+> 换电脑：conda 新建环境 `emotune` + **Python 3.12** + 足迹打包，见 [SETUP.md](SETUP.md)。固定版本与如何继续开发见 [VERSION.md](VERSION.md)。  
+> 静态介绍页：https://emomusic-grok-20261028-1105.surge.sh
 
 本机人脸情绪识别歌曲推荐。用摄像头、照片、本地视频或屏幕画面识别七类基本情绪（喜、怒、哀、惧、惊、厌、中性），再按情绪播放匹配的华语校园热歌。
 
@@ -51,21 +51,25 @@
 
 ## 环境
 
-- Windows 10/11，Python 3.10 或 3.11
-- 已验证：Python 3.11 + OpenCV 4.13 + Flask 3.1
+- Windows 10/11，**Miniconda3 / Anaconda3**
+- **必须**新建 conda 环境 `emotune`，Python **3.12**（已验证 3.12.16 + OpenCV 4.x + Flask 3.1）
+- 兼容 3.10 / 3.11，但新电脑请用 3.12；不要用系统 Python 全局装依赖
 
 ```bat
 cd /d 本项目目录
-python -m pip install -r requirements.txt
+conda create -n emotune python=3.12 pip -y
+conda activate emotune
+python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
-依赖：`flask`、`opencv-python`、`numpy`、`pillow`、`requests`、`scipy`、`onnxruntime`。
+也可双击 `tools\setup-conda.bat`。依赖：`flask`、`opencv-python`（4.x）、`numpy`、`pillow`、`requests`、`scipy`、`onnxruntime`。
 
 ## 启动
 
-双击 `run.bat`，或：
+双击 `run.bat`（自动使用 `emotune`），或：
 
 ```bat
+conda activate emotune
 python app.py
 ```
 
@@ -73,7 +77,7 @@ python app.py
 
 摄像头必须用 `http://127.0.0.1:5000`（或 localhost / HTTPS）打开。请用 Chrome 或 Edge。
 
-换一台电脑：优先按 [SETUP.md](SETUP.md) 克隆标签 `snapshot-20261028-1043`；或把整个 `emoMusic` 文件夹拷过去再 `python app.py`。示例表情和本地曲库在项目里。情绪足迹（`data/history.json`、`static/history/`）不进 GitHub：旧电脑运行 `tools\pack-local-data.bat`，新电脑解包 `tools\unpack-local-data.bat`。
+换一台电脑：按 [SETUP.md](SETUP.md) 克隆标签 `snapshot-20261028-1105`，再用 conda 新建 `emotune`（Python 3.12）。示例表情和本地曲库在项目里。情绪足迹不进 GitHub：旧电脑 `tools\pack-local-data.bat`，新电脑 `tools\unpack-local-data.bat`。
 
 ## 使用
 
@@ -136,7 +140,9 @@ emoMusic/
     lyrics.py            官方 LRC + 本机词
     assets.py            模型下载与曲库缓存
     history.py           全局持久历史
+  environment.yml        conda 环境 emotune / Python 3.12
   tools/
+    setup-conda.bat      一键创建 conda 环境并安装依赖
     pack_local_data.py   打包 / 恢复本机足迹（不进 Git）
   templates/index.html
   templates/guide.html   算法、理论、使用说明

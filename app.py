@@ -510,6 +510,7 @@ if __name__ == "__main__":
     from backend.assets import ensure_assets
     from backend.emotion import get_recognizer
 
+    logger.info("Python %s  |  %s", sys.version.split()[0], sys.prefix)
     logger.info("正在准备模型与本地曲库…")
     ensure_assets()
     get_recognizer()

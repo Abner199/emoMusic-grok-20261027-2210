@@ -15,7 +15,7 @@
 | Git 标签 | `snapshot-20261028-0951` |
 | 发布名 | 心弦 EmoTune 快照 2026-10-28 09:51 |
 | 分支 | `main` |
-| Surge 介绍页 | https://emomusic-gt-20261028.surge.sh |
+| Surge 介绍页 | https://emomusic-grok-20261028.surge.sh |
 | 网页标题 | 当AI遇见旋律：从表情感知到智能音乐推荐 |
 
 本仓库 `main` 指向这一版。克隆后默认已在该版本；用标签可以随时精确回到此刻。
@@ -153,9 +153,9 @@ git remote -v
 
 识别服务是本机 Flask，Surge 只托管静态说明：
 
-https://emomusic-gt-20261028.surge.sh
+https://emomusic-grok-20261028.surge.sh
 
-域名规则：`emomusic-gt-版本号.surge.sh`，本版版本号为 `20261028`。
+域名规则：`emomusic-grok-版本号.surge.sh`，本版版本号为 `20261028`。
 
 ---
 

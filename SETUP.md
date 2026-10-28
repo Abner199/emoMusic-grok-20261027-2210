@@ -210,7 +210,7 @@ git diff snapshot-20261028-0951
 
 本快照另有一页静态介绍，方便用手机或别人电脑看说明、仓库和启动步骤：
 
-https://emomusic-gt-20261028.surge.sh
+https://emomusic-grok-20261028.surge.sh
 
 那一页不能代替 `python app.py`。真正用摄像头识曲，仍按上面第 4 步在本机启动。
 

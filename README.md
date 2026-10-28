@@ -4,7 +4,7 @@
 
 > **当前快照** 2026-10-28 09:51 · 标签 `snapshot-20261028-0951` · 仓库 [emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)  
 > 换电脑逐步启动见 [SETUP.md](SETUP.md)。固定版本、上一版 224 首快照与如何继续开发见 [VERSION.md](VERSION.md)。  
-> 静态介绍页：https://emomusic-gt-20261028.surge.sh
+> 静态介绍页：https://emomusic-grok-20261028.surge.sh
 
 本机人脸情绪识别歌曲推荐。用摄像头、照片、本地视频或屏幕画面识别七类基本情绪（喜、怒、哀、惧、惊、厌、中性），再按情绪播放匹配的华语校园热歌。
 

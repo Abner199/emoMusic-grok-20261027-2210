@@ -59,6 +59,9 @@ def main() -> int:
     fails += not _ok("YuNet 模型", yunet.exists() and yunet.stat().st_size > 50_000, f"{yunet.stat().st_size if yunet.exists() else 0} bytes")
     fails += not _ok("FER 模型", fer.exists() and fer.stat().st_size > 50_000, f"{fer.stat().st_size if fer.exists() else 0} bytes")
     fails += not _ok("HSEmotion 模型", hse.exists() and hse.stat().st_size > 1_000_000, f"{hse.stat().st_size if hse.exists() else 0} bytes")
+    from tools.verify_cpu import check as _cpu_ort
+    cpu_ok, cpu_detail = _cpu_ort()
+    fails += not _ok("onnxruntime 为 pip CPU 包", cpu_ok, cpu_detail)
 
     catalog_path = DATA_DIR / "catalog.json"
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))["songs"]

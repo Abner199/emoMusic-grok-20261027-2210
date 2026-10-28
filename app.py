@@ -511,6 +511,15 @@ if __name__ == "__main__":
     from backend.emotion import get_recognizer
 
     logger.info("Python %s  |  %s", sys.version.split()[0], sys.prefix)
+    try:
+        from tools.verify_cpu import check as _cpu_ort
+        cpu_ok, cpu_detail = _cpu_ort()
+        if cpu_ok:
+            logger.info("onnxruntime CPU %s", cpu_detail)
+        else:
+            logger.warning("onnxruntime 不是 CPU 包：%s", cpu_detail)
+    except Exception:
+        logger.exception("未能核对 onnxruntime CPU 包")
     logger.info("正在准备模型与本地曲库…")
     ensure_assets()
     get_recognizer()

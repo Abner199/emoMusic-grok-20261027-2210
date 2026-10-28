@@ -67,7 +67,12 @@ if not defined EMOTUNE_PY (
 echo 使用 Python：%EMOTUNE_PY%
 "%EMOTUNE_PY%" --version
 echo.
-echo 正在安装依赖（清华源）…
+echo 先卸掉可能存在的 GPU 版 onnxruntime（本项目只用 CPU）…
+"%EMOTUNE_PY%" -m pip uninstall -y onnxruntime-gpu onnxruntime-directml 2>nul
+"%CONDA_EXE%" remove -n emotune onnxruntime --yes 2>nul
+"%EMOTUNE_PY%" -m pip uninstall -y onnxruntime 2>nul
+echo.
+echo 正在安装依赖（清华源，onnxruntime 为 pip CPU 包）…
 "%EMOTUNE_PY%" -m pip install -U pip --default-timeout=300 -i https://pypi.tuna.tsinghua.edu.cn/simple
 "%EMOTUNE_PY%" -m pip install --default-timeout=300 --retries 10 -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 if errorlevel 1 (
@@ -77,12 +82,23 @@ if errorlevel 1 (
 if errorlevel 1 (
   echo pip 仍失败，改用 conda-forge 安装 Flask / OpenCV / NumPy（不要装 conda 的 onnxruntime，那是 GPU 大包）。
   "%CONDA_EXE%" install -n emotune -c conda-forge flask numpy scipy pillow requests opencv -y
-  "%EMOTUNE_PY%" -m pip install --default-timeout=300 --retries 10 "onnxruntime>=1.16"
+  "%EMOTUNE_PY%" -m pip uninstall -y onnxruntime-gpu onnxruntime-directml onnxruntime 2>nul
+  "%EMOTUNE_PY%" -m pip install --default-timeout=300 --retries 10 "onnxruntime>=1.16,<2"
   if errorlevel 1 (
     echo 依赖安装失败。请检查网络、关掉代理后再试。不要执行 conda install onnxruntime。
     pause
     exit /b 1
   )
+)
+echo.
+echo 核对 onnxruntime 是 CPU 包…
+"%EMOTUNE_PY%" tools\verify_cpu.py
+if errorlevel 1 (
+  echo onnxruntime 不是 CPU 包。请执行：
+  echo   python -m pip uninstall -y onnxruntime-gpu onnxruntime-directml onnxruntime
+  echo   python -m pip install "onnxruntime>=1.16,<2"
+  pause
+  exit /b 1
 )
 
 echo.

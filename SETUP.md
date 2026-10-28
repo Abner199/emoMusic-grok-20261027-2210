@@ -6,7 +6,7 @@
 
 静态介绍页（不能跑摄像头）：https://emomusic-grok-20261028-1105.surge.sh
 
-**运行方式：conda 新建环境 `emotune`，Python 3.12。** 不要把依赖装进系统 Python。
+**运行方式：conda 新建环境 `emotune`，Python 3.12。** 不要把依赖装进系统 Python。推理只用 **CPU 版** `onnxruntime`（pip 包名就是 `onnxruntime`）。
 
 ---
 
@@ -29,11 +29,12 @@
 | conda | **Miniconda3** 或 Anaconda3（64 位）。环境名固定为 `emotune` |
 | Git | 从 GitHub 克隆时需要 [Git for Windows](https://git-scm.com/download/win) |
 | 浏览器 | Chrome 或 Edge（摄像头、屏幕分享用） |
-| 磁盘 | 约 1 GB（代码 + 三个 ONNX + 280 首试听）+ conda 环境约 0.5–1 GB；足迹另计 |
+| 磁盘 | 约 1 GB（代码 + 三个 ONNX + 280 首试听）+ conda 环境约 0.5–1 GB（CPU）；足迹另计 |
 | 网络 | 首次创建环境和缺模型时要联网；平时可完全离线识别和播本地曲 |
 | 摄像头 | 本机摄像头；页面必须用 `http://127.0.0.1:端口` 打开 |
+| GPU | **不需要。** 不要装 CUDA / `onnxruntime-gpu` |
 
-不需要 CUDA，不需要 ffmpeg。装了 ffmpeg 也只是以后给旋律分析用，当前人声试听是 m4a 缓存。不需要管理员权限：conda 环境会建在用户目录。
+不需要 CUDA，不需要 ffmpeg。装了 ffmpeg 也只是以后给旋律分析用，当前人声试听是 m4a 缓存。不需要管理员权限：conda 环境会建在用户目录。conda-forge 的 `onnxruntime` 会顺带拉约 2 GB CUDA，请不要用它。
 
 ### Python 版本
 
@@ -44,7 +45,7 @@
 | 3.13 / 3.14 | 未作为本项目部署路径验证，不要用来还原这一版 |
 | 3.9 及以下 | 不要用 |
 
-依赖用 pip 装进 conda 环境：Flask 3.x、OpenCV 4.x（不要 5）、NumPy 1.24–2.x、Pillow、requests、SciPy、onnxruntime。`requirements.txt` 已写上限，避免误装 OpenCV 5。
+依赖用 pip 装进 conda 环境：Flask 3.x、OpenCV 4.x（不要 5）、NumPy 1.24–2.x、Pillow、requests、SciPy、**CPU 版** onnxruntime。`requirements.txt` 已写上限，避免误装 OpenCV 5 或 GPU 版 onnxruntime。
 
 ---
 
@@ -82,10 +83,9 @@ conda tos accept
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
-git checkout snapshot-20261028-1105
 ```
 
-`main` 一般已指向最新快照；用标签可以精确钉在这一版。
+默认就是 `main`，含 **CPU 版 onnxruntime** 核对脚本。若只要 11:05 那一版代码，再执行 `git checkout snapshot-20261028-1105`（该标签不移动）。
 
 ### 方式 B：U 盘 / 网盘拷整个文件夹（连历史一起）
 
@@ -109,15 +109,16 @@ OpenCV 读 ONNX 已按内存加载，中文路径可用。
 | `data/history.json` | **情绪足迹索引（历史）** |
 | `static/history/` | **足迹里的人脸截图** |
 | `data/prefs.json` | 主题、检测方式等本机偏好 |
-| `requirements.txt` | pip 依赖清单 |
+| `requirements.txt` | pip 依赖清单（含 CPU 版 onnxruntime） |
 | `tools/setup-conda.bat` | 一键创建 conda 环境 |
+| `tools/verify_cpu.py` | 核对 onnxruntime 是 CPU 包 |
 
 不要指望拷来的 `.venv` 或别人电脑上的 conda 环境能直接用。新电脑按第 4 节**新建** `emotune`。
 
 ### 方式 C：Git 克隆 + 单独恢复足迹（推荐给「代码用仓库、历史用打包」）
 
 1. 在**旧电脑**项目根目录打包足迹（见第 7 节）。
-2. 在**新电脑**按方式 A 克隆并检出 `snapshot-20261028-1105`。
+2. 在**新电脑**按方式 A 克隆（默认 `main`，含 CPU 核对）。
 3. 按第 4、5 节建好 conda 环境。
 4. 把 `emotune-local-data.zip` 拷到新项目的 `data\` 下，运行解包脚本。
 5. 再启动 Flask。
@@ -132,7 +133,7 @@ OpenCV 读 ONNX 已按内存加载，中文路径可用。
 
 双击 `tools\setup-conda.bat`。
 
-它会：找到本机 conda → 创建（或复用）环境 `emotune` 且 Python 3.12 → 用清华源 `pip install -r requirements.txt`。
+它会：找到本机 conda → 创建（或复用）环境 `emotune` 且 Python 3.12 → 卸掉 GPU 版 onnxruntime → 用清华源 `pip install -r requirements.txt`（CPU 包）→ 运行 `python tools\verify_cpu.py`，必须 `PASS`。
 
 ### 4.2 命令行（Anaconda Prompt）
 
@@ -186,23 +187,43 @@ python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.
 
 清华源失败时去掉 `-i ...` 走官方 PyPI。大包（OpenCV、SciPy）若超时，加上 `--default-timeout=300`。
 
-**不要**执行 `conda install onnxruntime`：conda-forge 默认会拉 GPU/CUDA 依赖，体积约 2 GB。本项目用 CPU 推理，请用 pip 的 `onnxruntime`。
+本项目 **只用 CPU 推理**。请装 pip 包 `onnxruntime`（CPU）。
 
-若 pip 一直失败，可先用 conda-forge 装其余包，再只 pip 装 onnxruntime：
+不要装这些：
+
+- `onnxruntime-gpu`
+- `onnxruntime-directml`
+- `conda install onnxruntime`（conda-forge 默认拉 CUDA，约 2 GB）
+
+若已经误装 GPU / CUDA 包：
+
+```bat
+conda activate emotune
+python -m pip uninstall -y onnxruntime-gpu onnxruntime-directml onnxruntime
+conda remove -n emotune onnxruntime --yes
+python -m pip install --default-timeout=300 "onnxruntime>=1.16,<2"
+python tools\verify_cpu.py
+```
+
+若 pip 出现 `SSLEOFError` 或超时，多半是系统代理 / Clash TUN。关掉代理后再装，或加上 `--proxy http://127.0.0.1:7890`。
+
+若 pip 一直失败，可先用 conda-forge 装其余包，再只 pip 装 **CPU** onnxruntime：
 
 ```bat
 conda activate emotune
 conda install -c conda-forge flask numpy scipy pillow requests opencv -y
-python -m pip install --default-timeout=300 onnxruntime
+python -m pip uninstall -y onnxruntime-gpu onnxruntime-directml onnxruntime
+python -m pip install --default-timeout=300 "onnxruntime>=1.16,<2"
 ```
 
 装完后核对：
 
 ```bat
-python -c "import sys,flask,cv2,numpy,onnxruntime; print(sys.version.split()[0], cv2.__version__, numpy.__version__, onnxruntime.__version__)"
+python -c "import sys,flask,cv2,numpy,onnxruntime as ort; print(sys.version.split()[0], cv2.__version__, numpy.__version__, ort.__version__, ort.get_available_providers(), ort.get_device())"
+python tools\verify_cpu.py
 ```
 
-应看到 **3.12.x**，OpenCV **4.x**（例如 4.14），onnxruntime 已导入。
+应看到 **3.12.x**，OpenCV **4.x**，onnxruntime 版本号，device 为 `CPU`，providers 含 `CPUExecutionProvider`，**不含** `CUDAExecutionProvider` / `DmlExecutionProvider`。官方 pip CPU 包在 Windows 上还可能列出 `AzureExecutionProvider`（云推理占位，不是 GPU）。`verify_cpu.py` 打印 `PASS`。
 
 可选（只有跑浏览器自检才要）：
 
@@ -228,9 +249,12 @@ python app.py
 
 ```
 Python 3.12.16  |  C:\Users\你的用户名\.conda\envs\emotune
+onnxruntime CPU 1.31.x providers=['CPUExecutionProvider'] device=CPU …
 正在准备模型与本地曲库…
 打开浏览器访问 http://127.0.0.1:5000
 ```
+
+若出现 `onnxruntime 不是 CPU 包`，按第 5 节卸掉 GPU 包后重装 `onnxruntime`。
 
 用 **Chrome 或 Edge** 打开：
 

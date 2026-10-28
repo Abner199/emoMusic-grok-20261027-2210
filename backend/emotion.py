@@ -242,7 +242,11 @@ class EmotionRecognizer:
                 providers=["CPUExecutionProvider"],
             )
             self.hse_input = self.hse.get_inputs()[0].name
-            logger.info("HSEmotion EfficientNet-B0 已加载")
+            logger.info(
+                "HSEmotion EfficientNet-B0 已加载（CPU） available=%s session=%s",
+                ort.get_available_providers(),
+                self.hse.get_providers(),
+            )
         except Exception:
             self.hse = None
             logger.exception("HSEmotion 加载失败，单人精检仍用 MobileFaceNet TTA")

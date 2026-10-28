@@ -1,8 +1,11 @@
 # Python 3.12 in conda env emotune (3.10–3.12 also work).
+# Inference is CPU-only. Install pip package "onnxruntime".
+# Do NOT install onnxruntime-gpu / onnxruntime-directml.
+# Do NOT conda install onnxruntime (conda-forge pulls CUDA, ~2GB).
 flask>=3.0,<4
 opencv-python>=4.8,<5
 numpy>=1.24,<3
 pillow>=10.0
 requests>=2.31
 scipy>=1.11
-onnxruntime>=1.16
+onnxruntime>=1.16,<2

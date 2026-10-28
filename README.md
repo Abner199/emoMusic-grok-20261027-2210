@@ -3,7 +3,7 @@
 品牌 **心弦 EmoTune**。
 
 > **当前快照** 2026-10-28 11:05 · 标签 `snapshot-20261028-1105` · 仓库 [emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）  
-> 换电脑：conda 新建环境 `emotune` + **Python 3.12** + 足迹打包，见 [SETUP.md](SETUP.md)。固定版本与如何继续开发见 [VERSION.md](VERSION.md)。  
+> 换电脑：conda 新建环境 `emotune` + **Python 3.12** + **CPU 版 onnxruntime** + 足迹打包，见 [SETUP.md](SETUP.md)。固定版本与如何继续开发见 [VERSION.md](VERSION.md)。  
 > 静态介绍页：https://emomusic-grok-20261028-1105.surge.sh
 
 本机人脸情绪识别歌曲推荐。用摄像头、照片、本地视频或屏幕画面识别七类基本情绪（喜、怒、哀、惧、惊、厌、中性），再按情绪播放匹配的华语校园热歌。
@@ -62,7 +62,7 @@ conda activate emotune
 python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
-也可双击 `tools\setup-conda.bat`。依赖：`flask`、`opencv-python`（4.x）、`numpy`、`pillow`、`requests`、`scipy`、`onnxruntime`。
+也可双击 `tools\setup-conda.bat`。依赖：`flask`、`opencv-python`（4.x）、`numpy`、`pillow`、`requests`、`scipy`、**CPU 版** `onnxruntime`（不要装 `onnxruntime-gpu`，也不要 `conda install onnxruntime`）。
 
 ## 启动
 
@@ -77,7 +77,7 @@ python app.py
 
 摄像头必须用 `http://127.0.0.1:5000`（或 localhost / HTTPS）打开。请用 Chrome 或 Edge。
 
-换一台电脑：按 [SETUP.md](SETUP.md) 克隆标签 `snapshot-20261028-1105`，再用 conda 新建 `emotune`（Python 3.12）。示例表情和本地曲库在项目里。情绪足迹不进 GitHub：旧电脑 `tools\pack-local-data.bat`，新电脑 `tools\unpack-local-data.bat`。
+换一台电脑：按 [SETUP.md](SETUP.md) 克隆默认 `main`，再用 conda 新建 `emotune`（Python 3.12，CPU 版 onnxruntime）。示例表情和本地曲库在项目里。情绪足迹不进 GitHub：旧电脑 `tools\pack-local-data.bat`，新电脑 `tools\unpack-local-data.bat`。
 
 ## 使用
 

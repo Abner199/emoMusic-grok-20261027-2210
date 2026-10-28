@@ -19,7 +19,7 @@
 | Python | **3.12**（conda 新建环境 `emotune`，已验证 3.12.16） |
 | 网页标题 | 当AI遇见旋律：从表情感知到智能音乐推荐 |
 
-本仓库 `main` 指向这一版。克隆后默认已在该版本；用标签可以随时精确回到此刻。
+`snapshot-20261028-1105` 固定 conda `emotune` + Python 3.12 这一版。之后 `main` 又补了一笔：**推理只用 pip 的 CPU 包 `onnxruntime`**（不要 `onnxruntime-gpu`，也不要 `conda install onnxruntime`）。克隆默认分支即带 CPU 核对脚本 `tools/verify_cpu.py`。该标签本身不移动。
 
 上一版 `snapshot-20261028-1043`、`snapshot-20261028-0951` 与更早的 `snapshot-20261027-2210`（224 首）仍然保留，不会被本标签覆盖。
 
@@ -30,6 +30,7 @@
 - `environment.yml`、`tools/setup-conda.bat`、`run.bat` 会定位该环境
 - `SETUP.md` 按「Miniconda → 克隆 → 建环境 → 装依赖 → 启动 → 带走足迹」重写
 - `requirements.txt` 限制 Flask 3.x、OpenCV 4.x（避免误装 OpenCV 5）
+- 之后 `main` 固定 **CPU 版** `onnxruntime`：`tools/verify_cpu.py`、启动自检、`setup-conda.bat` 会拒绝 CUDA / DirectML 包
 
 功能与 10:43 快照相同：官方歌词对齐、快速人脸框、问号悬停说明、足迹打包、本地 280 首。
 
@@ -53,12 +54,14 @@ conda 环境 `emotune` 在用户目录，也不进 GitHub。换电脑要重新 `
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
-git checkout snapshot-20261028-1105
 conda create -n emotune python=3.12 pip -y
 conda activate emotune
 python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+python tools\verify_cpu.py
 python app.py
 ```
+
+默认克隆 `main`（含 CPU 核对）。要精确回到 11:05 再执行 `git checkout snapshot-20261028-1105`。
 
 也可双击 `tools\setup-conda.bat` 再建环境，再双击 `run.bat`。
 
@@ -74,7 +77,7 @@ python app.py
 
 然后打开 [http://127.0.0.1:18765](http://127.0.0.1:18765)。
 
-启动日志应含 `Python 3.12.x` 以及 conda 环境路径。本快照已含三个 ONNX 和 280 首 m4a。
+启动日志应含 `Python 3.12.x`、conda 环境路径，以及 `onnxruntime CPU … providers=['CPUExecutionProvider']`。本快照已含三个 ONNX 和 280 首 m4a。
 
 恢复旧足迹（可选）：
 

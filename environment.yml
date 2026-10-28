@@ -1,3 +1,4 @@
+# CPU only. Do not add conda-forge onnxruntime (that pulls CUDA).
 name: emotune
 channels:
   - defaults

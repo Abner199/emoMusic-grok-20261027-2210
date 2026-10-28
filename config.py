@@ -24,10 +24,11 @@ SECRET_KEY = "xinxian-emotune-dev-key-change-in-production"
 HOST = os.environ.get("EMOTUNE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("EMOTUNE_PORT", "5000"))
 MAX_CONTENT_MB = 8
-MAX_IMAGE_SIDE = 960
+MAX_IMAGE_SIDE = 1280
 
 YUNET_FILE = "face_detection_yunet_2023mar.onnx"
 FER_FILE = "facial_expression_recognition_mobilefacenet_2022july.onnx"
+HSE_FILE = "enet_b0_8_best_vgaf.onnx"
 
 # OpenCV Zoo MobileFaceNet FER 的类别顺序，不可改动
 MODEL_LABELS = ["angry", "disgust", "fear", "happy", "neutral", "sad", "surprise"]
@@ -137,8 +138,48 @@ INDEX_TO_ID = {
     6: "surprise",
 }
 
-FACE_SCORE_MIN = 0.55
+FACE_SCORE_MIN = 0.32
+FACE_MAX = 16
+YUNET_SCORE = 0.42
+YUNET_NMS = 0.3
 EMOTION_CONF_WARN = 0.38
+DEFAULT_FACE_MODE = "solo"
+FACE_MODES = {
+    "solo": {
+        "id": "solo",
+        "zh": "单人精检",
+        "name": "单人近景精检",
+        "blurb": "只取画面里最大、最稳的一张脸，检测阈值更高，不扫远景杂脸。近景用 MobileFaceNet 与 HSEmotion 融合，两模型不一致时更信野外模型，适合自拍、对镜和证件式照片。",
+        "score": 0.58,
+        "score_min": 0.46,
+        "nms": 0.3,
+        "top_k": 8,
+        "face_max": 1,
+        "min_face": 28,
+        "max_side": 1280,
+        "upscale": False,
+        "haar": False,
+        "dual_score": 0.80,
+        "majority": False,
+    },
+    "crowd": {
+        "id": "crowd",
+        "zh": "多人远场",
+        "name": "多人与远景",
+        "blurb": "同时框出多张脸，包括远景小脸；歌曲按人数最多的情绪来。适合课堂、合影和远镜头。",
+        "score": 0.42,
+        "score_min": 0.32,
+        "nms": 0.3,
+        "top_k": 50,
+        "face_max": 16,
+        "min_face": 14,
+        "max_side": 1280,
+        "upscale": True,
+        "haar": True,
+        "dual_score": 0.68,
+        "majority": True,
+    },
+}
 ONLINE_TIMEOUT = 4.0
 RECOMMEND_COUNT = 24
 ONLINE_APIS = ("itunes", "netease", "migu", "kugou", "qq", "kuwo")
@@ -163,5 +204,10 @@ MODEL_URLS = {
         "https://huggingface.co/opencv/facial_expression_recognition/resolve/main/facial_expression_recognition_mobilefacenet_2022july.onnx",
         "https://github.com/opencv/opencv_zoo/raw/main/models/facial_expression_recognition/facial_expression_recognition_mobilefacenet_2022july.onnx",
         "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models/facial_expression_recognition/facial_expression_recognition_mobilefacenet_2022july.onnx",
+    ],
+    HSE_FILE: [
+        "https://github.com/sb-ai-lab/EmotiEffLib/raw/main/models/affectnet_emotions/onnx/enet_b0_8_best_vgaf.onnx",
+        "https://media.githubusercontent.com/media/sb-ai-lab/EmotiEffLib/main/models/affectnet_emotions/onnx/enet_b0_8_best_vgaf.onnx",
+        "https://github.com/HSE-asavchenko/face-emotion-recognition/raw/main/models/affectnet_emotions/onnx/enet_b0_8_best_vgaf.onnx",
     ],
 }

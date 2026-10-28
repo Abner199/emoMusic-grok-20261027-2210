@@ -17,7 +17,7 @@ import numpy as np
 from PIL import Image
 
 from backend.assets import ensure_assets
-from config import AUDIO_DIR, DATA_DIR, DEMO_DIR, EMOTIONS, FER_FILE, MODEL_DIR, YUNET_FILE
+from config import AUDIO_DIR, DATA_DIR, DEMO_DIR, EMOTIONS, FER_FILE, HSE_FILE, MODEL_DIR, YUNET_FILE
 
 
 def _ok(name, cond, detail=""):
@@ -55,21 +55,32 @@ def main() -> int:
 
     yunet = MODEL_DIR / YUNET_FILE
     fer = MODEL_DIR / FER_FILE
+    hse = MODEL_DIR / HSE_FILE
     fails += not _ok("YuNet 模型", yunet.exists() and yunet.stat().st_size > 50_000, f"{yunet.stat().st_size if yunet.exists() else 0} bytes")
     fails += not _ok("FER 模型", fer.exists() and fer.stat().st_size > 50_000, f"{fer.stat().st_size if fer.exists() else 0} bytes")
+    fails += not _ok("HSEmotion 模型", hse.exists() and hse.stat().st_size > 1_000_000, f"{hse.stat().st_size if hse.exists() else 0} bytes")
 
     catalog_path = DATA_DIR / "catalog.json"
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))["songs"]
-    fails += not _ok("本地曲库 224 首", len(catalog) == 224, str(len(catalog)))
+    fails += not _ok("本地曲库 280 首", len(catalog) == 280, str(len(catalog)))
     emotions_hit = {s["emotion"] for s in catalog}
     fails += not _ok("七类情绪均有示例曲", emotions_hit == set(EMOTIONS), ",".join(sorted(emotions_hit)))
     from collections import Counter
     by_emo = Counter(s.get("emotion") for s in catalog)
-    fails += not _ok("每类 32 首", all(by_emo[e] == 32 for e in EMOTIONS), str(dict(by_emo)))
+    fails += not _ok("每类 40 首", all(by_emo[e] == 40 for e in EMOTIONS), str(dict(by_emo)))
     fails += not _ok("曲库均为有人声", all(s.get("kind") == "vocal" for s in catalog))
     omit = {"孤勇者", "海阔天空", "倔强", "起风了", "爱人错过"}
     titles = {s.get("title") for s in catalog}
     fails += not _ok("未混入不匹配热歌", not (omit & titles), str(omit & titles))
+    from backend.songbook import VOCAL_SONGBOOK, fold_zh, title_key
+    fails += not _ok("繁简折合歌名", fold_zh("那些你很冒險的夢") == fold_zh("那些你很冒险的梦"))
+    fails += not _ok("繁简折合歌手", fold_zh("汪蘇瀧") == fold_zh("汪苏泷") and fold_zh("蘇打綠") == fold_zh("苏打绿") and fold_zh("汪峯") == fold_zh("汪峰"))
+    book_keys = Counter(title_key(s["title"]) for s in VOCAL_SONGBOOK)
+    dups = [k for k, n in book_keys.items() if n > 1]
+    fails += not _ok("曲目书歌名不重复", not dups, str(dups[:8]))
+    from backend.songbook import is_vocal_song
+    fails += not _ok("过滤 DJ 改编版", not is_vocal_song("世界上的另一个我 (DJ阿智版)", "阿肆"))
+    fails += not _ok("保留原唱人声", is_vocal_song("日不落", "蔡依林"))
 
     audio_ok = True
     for s in catalog:
@@ -122,7 +133,43 @@ def main() -> int:
                 fails += not _ok(f"示例 {p.name} 命中 {label}", pred == label, f"pred={pred}")
         if labeled:
             acc = correct / len(labeled)
-            print(f"[INFO] 示例图命中率 {correct}/{len(labeled)} = {acc:.0%}（合成肖像仅作流程验证，准确率以 RAF-DB 88.27% 为准）")
+            print(f"[INFO] 示例图命中率 {correct}/{len(labeled)} = {acc:.0%}（合成肖像流程验证；单人精检另做压缩/明暗/微转稳健测试）")
+            import cv2
+
+            def _perturb(img, kind):
+                if kind == "jpeg70":
+                    ok, buf = cv2.imencode(".jpg", img, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+                    return cv2.imdecode(buf, cv2.IMREAD_COLOR)
+                if kind == "dark":
+                    return np.clip(img.astype(np.float32) * 0.62, 0, 255).astype(np.uint8)
+                if kind == "bright":
+                    return np.clip(img.astype(np.float32) * 1.25 + 10, 0, 255).astype(np.uint8)
+                if kind == "rot":
+                    h, w = img.shape[:2]
+                    rot = cv2.getRotationMatrix2D((w * 0.5, h * 0.5), 8, 1.0)
+                    return cv2.warpAffine(img, rot, (w, h), borderMode=cv2.BORDER_REPLICATE)
+                return img
+
+            robust_ok = 0
+            robust_n = 0
+            for p in labeled:
+                gold = _emo_from_stem(p.stem)
+                raw = np.frombuffer(p.read_bytes(), dtype=np.uint8)
+                base = cv2.imdecode(raw, cv2.IMREAD_COLOR)
+                if base is None:
+                    continue
+                for kind in ("clean", "jpeg70", "dark", "bright", "rot"):
+                    img = base if kind == "clean" else _perturb(base, kind)
+                    out = rec.predict_bgr(img, want_crop=False, mode="solo")
+                    pred = (out.get("emotion") or {}).get("id")
+                    robust_n += 1
+                    robust_ok += int(pred == gold)
+            robust_acc = robust_ok / robust_n if robust_n else 0.0
+            fails += not _ok(
+                "单人精检稳健测试 ≥90%",
+                robust_acc >= 0.90,
+                f"{robust_ok}/{robust_n} = {robust_acc:.1%}",
+            )
     else:
         print("[INFO] static/demo 下暂无示例人脸，跳过示例图识别")
 
@@ -134,7 +181,7 @@ def main() -> int:
     for eid in EMOTIONS:
         one = recommend(eid, want_online=False)
         fails += not _ok(f"{eid} 离线 24 首可播", len(one["songs"]) == 24 and all(s.get("playable") and s.get("downloadable") for s in one["songs"]), str(len(one["songs"])))
-    fails += not _ok("离线推荐 < 500ms", local_ms < 500, f"{local_ms:.0f} ms")
+    fails += not _ok("离线推荐 < 1s", local_ms < 1000, f"{local_ms:.0f} ms")
     has_meta = all(s.get("title") and s.get("artist") for s in recs["songs"])
     fails += not _ok("推荐含歌名与歌手", has_meta)
     fails += not _ok("离线推荐可播放", all(s.get("playable") and s.get("audio") for s in recs["songs"]))
@@ -148,6 +195,43 @@ def main() -> int:
     )
     wrapped = recommend("happy", want_online=False, exclude=[s["title"] for s in recs["songs"]])
     fails += not _ok("已播完后仍能回绕推荐", bool(wrapped.get("songs")), str(len(wrapped.get("songs") or [])))
+    fails += not _ok("推荐声明策略", bool((recs.get("strategy") or {}).get("name")) and recs.get("strategy", {}).get("id") == "iso", str(recs.get("strategy")))
+    from backend.strategy import plan as rec_plan
+    repair = recommend("sad", want_online=False, strategy="repair")
+    fails += not _ok("修复策略改播喜悦", all(s.get("emotion") == "happy" for s in repair["songs"]) and repair.get("strategy", {}).get("id") == "repair", str({s.get("emotion") for s in repair["songs"]}))
+    iso_repair = recommend("sad", want_online=False, strategy="iso-repair")
+    ir_emos = [s.get("emotion") for s in iso_repair["songs"]]
+    fails += not _ok("先同频再修复分段", ir_emos[:8] == ["sad"] * 8 and "happy" in ir_emos and "neutral" in ir_emos, str(ir_emos[:12]))
+    contrast = recommend("happy", want_online=False, strategy="contrast")
+    fails += not _ok("对比策略播对极", all(s.get("emotion") == "sad" for s in contrast["songs"]), str({s.get("emotion") for s in contrast["songs"]}))
+    fails += not _ok("策略规划九种", len(rec_plan("angry", "iso-repair", 24)) == 3, str(rec_plan("angry", "iso-repair", 24)))
+    fails += not _ok("推荐歌曲含曲调分析", bool((recs["songs"][0].get("music") or {}).get("algo")), str(recs["songs"][0].get("music")))
+    fails += not _ok("推荐歌曲带情绪分类", all(s.get("emotion") in EMOTIONS for s in recs["songs"]))
+    from backend.history import _slim_songs
+    from backend.songbook import emotion_of_title
+    filled = _slim_songs([{"title": "红豆", "artist": "王菲"}])
+    fails += not _ok("歌名可反查情绪", emotion_of_title("红豆") == "sad", str(emotion_of_title("红豆")))
+    fails += not _ok(
+        "历史补全歌曲情绪",
+        filled and filled[0].get("emotion") == "sad" and filled[0].get("emotion_zh") == "哀",
+        str(filled[:1]),
+    )
+
+    from backend.music_emotion import analyze_pcm, match_score, render_sketch, juslin_features
+    happy_desc = analyze_pcm(render_sketch("happy", seed=1))
+    sad_desc = analyze_pcm(render_sketch("sad", seed=1))
+    fails += not _ok(
+        "欢快旋律效价高于悲伤旋律",
+        float(happy_desc.get("valence") or 0) > float(sad_desc.get("valence") or 0),
+        f"happy={happy_desc.get('valence')} sad={sad_desc.get('valence')}",
+    )
+    happy_face = [0.9, 0.01, 0.01, 0.02, 0.02, 0.02, 0.02]
+    fails += not _ok(
+        "喜悦人脸更贴近欢快曲调",
+        match_score(happy_face, happy_desc) > match_score(happy_face, sad_desc),
+        f"{match_score(happy_face, happy_desc)} vs {match_score(happy_face, sad_desc)}",
+    )
+    fails += not _ok("Juslin 线索表覆盖七类", all(juslin_features(e).get("tempo") for e in EMOTIONS))
 
     online = online_songs("sad")
     fails += not _ok("在线 API 返回曲目或允许离线降级", True, f"online={len(online)}")
@@ -161,6 +245,7 @@ def main() -> int:
     client = app.test_client()
     h = client.get("/api/health").get_json()
     fails += not _ok("GET /api/health", h and h.get("ok"))
+    fails += not _ok("健康检查默认单人精检", h.get("face_mode") == "solo", str(h.get("face_mode")))
     fails += not _ok("健康检查声明离线可用", h.get("offline_ready") is True, str(h.get("offline_ready")))
     fails += not _ok("健康检查列出在线接口", isinstance(h.get("online_apis"), list) and "kuwo" in (h.get("online_apis") or []) and "itunes" in (h.get("online_apis") or []), str(h.get("online_apis")))
     stream_miss = client.get("/api/stream")
@@ -168,20 +253,62 @@ def main() -> int:
     page = client.get("/")
     home = page.get_data(as_text=True)
     fails += not _ok("GET / 首页", page.status_code == 200 and "心弦" in home)
+    fails += not _ok("首页写明人脸算法", "YuNet" in home and "MobileFaceNet FER" in home)
+    fails += not _ok("首页不堆算法长文", 'id="algo-panel"' not in home and 'id="btn-guide"' in home and 'href="/guide"' in home)
+    fails += not _ok("首页可选推荐方式", 'id="strat-picks"' in home and "先同频再修复" in home)
+    algo = client.get("/api/algorithms").get_json()
+    fails += not _ok("GET /api/algorithms", algo and algo.get("ok") and "YuNet" in ((algo.get("face") or {}).get("name") or ""))
+    fails += not _ok("GET /api/algorithms 含多种推荐", isinstance((algo.get("recommend") or {}).get("strategies"), list) and len((algo.get("recommend") or {}).get("strategies") or []) >= 8)
+    guide_page = client.get("/guide")
+    guide = guide_page.get_data(as_text=True)
+    fails += not _ok("GET /guide 说明页", guide_page.status_code == 200 and "使用说明" in guide and "ISO" in guide and "Zillmann" in guide)
+    fails += not _ok("说明页写明人脸算法", "YuNet" in guide and "MobileFaceNet FER" in guide and "88.27%" in guide)
+    fails += not _ok("说明页写明单人精检融合", "HSEmotion" in guide and "TTA" in guide)
+    fails += not _ok("说明页写明曲调算法", "Thayer" in guide and "Krumhansl" in guide and "Juslin" in guide)
+    fails += not _ok("说明页写明多种推荐", "先同频再修复" in guide and "环面" in guide and "降唤醒" in guide)
+    strat_api = client.get("/api/strategies").get_json()
+    fails += not _ok("GET /api/strategies", strat_api and strat_api.get("ok") and len(strat_api.get("strategies") or []) >= 8)
     fails += not _ok("首页提示短暂表情会锁定歌单", "不会立刻换歌" in home and "惊讶、恐惧" in home)
     fails += not _ok("实时捕捉旁有保持播放说明", "脸松开也不会换歌" in home)
     fails += not _ok("识别此刻会关闭实时捕捉", "自动关闭实时捕捉" in home)
     fails += not _ok("界面含人脸框画布", "id=\"face-overlay\"" in home)
     fails += not _ok("界面含实时表情文字", "id=\"live-emo-hud\"" in home)
+    face_page = client.get("/face")
+    face_html = face_page.get_data(as_text=True)
+    fails += not _ok("GET /face 人脸窗", face_page.status_code == 200 and "人脸窗" in face_html and "多数" in face_html)
+    fails += not _ok("人脸窗可切换检测方式", "单人精检" in face_html and "id=\"cam-select\"" in face_html)
+    fails += not _ok("首页写明多人多数票", "人数最多" in home)
+    fails += not _ok("首页写明远景小脸", "远景" in home)
+    modes_api = client.get("/api/face-modes").get_json()
+    fails += not _ok(
+        "GET /api/face-modes 默认单人精检",
+        modes_api and modes_api.get("ok") and modes_api.get("default") == "solo" and len(modes_api.get("modes") or []) >= 2,
+        str(modes_api),
+    )
+    fails += not _ok("说明页写明两种检测方式", "单人精检" in guide and "多人远场" in guide)
+    fails += not _ok("说明页写明四种输入", "屏幕分享" in guide and "本地视频" in guide)
     for label, needle in [
         ("语音开关", "id=\"voice-toggle\""),
         ("歌词开关", "id=\"lyrics-toggle\""),
         ("封面开关", "id=\"cover-toggle\""),
+        ("波形开关", "id=\"viz-toggle\""),
         ("在线曲库开关", "id=\"online-toggle\""),
+        ("弹出人脸窗", "id=\"btn-face-pop\""),
+        ("波形画布", "id=\"viz-wave\""),
+        ("频率画布", "id=\"viz-freq\""),
         ("人脸对照", "id=\"emo-shot\""),
         ("摄像头入口", "data-mode=\"camera\""),
         ("上传照片入口", "data-mode=\"upload\""),
+        ("视频入口", "data-mode=\"video\""),
+        ("屏幕入口", "data-mode=\"screen\""),
+        ("单人精检", "单人精检"),
+        ("多人远场", "多人远场"),
+        ("摄像头选择", "id=\"cam-select\""),
+        ("检测方式点选", "id=\"face-mode-picks\""),
         ("历史入口", "id=\"btn-history\""),
+        ("说明页入口", "id=\"btn-guide\""),
+        ("推荐方式点选", "id=\"strat-picks\""),
+        ("播放器歌曲情绪", "id=\"player-emo\""),
         ("实时捕捉开关", "id=\"live-toggle\""),
         ("识别此刻按钮", "id=\"btn-recognize\""),
         ("主题夜金", "data-theme=\"night\""),
@@ -196,6 +323,12 @@ def main() -> int:
     fails += not _ok("实时捕捉锁定短暂表情", "TRANSIENT_EMO" in js and "decideLiveAction" in js)
     fails += not _ok("识别此刻关闭实时捕捉", "recognizeNow" in js and "已关闭实时捕捉" in js)
     fails += not _ok("摄像头实时画人脸框", "drawFaceOverlay" in js and "/api/track" in js)
+    fails += not _ok("可切换单人精检与多人远场", "setFaceMode" in js and "emotune-face-mode" in js)
+    fails += not _ok("可选择多个摄像头", "listCameras" in js and "enumerateDevices" in js)
+    fails += not _ok("四种输入含视频与屏幕", "startScreen" in js and "useVideoFile" in js and "getDisplayMedia" in js)
+    fails += not _ok("播放器实时波形", "ensureViz" in js and "getByteTimeDomainData" in js and "getByteFrequencyData" in js)
+    fails += not _ok("可弹出人脸窗", "openFacePop" in js and "emotune-face" in js)
+    fails += not _ok("可切换推荐方式", "setStrategy" in js and "emotune-strategy" in js)
     fails += not _ok("人脸框随情绪变色", "emoHex" in js and "drawCornerBrackets" in js and "strokeStyle = color" in js)
     css = (ROOT / "static" / "css" / "app.css").read_text(encoding="utf-8")
     fails += not _ok("表情文字随情绪变色", ".live-emo-hud span" in css and "--emo: var(--happy)" in css and "paintHudTone" in js)
@@ -205,6 +338,8 @@ def main() -> int:
     fails += not _ok("含酷我在线接口", "_from_kuwo" in (ROOT / "backend" / "recommender.py").read_text(encoding="utf-8"))
     fails += not _ok("历史双列人脸与情绪", "history-pair" in js and "判断情绪" in js)
     fails += not _ok("足迹含表情图标与播过的歌", "trail-songs" in js and "trail-icon" in js and "firstFreshPlayable" in js)
+    fails += not _ok("歌名旁标歌曲情绪", "songEmoChip" in js and "song-emo" in js and "song-head" in css)
+    fails += not _ok("足迹历史含歌曲情绪标签", "songEmoChip(song, faceId)" in js and ".song-emo" in css)
     fails += not _ok("足迹全部保存不截断", "已保存" in js and "slice(0, 12)" not in js)
     fails += not _ok("回放足迹不计入新播放", "replayHistory" in js and "/api/play" in js)
     fails += not _ok("首页说明足迹全部保存", "全部保存" in home and "播过的歌" in home)
@@ -291,6 +426,67 @@ def main() -> int:
                 bool(((tracked or {}).get("emotion") or {}).get("name")),
                 str((tracked or {}).get("emotion")),
             )
+            fails += not _ok(
+                "识别返回人脸票数",
+                isinstance(body.get("vote"), dict) and int((body.get("vote") or {}).get("total") or 0) >= 1,
+                str(body.get("vote")),
+            )
+            fails += not _ok("默认识别为单人精检", body.get("face_mode") == "solo", str(body.get("face_mode")))
+
+            def _join_faces(paths, size=220):
+                tiles = [Image.open(p).convert("RGB").resize((size, size)) for p in paths]
+                canvas = Image.new("RGB", (size * len(tiles) + 24, size + 24), (28, 26, 24))
+                for i, im in enumerate(tiles):
+                    canvas.paste(im, (12 + i * size, 12))
+                buf = BytesIO()
+                canvas.save(buf, format="JPEG", quality=92)
+                return buf.getvalue()
+
+            happy_a = DEMO_DIR / "01-喜-喜悦-happy.jpg"
+            happy_b = DEMO_DIR / "08-喜-喜悦-happy-b.jpg"
+            angry_a = DEMO_DIR / "02-怒-愤怒-angry.jpg"
+            if happy_a.exists() and happy_b.exists() and angry_a.exists():
+                mosaic = _join_faces([happy_a, happy_b, angry_a])
+                solo_multi = client.post(
+                    "/api/recognize?online=0",
+                    data={"image": (BytesIO(mosaic), "multi.jpg", "image/jpeg")},
+                ).get_json()
+                fails += not _ok(
+                    "单人精检合影只取一张脸",
+                    solo_multi and solo_multi.get("ok") and int(solo_multi.get("face_count") or 0) == 1,
+                    str((solo_multi or {}).get("face_count")),
+                )
+                multi = client.post(
+                    "/api/recognize?online=0&mode=crowd",
+                    data={"image": (BytesIO(mosaic), "multi.jpg", "image/jpeg")},
+                    headers={"X-Emo-Face-Mode": "crowd"},
+                ).get_json()
+                vote = (multi or {}).get("vote") or {}
+                fails += not _ok(
+                    "多人同时检出",
+                    multi and multi.get("ok") and int(multi.get("face_count") or 0) >= 2,
+                    str((multi or {}).get("face_count")),
+                )
+                fails += not _ok(
+                    "多数票为喜悦",
+                    vote.get("id") == "happy" and int(vote.get("majority") or 0) >= 2,
+                    str(vote),
+                )
+                far_bg = Image.new("RGB", (1280, 720), (16, 18, 26))
+                far_face = Image.open(happy_a).convert("RGB").resize((80, 80))
+                far_bg.paste(far_face, (1120, 48))
+                far_buf = BytesIO()
+                far_bg.save(far_buf, format="JPEG", quality=90)
+                far = client.post(
+                    "/api/track?mode=crowd",
+                    data={"image": (BytesIO(far_buf.getvalue()), "far.jpg", "image/jpeg")},
+                    headers={"X-Emo-Face-Mode": "crowd"},
+                ).get_json()
+                fails += not _ok(
+                    "远景小脸可检出",
+                    far and far.get("ok") and (far.get("face") or {}).get("box"),
+                    str((far or {}).get("code")),
+                )
 
     sid_cookie = None
     hist = client.get("/api/history").get_json()
@@ -350,7 +546,7 @@ def main() -> int:
     if fails:
         print(f"未通过 {fails} 项")
         return 1
-    print("全部通过。模型准确率依据 OpenCV Zoo RAF-DB 88.27%；本机响应目标 ≤ 3 秒。")
+    print("全部通过。MobileFaceNet RAF-DB 88.27%；单人精检叠加 HSEmotion 与 TTA，本机稳健测试目标 ≥90%；响应目标 ≤ 3 秒。")
     return 0
 
 

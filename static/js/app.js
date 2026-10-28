@@ -18,11 +18,19 @@
     upload: "上传照片",
     camera: "摄像头",
     "camera-live": "实时捕捉",
+    video: "本地视频",
+    "video-live": "视频捕捉",
+    screen: "屏幕",
+    "screen-live": "屏幕捕捉",
+  };
+  const FACE_MODE_META = {
+    solo: { id: "solo", zh: "单人精检", blurb: "只取画面里最大、最稳的一张脸，检测阈值更高，不扫远景杂脸。适合自拍和对镜。近景会融合两套表情模型；两模型不一致时更信野外模型。" },
+    crowd: { id: "crowd", zh: "多人远场", blurb: "同时框出多张脸，包括远景小脸；歌曲按人数最多的情绪来。适合课堂、合影和远镜头。" },
   };
   const TRAD =
-    "愛後為國樂發時長門開東風雲點實現與無這個們來對會體醜強獨戰鐘煙湧陰貓樹傑銘謙飛兒鄧陳趙歲戀聽記過錯氣龍捲義術單簡當從業書華語經總應該說讓給還進運關問題歡熱陽離獸團傳蘭齊劉買綱願乾燦爛態戲劇觀覺優傷殤俠雙盧樸馮靜倫誇闆裡麼線將畫憶懷邊條孫隻隻臺蘋麼麼聲帶專輯場錄選數賜碼銀鏡際內寫讀請區灣標準寶貝頁頭題顏館廣廳響處歷據產權號級類組員並確滿漢彙視藝職網質價電務間葉滾搖見絲詩迴蕭驚顫慄溫學認島黃嘆髮孃煉園遊盤騎亂羅曖榮詞話親變萬遠換擇證驗聯習鳳車馬魚錢賣鬆麵廠鐵億儀慶禮節責曆絡織閉係裏詠曉鴻穎聰艷偉麗鵬濤潔純紅機軍殺謝鋒殘竅極誘計動軌跡約橋興嗎雞嵐張妳瑋議の層樓寶暢";
+    "愛後為國樂發時長門開東風雲點實現與無這個們來對會體醜強獨戰鐘煙湧陰貓樹傑銘謙飛兒鄧陳趙歲戀聽記過錯氣龍捲義術單簡當從業書華語經總應該說讓給還進運關問題歡熱陽離獸團傳蘭齊劉買綱願乾燦爛態戲劇觀覺優傷殤俠雙盧樸馮靜倫誇闆裡麼線將畫憶懷邊條孫隻隻臺蘋麼麼聲帶專輯場錄選數賜碼銀鏡際內寫讀請區灣標準寶貝頁頭題顏館廣廳響處歷據產權號級類組員並確滿漢彙視藝職網質價電務間葉滾搖見絲詩迴蕭驚顫慄溫學認島黃嘆髮孃煉園遊盤騎亂羅曖榮詞話親變萬遠換擇證驗聯習鳳車馬魚錢賣鬆麵廠鐵億儀慶禮節責曆絡織閉係裏詠曉鴻穎聰艷偉麗鵬濤潔純紅機軍殺謝鋒殘竅極誘計動軌跡約橋興嗎雞嵐張妳瑋議の層樓寶暢蘇綠瀧險夢牆墻剛違獻凍轉蓋結絕劍樣個幾終峯傾喬舊賞韋禮編楊韓吳寧許靚夠彈帥週製複採捨";
   const SIMP =
-    "爱后为国乐发时长门开东风云点实现与无这个们来对会体丑强独战钟烟涌阴猫树杰铭谦飞儿邓陈赵岁恋听记过错气龙卷义术单简当从业书华语经总应该说让给还进运关问题欢热阳离兽团传兰齐刘买纲愿干灿烂态戏剧观觉优伤殇侠双卢朴冯静伦夸板里么线将画忆怀边条孙只只台苹么么声带专辑场录选数赐码银镜际内写读请区湾标准宝贝页头题颜馆广厅响处历据产权号级类组员并确满汉汇视艺职网质价电务间叶滚摇见丝诗回萧惊颤栗温学认岛黄叹发娘炼园游盘骑乱罗暧荣词话亲变万远换择证验联习凤车马鱼钱卖松面厂铁亿仪庆礼节责历络织闭系里咏晓鸿颖聪艳伟丽鹏涛洁纯红机军杀谢锋残窍极诱计动轨迹约桥兴吗鸡岚张你玮议之层楼宝畅";
+    "爱后为国乐发时长门开东风云点实现与无这个们来对会体丑强独战钟烟涌阴猫树杰铭谦飞儿邓陈赵岁恋听记过错气龙卷义术单简当从业书华语经总应该说让给还进运关问题欢热阳离兽团传兰齐刘买纲愿干灿烂态戏剧观觉优伤殇侠双卢朴冯静伦夸板里么线将画忆怀边条孙只只台苹么么声带专辑场录选数赐码银镜际内写读请区湾标准宝贝页头题颜馆广厅响处历据产权号级类组员并确满汉汇视艺职网质价电务间叶滚摇见丝诗回萧惊颤栗温学认岛黄叹发娘炼园游盘骑乱罗暧荣词话亲变万远换择证验联习凤车马鱼钱卖松面厂铁亿仪庆礼节责历络织闭系里咏晓鸿颖聪艳伟丽鹏涛洁纯红机军杀谢锋残窍极诱计动轨迹约桥兴吗鸡岚张你玮议之层楼宝畅苏绿泷险梦墙墙刚违献冻转盖结绝剑样个几终峰倾乔旧赏韦礼编杨韩吴宁许靓够弹帅周制复采舍";
   const TRAD_MAP = (() => {
     const map = Object.create(null);
     for (let i = 0; i < TRAD.length; i += 1) map[TRAD[i]] = SIMP[i];
@@ -125,8 +133,12 @@
     trackTimer: 0,
     trackOn: false,
     trackBusy: false,
-    overlaySmooth: null,
+    overlaySmooth: [],
     lastOverlay: { id: "idle", color: "#c4a574" },
+    lastVote: null,
+    facePop: null,
+    facePopWatch: 0,
+    facePopActive: false,
     recognizing: false,
     camBusy: false,
     songs: [],
@@ -155,6 +167,16 @@
     playWatch: 0,
     lyricsOn: localStorage.getItem("emotune-lyrics") !== "0",
     coverOn: localStorage.getItem("emotune-cover") !== "0",
+    vizOn: localStorage.getItem("emotune-viz") !== "0",
+    strategy: localStorage.getItem("emotune-strategy") || "iso",
+    strategies: [],
+    faceMode: localStorage.getItem("emotune-face-mode") || "solo",
+    camId: localStorage.getItem("emotune-cam") || "",
+    mirror: true,
+    videoUrl: "",
+    audioCtx: null,
+    analyser: null,
+    vizRaf: 0,
     theme: localStorage.getItem("emotune-theme") || "night",
     lyricLines: [],
     lyricToken: 0,
@@ -183,10 +205,97 @@
     }
   }
 
+  const FALLBACK_STRATS = [
+    { id: "iso", zh: "同频", name: "同频匹配", blurb: "贴着当前表情，播同一类最贴的歌。" },
+    { id: "repair", zh: "修复", name: "心境修复", blurb: "不继续泡在负面里，直接播修复目标类。" },
+    { id: "iso-repair", zh: "先同频再修复", name: "同频后修复", blurb: "先同频接住，再过渡，最后走到修复。" },
+    { id: "contrast", zh: "对比", name: "对极反差", blurb: "整单取对极情绪，听反差。" },
+    { id: "circumplex", zh: "回暖", name: "环面回暖", blurb: "在情绪环面上邻格走，慢慢亮起来。" },
+    { id: "calm", zh: "降唤醒", name: "先把劲卸掉", blurb: "先用低唤醒把劲卸掉。" },
+    { id: "uplift", zh: "升效价", name: "平行抬亮", blurb: "唤醒差不多，把效价抬亮。" },
+    { id: "amplify", zh: "强化", name: "把这类情绪听满", blurb: "不换类，把这一类听得更典型。" },
+    { id: "balance", zh: "平衡", name: "同频与修复交错", blurb: "一半同频、一半修复，交错着听。" },
+  ];
+
+  function strategyMeta(id) {
+    const key = id || state.strategy || "iso";
+    return (state.strategies || []).find((s) => s.id === key) || FALLBACK_STRATS.find((s) => s.id === key) || FALLBACK_STRATS[0];
+  }
+
+  function paintStrategyNow(strat) {
+    const meta = strat && (strat.zh || strat.name) ? strat : strategyMeta(state.strategy);
+    const now = $("#strat-now");
+    if (now) now.textContent = meta.zh || meta.name || "同频";
+    const hint = $("#strat-hint");
+    if (hint) hint.textContent = meta.blurb || meta.how || "";
+    $$(".strat-pick").forEach((btn) => {
+      const on = btn.dataset.strategy === (meta.id || state.strategy);
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-checked", on ? "true" : "false");
+    });
+  }
+
+  function renderStrategyPicks() {
+    const box = $("#strat-picks");
+    if (!box) return;
+    const list = state.strategies.length ? state.strategies : FALLBACK_STRATS;
+    box.innerHTML = list
+      .map(
+        (s) =>
+          `<button type="button" class="strat-pick${s.id === state.strategy ? " is-on" : ""}" data-strategy="${esc(s.id)}" role="radio" aria-checked="${s.id === state.strategy ? "true" : "false"}" title="${esc(s.name || s.zh)}">${esc(s.zh)}</button>`
+      )
+      .join("");
+    paintStrategyNow();
+  }
+
+  function setStrategy(id, persist, reload) {
+    const meta = strategyMeta(id);
+    state.strategy = meta.id || "iso";
+    localStorage.setItem("emotune-strategy", state.strategy);
+    paintStrategyNow(meta);
+    if (persist) {
+      fetch("/api/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ strategy: state.strategy }),
+      }).catch(() => {});
+    }
+    if (reload && (state.lastEmotion || state.lockEmotion)) {
+      loadPlaylist(currentEmotionId(), true);
+      toast(`已改用「${meta.zh}」推荐：${meta.name || ""}`.trim());
+    }
+  }
+
+  function bindStrategyPicks() {
+    const box = $("#strat-picks");
+    if (!box) return;
+    box.addEventListener("click", (e) => {
+      const btn = e.target.closest(".strat-pick");
+      if (!btn) return;
+      setStrategy(btn.dataset.strategy, true, true);
+    });
+    renderStrategyPicks();
+  }
+
+  async function loadStrategies() {
+    try {
+      const data = await (await fetch("/api/strategies")).json();
+      if (data && Array.isArray(data.strategies) && data.strategies.length) {
+        state.strategies = data.strategies;
+        if (data.default && !localStorage.getItem("emotune-strategy")) state.strategy = data.default;
+        renderStrategyPicks();
+      }
+    } catch {
+      renderStrategyPicks();
+    }
+  }
+
   const audio = new Audio();
   audio.preload = "auto";
   audio.playsInline = true;
+  audio.crossOrigin = "anonymous";
   audio.setAttribute("playsinline", "true");
+  audio.setAttribute("crossorigin", "anonymous");
   audio.volume = Number(localStorage.getItem("emotune-vol") || 0.86);
 
   const SILENT_WAV =
@@ -351,10 +460,98 @@
     return window.isSecureContext || isLocalHost();
   }
 
+  function isLiveMode(mode = state.mode) {
+    return mode === "camera" || mode === "video" || mode === "screen";
+  }
+
+  function liveSource() {
+    if (state.mode === "video") return state.live ? "video-live" : "video";
+    if (state.mode === "screen") return state.live ? "screen-live" : "screen";
+    return state.live ? "camera-live" : "camera";
+  }
+
+  function frameReady() {
+    const v = ui.cam;
+    return Boolean(v && !v.hidden && v.videoWidth > 0);
+  }
+
   function cameraReady() {
     const stream = state.stream;
     const live = stream && stream.active && stream.getVideoTracks().some((t) => t.readyState === "live");
-    return Boolean(live && ui.cam.videoWidth > 0);
+    return Boolean(live && ui.cam && ui.cam.videoWidth > 0);
+  }
+
+  function faceHeaders(extra) {
+    const headers = {
+      "X-Emo-Online": state.onlineOn ? "1" : "0",
+      "X-Emo-Strategy": state.strategy || "iso",
+      "X-Emo-Face-Mode": state.faceMode || "solo",
+    };
+    if (extra) Object.assign(headers, extra);
+    return headers;
+  }
+
+  function paintFaceMode() {
+    const meta = FACE_MODE_META[state.faceMode] || FACE_MODE_META.solo;
+    const hint = $("#face-mode-hint");
+    if (hint) hint.textContent = meta.blurb || "";
+    $$("#face-mode-picks [data-face-mode]").forEach((btn) => {
+      const on = btn.dataset.faceMode === meta.id;
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-checked", on ? "true" : "false");
+    });
+  }
+
+  function setFaceMode(id, persist) {
+    const meta = FACE_MODE_META[id] || FACE_MODE_META.solo;
+    const changed = state.faceMode !== meta.id;
+    state.faceMode = meta.id;
+    localStorage.setItem("emotune-face-mode", state.faceMode);
+    paintFaceMode();
+    if (persist) {
+      fetch("/api/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ face_mode: state.faceMode }),
+      }).catch(() => {});
+    }
+    if (typeof faceChannel !== "undefined" && faceChannel && state.facePopActive) {
+      try {
+        faceChannel.postMessage({ type: "face-mode", id: state.faceMode });
+      } catch {
+        /* ignore */
+      }
+    }
+    if (changed && persist) {
+      toast(meta.id === "crowd" ? "已切到多人远场：可检多张脸和远景小脸。" : "已切到单人精检：只认近景主脸。");
+    }
+  }
+
+  function setMirror(on) {
+    state.mirror = !!on;
+    if (ui.cam) ui.cam.classList.toggle("is-mirror", state.mirror);
+  }
+
+  function updateLiveChrome() {
+    const mode = state.mode;
+    const camRow = $("#cam-select-row");
+    const videoRow = $("#video-row");
+    const guide = $("#cam-guide");
+    const btnCam = $("#btn-cam");
+    const btnScreen = $("#btn-screen");
+    const btnVideo = $("#btn-video");
+    if (camRow) camRow.hidden = mode !== "camera";
+    if (videoRow) videoRow.hidden = mode !== "video";
+    if (guide) guide.hidden = mode !== "camera";
+    if (btnCam) btnCam.hidden = mode !== "camera";
+    if (btnScreen) btnScreen.hidden = mode !== "screen";
+    if (btnVideo) btnVideo.hidden = mode !== "video";
+    const copy = {
+      camera: "点下面的按钮开启摄像头，把面部落在椭圆里",
+      video: "选择本地视频，播放后可识别此刻或打开实时捕捉",
+      screen: "点「分享屏幕」，选择窗口或整块屏幕后再识别",
+    };
+    if (mode in copy) setCamHint(copy[mode]);
   }
 
   function setCamHint(text) {
@@ -374,7 +571,7 @@
       return "摄像头权限被拒绝。请点击地址栏右侧的摄像头图标，允许本站访问后再点「开启摄像头」。";
     }
     if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-      return "没有找到摄像头。请确认系统里已启用相机，或改用上传照片。";
+      return "没有找到摄像头。请确认系统里已启用相机，或改用照片、视频、屏幕。";
     }
     if (name === "NotReadableError" || name === "TrackStartError") {
       return "摄像头被其他程序占用（会议软件、系统相机等）。请关闭占用后再试。";
@@ -401,10 +598,35 @@
       state.stream.getTracks().forEach((t) => t.stop());
       state.stream = null;
     }
-    ui.cam.srcObject = null;
+    const v = ui.cam;
+    if (!v) return;
+    try {
+      v.pause();
+    } catch {
+      /* ignore */
+    }
+    v.srcObject = null;
+    if (state.videoUrl) {
+      try {
+        URL.revokeObjectURL(state.videoUrl);
+      } catch {
+        /* ignore */
+      }
+      state.videoUrl = "";
+    }
+    if (v.getAttribute("src")) {
+      v.removeAttribute("src");
+      try {
+        v.load();
+      } catch {
+        /* ignore */
+      }
+    }
+    v.loop = false;
+    v.controls = false;
   }
 
-  function captureBlob(quality = 0.86, maxSide = 720) {
+  function captureBlob(quality = 0.92, maxSide = 1280) {
     const video = ui.cam;
     if (!video.videoWidth) return Promise.resolve(null);
     const scale = Math.min(1, maxSide / Math.max(video.videoWidth, video.videoHeight));
@@ -438,13 +660,42 @@
     });
   }
 
+  async function listCameras() {
+    const sel = $("#cam-select");
+    if (!sel || !navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+    const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+    const cams = devices.filter((d) => d.kind === "videoinput");
+    const current = sel.value || state.camId || "";
+    if (!cams.length) {
+      sel.innerHTML = `<option value="">没有找到摄像头</option>`;
+      return;
+    }
+    sel.innerHTML = cams
+      .map((d, i) => {
+        const label = d.label || `摄像头 ${i + 1}`;
+        return `<option value="${esc(d.deviceId)}">${esc(label)}</option>`;
+      })
+      .join("");
+    if (current && [...sel.options].some((o) => o.value === current)) sel.value = current;
+    else if (state.camId && [...sel.options].some((o) => o.value === state.camId)) sel.value = state.camId;
+    state.camId = sel.value || state.camId;
+  }
+
   async function requestCameraStream() {
-    const attempts = [
+    const picked = ($("#cam-select") && $("#cam-select").value) || state.camId || "";
+    const byId = (id, extra) => ({ video: Object.assign({ deviceId: { exact: id } }, extra || {}), audio: false });
+    const attempts = [];
+    if (picked) {
+      attempts.push(byId(picked, { width: { ideal: 1920 }, height: { ideal: 1080 } }));
+      attempts.push(byId(picked));
+    }
+    attempts.push(
+      { video: { facingMode: { ideal: "user" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
       { video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
       { video: { facingMode: { ideal: "user" } }, audio: false },
       { video: { width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-      { video: true, audio: false },
-    ];
+      { video: true, audio: false }
+    );
     let lastErr = null;
     for (const constraints of attempts) {
       try {
@@ -480,6 +731,8 @@
     ui.cam.setAttribute("playsinline", "true");
     ui.cam.setAttribute("webkit-playsinline", "true");
     ui.cam.srcObject = stream;
+    ui.cam.loop = false;
+    ui.cam.controls = false;
     ui.cam.hidden = false;
     ui.preview.hidden = true;
     try {
@@ -490,10 +743,23 @@
     const ok = await waitForVideo();
     if (!ok) throw new Error("摄像头已连接，但没有画面。请检查隐私盖板或系统相机权限。");
     ui.empty.hidden = true;
+    const track = stream.getVideoTracks()[0];
+    if (track && track.getSettings) {
+      const id = track.getSettings().deviceId;
+      if (id) {
+        state.camId = id;
+        localStorage.setItem("emotune-cam", id);
+      }
+    }
+    if (state.mode === "camera") await listCameras();
     startTrackLoop();
   }
 
   async function startCamera() {
+    if (state.facePopActive) {
+      toast("人脸窗正在使用摄像头。关闭人脸窗后可回到本页检测。");
+      return false;
+    }
     if (state.camBusy) return false;
     if (cameraReady()) {
       ui.empty.hidden = true;
@@ -518,6 +784,7 @@
       }
       stopCameraStream();
       const stream = await requestCameraStream();
+      setMirror(true);
       await attachStream(stream);
       setCamHint("点下面的按钮开启摄像头，把面部落在椭圆里");
       return true;
@@ -537,6 +804,105 @@
     }
   }
 
+  async function startScreen() {
+    if (state.facePopActive) {
+      toast("人脸窗正在使用画面。关闭人脸窗后再分享屏幕。");
+      return false;
+    }
+    if (!isCameraSecure()) {
+      toast("屏幕分享需要在 http://127.0.0.1 打开。", "err");
+      return false;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+      toast("当前浏览器不支持屏幕分享，请用 Chrome 或 Edge。", "err");
+      return false;
+    }
+    try {
+      stopCameraStream();
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 12 }, cursor: "never" },
+        audio: false,
+      });
+      const track = stream.getVideoTracks()[0];
+      if (track) {
+        track.addEventListener("ended", () => {
+          if (state.mode === "screen") {
+            stopLive();
+            stopCameraStream();
+            ui.empty.hidden = false;
+            setCamHint("屏幕分享已结束。可再点「分享屏幕」。");
+          }
+        });
+      }
+      setMirror(false);
+      await attachStream(stream);
+      setCamHint("正在读取屏幕画面");
+      toast("已开始屏幕分享，可识别此刻或打开实时捕捉。");
+      return true;
+    } catch (err) {
+      stopCameraStream();
+      ui.empty.hidden = false;
+      if (err && (err.name === "NotAllowedError" || err.name === "AbortError")) {
+        setCamHint("未选择屏幕。再点「分享屏幕」选择窗口或整屏。");
+        return false;
+      }
+      const text = (err && err.message) || "无法分享屏幕。";
+      setCamHint(text);
+      toast(text, "err");
+      return false;
+    }
+  }
+
+  async function useVideoFile(file) {
+    if (!file) return false;
+    const okType = (file.type || "").startsWith("video/") || /\.(mp4|webm|mov|mkv|avi)$/i.test(file.name || "");
+    if (!okType) {
+      toast("请选择视频文件，例如 MP4 / WEBM。", "err");
+      return false;
+    }
+    unlockAudio();
+    stopLive();
+    stopCameraStream();
+    const url = URL.createObjectURL(file);
+    state.videoUrl = url;
+    const v = ui.cam;
+    v.muted = true;
+    v.loop = true;
+    v.controls = true;
+    v.srcObject = null;
+    v.src = url;
+    v.hidden = false;
+    ui.preview.hidden = true;
+    setMirror(false);
+    try {
+      await v.play();
+    } catch {
+      /* 用户可再点播放 */
+    }
+    const ok = await waitForVideo(8000);
+    if (!ok) {
+      ui.empty.hidden = false;
+      toast("视频没有画面，请换一段文件。", "err");
+      return false;
+    }
+    ui.empty.hidden = true;
+    startTrackLoop();
+    toast("视频已打开，可识别此刻或打开实时捕捉。");
+    return true;
+  }
+
+  async function ensureLiveSource() {
+    if (state.mode === "camera") return startCamera();
+    if (state.mode === "screen") return cameraReady() ? true : startScreen();
+    if (state.mode === "video") {
+      if (frameReady()) return true;
+      toast("请先选择一段本地视频。", "err");
+      return false;
+    }
+    toast("实时捕捉用于摄像头、视频或屏幕。", "err");
+    return false;
+  }
+
   const TRANSIENT_EMO = { surprise: true, fear: true, angry: true, disgust: true };
   const EMO_HOLD_MS = {
     surprise: 48000,
@@ -549,6 +915,7 @@
   };
   const LIVE_SWITCH_HITS = 2;
   const LIVE_NEUTRAL_HITS = 6;
+  const LIVE_MIN_PROB = 0.52;
 
   function holdLeftMs(id) {
     if (!id || !state.lockAt) return 0;
@@ -706,6 +1073,16 @@
     };
   }
 
+  function boxIou(a, b) {
+    const x1 = Math.max(a.x, b.x);
+    const y1 = Math.max(a.y, b.y);
+    const x2 = Math.min(a.x + a.w, b.x + b.w);
+    const y2 = Math.min(a.y + a.h, b.y + b.h);
+    const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+    const ua = a.w * a.h + b.w * b.h - inter;
+    return ua > 0 ? inter / ua : 0;
+  }
+
   function roundRectPath(ctx, x, y, w, h, r) {
     const rr = Math.max(0, Math.min(r, w / 2, h / 2));
     ctx.beginPath();
@@ -778,8 +1155,9 @@
       const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
-    state.overlaySmooth = null;
+    state.overlaySmooth = [];
     state.lastOverlay = { id: "idle", color: EMO_HEX.idle };
+    state.lastVote = null;
     const hud = $("#live-emo-hud");
     if (hud) {
       hud.hidden = true;
@@ -805,7 +1183,10 @@
       $("#live-emo-zh").textContent = "";
       $("#live-emo-name").textContent = "寻找人脸";
       $("#live-emo-pct").textContent = "";
+      const countMiss = $("#live-emo-count");
+      if (countMiss) countMiss.textContent = "";
       state.lastOverlay = { id: "idle", color: EMO_HEX.idle };
+      state.lastVote = null;
       if (changed) flashLiveHud(hud);
       return;
     }
@@ -821,7 +1202,14 @@
     $("#live-emo-name").textContent = meta.name || emo.name || "";
     const pct = Math.round((emo.prob || 0) * 100);
     $("#live-emo-pct").textContent = pct ? `${pct}%` : "";
+    const vote = (data && data.vote) || {};
+    const n = vote.total || data.face_count || 0;
+    const countEl = $("#live-emo-count");
+    if (countEl) {
+      countEl.textContent = n > 1 ? `${n} 张 · 多数 ${vote.majority || n}` : n === 1 ? "1 张脸" : "";
+    }
     state.lastOverlay = { id: nextId, color };
+    state.lastVote = vote;
   }
 
   function drawFaceOverlay(data) {
@@ -831,74 +1219,104 @@
     sizeFaceOverlay();
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     updateLiveHud(data);
-    if (!data || !data.ok || !data.face || !data.face.box) {
-      state.overlaySmooth = null;
+    if (!data || !data.ok) {
+      state.overlaySmooth = [];
       return;
     }
-    const imageSize = data.face.image_size || [ui.shot.width, ui.shot.height];
-    const mapped = mapBoxToCanvas(data.face.box, imageSize, true);
-    if (!mapped) return;
-    state.overlaySmooth = lerpBox(state.overlaySmooth, mapped, 0.42);
-    const box = state.overlaySmooth;
-    const emo = data.emotion || {};
-    const emoId = emo.id || "idle";
-    const color = emoHex(emoId, emo.color);
-    state.lastOverlay = { id: emoId, color };
-    const radius = Math.max(10, box.w * 0.08);
-    ctx.save();
-    roundRectPath(ctx, box.x, box.y, box.w, box.h, radius);
-    ctx.fillStyle = hexToRgba(color, 0.14);
-    ctx.fill();
-    ctx.lineWidth = Math.max(3.5, box.w * 0.018);
-    ctx.strokeStyle = color;
-    ctx.shadowColor = color;
-    ctx.shadowBlur = 18;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.lineWidth = Math.max(5, box.w * 0.03);
-    drawCornerBrackets(ctx, box.x, box.y, box.w, box.h, color);
-    const extras = (data.faces || []).filter((f) => !f.primary && f.box);
-    extras.forEach((f) => {
-      const extra = mapBoxToCanvas(f.box, imageSize, true);
-      if (!extra) return;
-      ctx.globalAlpha = 0.4;
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = hexToRgba(color, 0.55);
-      roundRectPath(ctx, extra.x, extra.y, extra.w, extra.h, 8);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
+    const imageSize = (data.face && data.face.image_size) || [ui.shot.width, ui.shot.height];
+    const raw = (data.faces && data.faces.length
+      ? data.faces
+      : data.face && data.face.box
+        ? [{ box: data.face.box, primary: true, emotion: data.emotion }]
+        : []
+    ).filter((f) => f && f.box);
+    const mapped = [];
+    raw.forEach((f) => {
+      const box = mapBoxToCanvas(f.box, imageSize, !!state.mirror);
+      if (!box) return;
+      mapped.push({
+        box,
+        primary: !!f.primary,
+        emo: f.emotion || data.emotion || {},
+      });
     });
-    const meta = EMO_META[emoId] || {};
-    const zh = meta.zh || emo.zh || "";
-    const name = meta.name || emo.name || "";
-    const pct = Math.round((emo.prob || 0) * 100);
-    const label = [zh, name, pct ? `${pct}%` : ""].filter(Boolean).join("  ");
-    if (label) {
-      const fontPx = Math.max(15, Math.min(24, box.w * 0.14));
-      ctx.font = `700 ${fontPx}px "Noto Sans SC","Microsoft YaHei",sans-serif`;
-      ctx.textBaseline = "middle";
-      const padX = 12;
-      const tw = ctx.measureText(label).width;
-      const pillW = tw + padX * 2;
-      const pillH = fontPx + 14;
-      let px = box.x;
-      let py = box.y - pillH - 10;
-      if (py < 8) py = box.y + 8;
-      if (px + pillW > canvas.width - 8) px = Math.max(8, canvas.width - pillW - 8);
-      roundRectPath(ctx, px, py, pillW, pillH, pillH / 2);
-      ctx.fillStyle = "rgba(8,7,6,0.78)";
-      ctx.fill();
-      ctx.fillStyle = hexToRgba(color, 0.22);
-      ctx.fill();
-      ctx.lineWidth = 1.8;
-      ctx.strokeStyle = color;
-      ctx.stroke();
-      ctx.shadowColor = "rgba(0,0,0,0.65)";
-      ctx.shadowBlur = 8;
-      ctx.fillStyle = color;
-      ctx.fillText(label, px + padX, py + pillH / 2);
+    if (!mapped.length) {
+      state.overlaySmooth = [];
+      return;
     }
-    ctx.restore();
+    const prev = Array.isArray(state.overlaySmooth) ? state.overlaySmooth : [];
+    const used = new Set();
+    mapped.forEach((item) => {
+      let best = -1;
+      let bestIou = 0.28;
+      prev.forEach((p, i) => {
+        if (used.has(i) || !p || !p.box) return;
+        const v = boxIou(p.box, item.box);
+        if (v > bestIou) {
+          bestIou = v;
+          best = i;
+        }
+      });
+      if (best >= 0) {
+        used.add(best);
+        item.box = lerpBox(prev[best].box, item.box, 0.42);
+      }
+    });
+    state.overlaySmooth = mapped;
+    const majority = data.emotion || {};
+    const majorityId = majority.id || "idle";
+    const majorityColor = emoHex(majorityId, majority.color);
+    state.lastOverlay = { id: majorityId, color: majorityColor };
+    mapped.forEach((item) => {
+      const box = item.box;
+      const emo = item.emo || {};
+      const emoId = emo.id || majorityId;
+      const color = emoHex(emoId, emo.color);
+      const radius = Math.max(8, box.w * 0.08);
+      ctx.save();
+      roundRectPath(ctx, box.x, box.y, box.w, box.h, radius);
+      ctx.fillStyle = hexToRgba(color, item.primary ? 0.14 : 0.08);
+      ctx.fill();
+      ctx.lineWidth = item.primary ? Math.max(3.2, box.w * 0.018) : 2.2;
+      ctx.strokeStyle = color;
+      ctx.shadowColor = item.primary ? color : "transparent";
+      ctx.shadowBlur = item.primary ? 16 : 0;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      if (item.primary) {
+        ctx.lineWidth = Math.max(4.5, box.w * 0.028);
+        drawCornerBrackets(ctx, box.x, box.y, box.w, box.h, color);
+      }
+      const meta = EMO_META[emoId] || {};
+      const zh = meta.zh || emo.zh || "";
+      const name = meta.name || emo.name || "";
+      const pct = Math.round((emo.prob || 0) * 100);
+      const label = [zh, name, pct ? `${pct}%` : ""].filter(Boolean).join("  ");
+      if (label) {
+        const fontPx = Math.max(13, Math.min(22, box.w * 0.14));
+        ctx.font = `700 ${fontPx}px "Noto Sans SC","Microsoft YaHei",sans-serif`;
+        ctx.textBaseline = "middle";
+        const padX = 10;
+        const tw = ctx.measureText(label).width;
+        const pillW = tw + padX * 2;
+        const pillH = fontPx + 12;
+        let px = box.x;
+        let py = box.y - pillH - 8;
+        if (py < 8) py = box.y + 8;
+        if (px + pillW > canvas.width - 8) px = Math.max(8, canvas.width - pillW - 8);
+        roundRectPath(ctx, px, py, pillW, pillH, pillH / 2);
+        ctx.fillStyle = "rgba(8,7,6,0.78)";
+        ctx.fill();
+        ctx.fillStyle = hexToRgba(color, 0.2);
+        ctx.fill();
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = color;
+        ctx.stroke();
+        ctx.fillStyle = color;
+        ctx.fillText(label, px + padX, py + pillH / 2);
+      }
+      ctx.restore();
+    });
   }
 
   function stopTrackLoop() {
@@ -911,14 +1329,16 @@
   }
 
   function startTrackLoop() {
+    if (state.facePopActive) return;
     if (state.trackOn) return;
     state.trackOn = true;
     const tick = async () => {
       state.trackTimer = 0;
       if (!state.trackOn) return;
-      if (state.mode !== "camera" || !cameraReady() || (ui.empty && !ui.empty.hidden)) {
+      const liveOk = isLiveMode() && frameReady() && !(ui.empty && !ui.empty.hidden);
+      if (!liveOk) {
         clearFaceOverlay();
-        if (state.trackOn && state.mode === "camera" && cameraReady()) {
+        if (state.trackOn && isLiveMode() && frameReady()) {
           state.trackTimer = setTimeout(tick, 400);
         }
         return;
@@ -926,13 +1346,17 @@
       if (!state.trackBusy && !state.recognizing) {
         state.trackBusy = true;
         try {
-          const blob = await captureBlob(0.56, 480);
-          if (blob && state.trackOn && state.mode === "camera") {
+          const blob = await captureBlob(0.92, 1280);
+          if (blob && state.trackOn && isLiveMode()) {
             const fd = new FormData();
             fd.append("image", blob, "track.jpg");
-            const res = await fetch("/api/track", { method: "POST", body: fd });
+            const res = await fetch("/api/track?mode=" + encodeURIComponent(state.faceMode || "solo"), {
+              method: "POST",
+              body: fd,
+              headers: faceHeaders({ "X-Emo-Source": liveSource() }),
+            });
             const data = await res.json();
-            if (state.trackOn && state.mode === "camera") drawFaceOverlay(data);
+            if (state.trackOn && isLiveMode()) drawFaceOverlay(data);
           }
         } catch {
           /* 追踪失败时下一拍再试 */
@@ -940,7 +1364,7 @@
           state.trackBusy = false;
         }
       }
-      if (state.trackOn && state.mode === "camera" && cameraReady()) {
+      if (state.trackOn && isLiveMode() && frameReady()) {
         state.trackTimer = setTimeout(tick, state.live ? 420 : 280);
       }
     };
@@ -954,22 +1378,32 @@
       t.classList.toggle("is-on", on);
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
+    const view = isLiveMode(mode) ? "live" : "upload";
     $$(".stage-body").forEach((v) => {
-      v.hidden = v.dataset.view !== mode;
+      v.hidden = v.dataset.view !== view;
     });
   }
 
   function setMode(mode) {
-    showPanel(mode);
-    if (mode === "camera") {
-      ui.preview.hidden = true;
-      ui.cam.hidden = false;
-      startCamera();
-    } else {
-      stopLive();
-      stopTrackLoop();
-      clearFaceOverlay();
+    const next = ["camera", "upload", "video", "screen"].includes(mode) ? mode : "camera";
+    const prev = state.mode;
+    if (prev === next) {
+      showPanel(next);
+      updateLiveChrome();
+      return;
     }
+    stopLive();
+    if (isLiveMode(prev) || isLiveMode(next)) stopCameraStream();
+    showPanel(next);
+    setMirror(next === "camera");
+    updateLiveChrome();
+    ui.preview.hidden = true;
+    if (isLiveMode(next)) {
+      ui.cam.hidden = false;
+      if (ui.empty) ui.empty.hidden = frameReady();
+      if (frameReady()) startTrackLoop();
+    }
+    if (next === "camera") startCamera();
   }
 
   function renderEmoTags(scores = [], currentId = "") {
@@ -1036,11 +1470,12 @@
     if (ui.hero) ui.hero.dataset.emo = "idle";
     if (ui.icon) ui.icon.innerHTML = faceSvg("idle", 180);
     showFaceCrop({});
-    $("#emo-kicker").textContent = "等待识别";
+    $("#emo-kicker").textContent = "YuNet · MobileFaceNet FER";
     $("#emo-zh").textContent = "待识别";
     $("#emo-name").textContent = "面向镜头，点识别此刻";
     $("#emo-conf").textContent = "";
-    $("#emo-copy").textContent = "识别后会对照人脸与情绪，并自动连播匹配歌曲。惊讶、恐惧等表情松开后，歌曲仍会按这次情绪继续播。";
+    $("#emo-copy").textContent = "识别后会对照人脸与情绪，并按你选的推荐方式自动连播。惊讶、恐惧等表情松开后，歌曲仍会按这次情绪继续播。";
+    paintStrategyNow();
     const genre = $("#emo-genre");
     genre.hidden = true;
     genre.textContent = "";
@@ -1061,14 +1496,25 @@
         ui.icon.classList.add("is-pop");
       }
     }
-    $("#emo-kicker").textContent = "当前情绪";
+    $("#emo-kicker").textContent = "YuNet · MobileFaceNet FER";
+    const rec = payload.recommendations || {};
+    if (rec.strategy && rec.strategy.id) state.strategy = rec.strategy.id;
+    paintStrategyNow(rec.strategy);
     const meta = EMO_META[e.id] || {};
     $("#emo-zh").textContent = meta.zh || e.zh || "";
     $("#emo-name").textContent = meta.name || e.name || "";
     const conf = Math.round(e.prob * 100);
-    $("#emo-conf").textContent = e.low_confidence
-      ? `置信度 ${conf}% · 光线或角度一般，结果仅供参考`
-      : `置信度 ${conf}%`;
+    const vote = payload.vote || {};
+    const many = (vote.total || payload.face_count || 0) > 1;
+    if (many) {
+      $("#emo-conf").textContent = e.low_confidence
+        ? `${vote.total} 张脸 · 多数「${meta.name || e.name || ""}」${vote.majority}/${vote.total} · 光线一般仅供参考`
+        : `${vote.total} 张脸 · 多数「${meta.name || e.name || ""}」${vote.majority}/${vote.total}`;
+    } else {
+      $("#emo-conf").textContent = e.low_confidence
+        ? `置信度 ${conf}% · 光线或角度一般，结果仅供参考`
+        : `置信度 ${conf}%`;
+    }
     $("#emo-copy").textContent = e.copy;
     const genre = $("#emo-genre");
     genre.hidden = !e.genre;
@@ -1107,6 +1553,27 @@
     return out;
   }
 
+  function songEmotionId(song) {
+    if (!song) return "";
+    const cand = [song.emotion, song.music && song.music.emotion];
+    for (const raw of cand) {
+      const id = String(raw || "").trim();
+      if (id && EMO_META[id] && id !== "idle") return id;
+    }
+    return "";
+  }
+
+  function songEmoChip(song, faceId) {
+    const id = songEmotionId(song);
+    if (!id) return "";
+    const meta = EMO_META[id] || {};
+    const zh = String(song.emotion_zh || meta.zh || "");
+    const name = String(song.emotion_name || meta.name || "");
+    const mismatch = Boolean(faceId) && faceId !== id && EMO_META[faceId] && faceId !== "idle";
+    const label = mismatch ? `歌曲情绪：${name}，与识别情绪不同` : `歌曲情绪：${name}`;
+    return `<span class="song-emo${mismatch ? " is-off" : ""}" data-emo="${esc(id)}" title="${esc(label)}" aria-label="${esc(label)}"><b>${esc(zh)}</b><i>${esc(name)}</i></span>`;
+  }
+
   function songCard(song, idx) {
     const cover = esc(song.cover || "");
     const title = esc(prettyText(song.title));
@@ -1114,11 +1581,17 @@
     const album = song.album ? " · " + esc(prettyText(song.album)) : "";
     const playable = song.playable && song.audio;
     const badge = esc(prettyText(song.source_label || SOURCE_ZH[song.source] || song.source || ""));
-    return `<article class="song" data-idx="${idx}">
+    const faceId = state.lockEmotion || state.lastEmotion || "";
+    const emoId = songEmotionId(song);
+    return `<article class="song" data-idx="${idx}" data-emo="${esc(emoId)}">
       <img src="${cover}" alt="${title} 封面" onerror="this.style.opacity=.2" />
       <div class="body">
-        <strong>${title}</strong>
+        <div class="song-head">
+          <strong>${title}</strong>
+          ${songEmoChip(song, faceId)}
+        </div>
         <em>${artist}${album}</em>
+        ${song.rec_role_zh ? `<p class="song-algo">${esc(song.rec_role_zh)}${song.music ? " · 曲调 " + esc(song.music.emotion_zh || "") + " · " + esc(song.music.tempo_label || "") + " · " + esc(song.music.mode_zh || "") : ""}${song.match != null ? " · 匹配 " + Math.round(Number(song.match) * 100) + "%" : ""}</p>` : song.music ? `<p class="song-algo">曲调 ${esc(song.music.emotion_zh || "")} · ${esc(song.music.tempo_label || "")} · ${esc(song.music.mode_zh || "")}${song.match != null ? " · 匹配 " + Math.round(Number(song.match) * 100) + "%" : ""}</p>` : ""}
       </div>
       <div class="ops">
         <span class="badge">${badge}</span>
@@ -1169,17 +1642,22 @@
   function recsCaption(rec) {
     const n = (rec.songs || []).length;
     const providers = (rec.providers || []).map((s) => String(s).replace(/^在线 · /, "")).filter(Boolean);
+    const strat = (rec.strategy && (rec.strategy.zh || rec.strategy.name)) || "同频";
     if (rec.online_count > 0) {
       const src = providers.length ? providers.join("、") : "在线";
-      return `${rec.genre || ""} · ${src} ${rec.online_count} / 本地 ${rec.local_count || 0} · ${n} 首 · 表情松开也会继续播`;
+      return `${rec.genre || ""} · ${src} ${rec.online_count} / 本地 ${rec.local_count || 0} · ${n} 首 · ${strat}`;
     }
-    return `${rec.genre || ""} · 本地曲库 ${n} 首 · 表情松开也会继续播`;
+    return `${rec.genre || ""} · 本地曲库 ${n} 首 · ${strat}`;
   }
 
   async function loadPlaylist(emo, play) {
     const id = emo || currentEmotionId();
     try {
-      const data = await (await fetch(`/api/recommend?emotion=${encodeURIComponent(id)}&online=${state.onlineOn ? "1" : "0"}`)).json();
+      const data = await (await fetch(`/api/recommend?emotion=${encodeURIComponent(id)}&online=${state.onlineOn ? "1" : "0"}&strategy=${encodeURIComponent(state.strategy || "iso")}`)).json();
+      if (data.strategy && data.strategy.id) {
+        state.strategy = data.strategy.id;
+        paintStrategyNow(data.strategy);
+      }
       renderSongs(data.songs || [], recsCaption(data));
       if (state.onlineOn && data.online_count === 0) {
         toast("在线曲库暂时没有可播歌曲，已改用本地歌曲。");
@@ -1254,6 +1732,99 @@
   function applyPlayerView() {
     ui.player.classList.toggle("is-lyrics-off", !state.lyricsOn);
     ui.player.classList.toggle("is-cover-off", !state.coverOn);
+    ui.player.classList.toggle("is-viz-off", !state.vizOn);
+  }
+
+  function sizeVizCanvas(canvas) {
+    if (!canvas) return null;
+    const cssW = canvas.clientWidth || 320;
+    const cssH = canvas.clientHeight || 72;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(8, Math.round(cssW * dpr));
+    const h = Math.max(8, Math.round(cssH * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    return { w, h, dpr };
+  }
+
+  function vizColor() {
+    return getComputedStyle(document.body).getPropertyValue("--accent").trim() || "#c4a574";
+  }
+
+  function ensureViz() {
+    if (state.analyser) return state.analyser;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    try {
+      state.audioCtx = new AC();
+      const src = state.audioCtx.createMediaElementSource(audio);
+      state.analyser = state.audioCtx.createAnalyser();
+      state.analyser.fftSize = 2048;
+      state.analyser.smoothingTimeConstant = 0.8;
+      src.connect(state.analyser);
+      state.analyser.connect(state.audioCtx.destination);
+      return state.analyser;
+    } catch {
+      return null;
+    }
+  }
+
+  function drawVizFrame() {
+    state.vizRaf = 0;
+    const analyser = state.analyser;
+    const wave = $("#viz-wave");
+    const freq = $("#viz-freq");
+    if (!analyser || !wave || !freq || !state.vizOn || (ui.player && ui.player.hidden)) return;
+    const color = vizColor();
+    const waveSize = sizeVizCanvas(wave);
+    const freqSize = sizeVizCanvas(freq);
+    const td = new Uint8Array(analyser.fftSize);
+    analyser.getByteTimeDomainData(td);
+    const wctx = wave.getContext("2d");
+    wctx.clearRect(0, 0, waveSize.w, waveSize.h);
+    wctx.strokeStyle = color;
+    wctx.lineWidth = Math.max(1.4, waveSize.dpr);
+    wctx.beginPath();
+    const step = Math.max(1, Math.floor(td.length / waveSize.w));
+    for (let x = 0, i = 0; x < waveSize.w; x += 1, i += step) {
+      const v = (td[Math.min(i, td.length - 1)] - 128) / 128;
+      const y = waveSize.h / 2 + v * (waveSize.h * 0.42);
+      if (x === 0) wctx.moveTo(x, y);
+      else wctx.lineTo(x, y);
+    }
+    wctx.stroke();
+    const fd = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(fd);
+    const fctx = freq.getContext("2d");
+    fctx.clearRect(0, 0, freqSize.w, freqSize.h);
+    const bars = Math.min(64, Math.max(24, Math.floor(freqSize.w / 8)));
+    const gap = Math.max(1, Math.round(1.2 * freqSize.dpr));
+    const barW = Math.max(2, (freqSize.w - gap * bars) / bars);
+    for (let i = 0; i < bars; i += 1) {
+      const lo = Math.floor((i / bars) ** 1.6 * fd.length);
+      const hi = Math.max(lo + 1, Math.floor(((i + 1) / bars) ** 1.6 * fd.length));
+      let sum = 0;
+      for (let k = lo; k < hi && k < fd.length; k += 1) sum += fd[k];
+      const mag = sum / Math.max(1, hi - lo) / 255;
+      const bh = Math.max(2, mag * freqSize.h * 0.92);
+      const x = i * (barW + gap);
+      const y = freqSize.h - bh;
+      fctx.fillStyle = hexToRgba(color, 0.35 + mag * 0.55);
+      fctx.fillRect(x, y, barW, bh);
+    }
+    if (!audio.paused && !audio.ended && state.vizOn) {
+      state.vizRaf = requestAnimationFrame(drawVizFrame);
+    }
+  }
+
+  function startVizLoop() {
+    if (!state.vizOn) return;
+    const analyser = ensureViz();
+    if (!analyser) return;
+    if (state.audioCtx && state.audioCtx.state === "suspended") state.audioCtx.resume().catch(() => {});
+    if (!state.vizRaf) state.vizRaf = requestAnimationFrame(drawVizFrame);
   }
 
   function renderLyric(t) {
@@ -1322,6 +1893,25 @@
     }
     $("#player-title").textContent = prettyText(song.title);
     $("#player-sub").textContent = `${prettyText(song.artist)}${song.album ? " · " + prettyText(song.album) : ""} · 连续播放`;
+    const emoEl = $("#player-emo");
+    if (emoEl) {
+      const id = songEmotionId(song);
+      if (id) {
+        const meta = EMO_META[id] || {};
+        const zh = song.emotion_zh || meta.zh || "";
+        const name = song.emotion_name || meta.name || "";
+        emoEl.hidden = false;
+        emoEl.dataset.emo = id;
+        emoEl.className = "song-emo";
+        emoEl.title = `歌曲情绪：${name}`;
+        emoEl.setAttribute("aria-label", `歌曲情绪：${name}`);
+        emoEl.innerHTML = `<b>${esc(zh)}</b><i>${esc(name)}</i>`;
+      } else {
+        emoEl.hidden = true;
+        emoEl.removeAttribute("data-emo");
+        emoEl.innerHTML = "";
+      }
+    }
     const dl = $("#btn-download");
     const open = $("#btn-open");
     if (song.downloadable) {
@@ -1424,20 +2014,39 @@
     state.playedByEmotion[emo] = next;
   }
 
+  function withSongEmotion(song, fallbackId) {
+    if (!song || songEmotionId(song)) return song;
+    if (!fallbackId || !EMO_META[fallbackId] || fallbackId === "idle") return song;
+    const meta = EMO_META[fallbackId];
+    return Object.assign({}, song, {
+      emotion: fallbackId,
+      emotion_zh: song.emotion_zh || meta.zh || "",
+      emotion_name: song.emotion_name || meta.name || "",
+    });
+  }
+
   function footprintSongs(it) {
     const played = Array.isArray(it && it.played) ? it.played : [];
     const recs = Array.isArray(it && it.songs) ? it.songs : [];
-    if (played.length) return uniqueSongs(played.concat(recs));
-    return uniqueSongs(recs);
+    const byKey = new Map();
+    for (const song of recs) {
+      const key = foldTitle(song && song.title);
+      const id = songEmotionId(song);
+      if (key && id && !byKey.has(key)) byKey.set(key, id);
+    }
+    const enrich = (song) => withSongEmotion(song, byKey.get(foldTitle(song && song.title)));
+    if (played.length) return uniqueSongs(played.map(enrich).concat(recs.map(enrich)));
+    return uniqueSongs(recs.map(enrich));
   }
 
   function songsLine(it, limit = 3) {
     const songs = footprintSongs(it);
     if (!songs.length) return "";
+    const faceId = (it && it.emotion && it.emotion.id) || "";
     const shown = songs.slice(0, limit).map((song) => {
       const title = esc(prettyText(song.title || ""));
       const artist = song.artist ? ` · ${esc(prettyText(song.artist))}` : "";
-      return `<span class="trail-song"><strong>${title}</strong><em>${artist}</em></span>`;
+      return `<span class="trail-song">${songEmoChip(song, faceId)}<strong>${title}</strong><em>${artist}</em></span>`;
     });
     const more = songs.length > limit ? `<span class="more">共 ${songs.length} 首</span>` : "";
     return `<span class="trail-songs">${shown.join("")}${more}</span>`;
@@ -1480,6 +2089,9 @@
           audio: song.audio,
           source: song.source,
           source_label: song.source_label,
+          emotion: songEmotionId(song),
+          emotion_zh: song.emotion_zh || (EMO_META[songEmotionId(song)] || {}).zh || "",
+          emotion_name: song.emotion_name || (EMO_META[songEmotionId(song)] || {}).name || "",
           key,
         },
       }),
@@ -1499,6 +2111,92 @@
     playAt(i);
   }
 
+  function handleRecognizeData(data, source, t0) {
+    const live = source === "camera-live";
+    if (!data || !data.ok) {
+      if (live) {
+        if (state.lockEmotion) updateHoldUi(true);
+        return;
+      }
+      toast((data && data.error) || "识别失败", "err");
+      return;
+    }
+    const rec = data.recommendations || {};
+    const emoId = (data.emotion && data.emotion.id) || "";
+    const mix = recsCaption(rec);
+    if (data.history_id) state.historyId = data.history_id;
+    if (emoId && Array.isArray(data.played_keys)) rememberPlayedKeys(emoId, data.played_keys);
+    if (data.vote) state.lastVote = data.vote;
+
+    const applyNew = () => {
+      state.replayHistory = false;
+      showEmotion(data);
+      renderSongs(rec.songs, mix);
+      lockPlaylist(emoId);
+      autoPlayList(true);
+      startVizLoop();
+      if (live && TRANSIENT_EMO[emoId]) {
+        const nm = (EMO_META[emoId] || {}).name || "";
+        toast(`已锁定「${nm}」歌单，脸松开也不会马上换歌`);
+      }
+      if (state.onlineOn && rec.mode === "local-fallback") toast("在线曲库暂时不可用，已改用本地歌曲。");
+    };
+
+    if (!live) {
+      applyNew();
+      const cost = Math.round(data.total_ms || (t0 ? performance.now() - t0 : 0));
+      if (state.onlineOn && cost > 3000) toast(`本次总耗时 ${cost} 毫秒，略慢于 3 秒目标。`);
+      loadHistory();
+      return;
+    }
+
+    const locked = state.lockEmotion;
+    const prob = Number((data.emotion && data.emotion.prob) || 0);
+    const low = !!(data.emotion && (data.emotion.low_confidence || prob < LIVE_MIN_PROB));
+    const decision = decideLiveAction(locked, emoId, low);
+
+    if (decision.action === "apply") {
+      applyNew();
+    } else if (decision.action === "same") {
+      if (emoId && emoId !== "neutral") state.lockAt = Date.now();
+      showEmotion(data);
+      updateHoldUi(false);
+      syncPlayingHighlight();
+    } else if (decision.action === "hold") {
+      showFaceCrop(data);
+      state.liveGuess = "";
+      state.liveGuessCount = 0;
+      updateHoldUi(true);
+    } else if (decision.action === "pending-neutral") {
+      if (state.liveGuess !== "neutral") {
+        state.liveGuess = "neutral";
+        state.liveGuessCount = 1;
+      } else {
+        state.liveGuessCount += 1;
+      }
+      if (state.liveGuessCount >= LIVE_NEUTRAL_HITS) applyNew();
+      else {
+        showFaceCrop(data);
+        updateHoldUi(true);
+      }
+    } else {
+      if (state.liveGuess !== emoId) {
+        state.liveGuess = emoId;
+        state.liveGuessCount = 1;
+      } else {
+        state.liveGuessCount += 1;
+      }
+      if (state.liveGuessCount >= LIVE_SWITCH_HITS) applyNew();
+      else {
+        showFaceCrop(data);
+        const pending = (EMO_META[emoId] || {}).name || "";
+        updateHoldUi(false, pending);
+      }
+    }
+    const cost = Math.round(data.total_ms || (t0 ? performance.now() - t0 : 0));
+    if (state.onlineOn && cost > 3000) toast(`本次总耗时 ${cost} 毫秒，略慢于 3 秒目标。`);
+  }
+
   async function recognize(blobs, source) {
     if (state.recognizing) return;
     const files = (Array.isArray(blobs) ? blobs : [blobs]).filter(Boolean);
@@ -1514,97 +2212,22 @@
       files.forEach((b, i) => fd.append(i === 0 ? "image" : "images", b, `frame${i}.jpg`));
       const t0 = performance.now();
       const res = await fetch(
-        "/api/recognize?source=" + encodeURIComponent(source) + "&online=" + (state.onlineOn ? "1" : "0"),
+        "/api/recognize?source=" +
+          encodeURIComponent(source) +
+          "&online=" +
+          (state.onlineOn ? "1" : "0") +
+          "&strategy=" +
+          encodeURIComponent(state.strategy || "iso") +
+          "&mode=" +
+          encodeURIComponent(state.faceMode || "solo"),
         {
           method: "POST",
           body: fd,
-          headers: {
-            "X-Emo-Source": source,
-            "X-Emo-Online": state.onlineOn ? "1" : "0",
-          },
+          headers: faceHeaders({ "X-Emo-Source": source }),
         }
       );
       const data = await res.json();
-      const live = source === "camera-live";
-      if (!data.ok) {
-        if (live) {
-          if (state.lockEmotion) updateHoldUi(true);
-          return;
-        }
-        toast(data.error || "识别失败", "err");
-        return;
-      }
-      const rec = data.recommendations || {};
-      const emoId = (data.emotion && data.emotion.id) || "";
-      const mix = recsCaption(rec);
-      if (data.history_id) state.historyId = data.history_id;
-      if (emoId && Array.isArray(data.played_keys)) rememberPlayedKeys(emoId, data.played_keys);
-
-      const applyNew = () => {
-        state.replayHistory = false;
-        showEmotion(data);
-        renderSongs(rec.songs, mix);
-        lockPlaylist(emoId);
-        autoPlayList(true);
-        if (live && TRANSIENT_EMO[emoId]) {
-          const nm = (EMO_META[emoId] || {}).name || "";
-          toast(`已锁定「${nm}」歌单，脸松开也不会马上换歌`);
-        }
-        if (state.onlineOn && rec.mode === "local-fallback") toast("在线曲库暂时不可用，已改用本地歌曲。");
-      };
-
-      if (!live) {
-        applyNew();
-        const cost = Math.round(data.total_ms || performance.now() - t0);
-        if (state.onlineOn && cost > 3000) toast(`本次总耗时 ${cost} 毫秒，略慢于 3 秒目标。`);
-        loadHistory();
-        return;
-      }
-
-      const locked = state.lockEmotion;
-      const low = !!(data.emotion && data.emotion.low_confidence);
-      const decision = decideLiveAction(locked, emoId, low);
-
-      if (decision.action === "apply") {
-        applyNew();
-      } else if (decision.action === "same") {
-        if (emoId && emoId !== "neutral") state.lockAt = Date.now();
-        showEmotion(data);
-        updateHoldUi(false);
-        syncPlayingHighlight();
-      } else if (decision.action === "hold") {
-        showFaceCrop(data);
-        state.liveGuess = "";
-        state.liveGuessCount = 0;
-        updateHoldUi(true);
-      } else if (decision.action === "pending-neutral") {
-        if (state.liveGuess !== "neutral") {
-          state.liveGuess = "neutral";
-          state.liveGuessCount = 1;
-        } else {
-          state.liveGuessCount += 1;
-        }
-        if (state.liveGuessCount >= LIVE_NEUTRAL_HITS) applyNew();
-        else {
-          showFaceCrop(data);
-          updateHoldUi(true);
-        }
-      } else {
-        if (state.liveGuess !== emoId) {
-          state.liveGuess = emoId;
-          state.liveGuessCount = 1;
-        } else {
-          state.liveGuessCount += 1;
-        }
-        if (state.liveGuessCount >= LIVE_SWITCH_HITS) applyNew();
-        else {
-          showFaceCrop(data);
-          const pending = (EMO_META[emoId] || {}).name || "";
-          updateHoldUi(false, pending);
-        }
-      }
-      const cost = Math.round(data.total_ms || performance.now() - t0);
-      if (state.onlineOn && cost > 3000) toast(`本次总耗时 ${cost} 毫秒，略慢于 3 秒目标。`);
+      handleRecognizeData(data, source, t0);
     } catch (err) {
       toast("网络或服务异常，请确认已启动后端。", "err");
     } finally {
@@ -1616,26 +2239,29 @@
 
   async function recognizeNow() {
     unlockAudio();
-    if (state.mode === "camera") {
+    if (isLiveMode()) {
       if (state.live) {
         stopLive();
         toast("已关闭实时捕捉，改为识别此刻的截图");
       }
-      if (!cameraReady()) {
-        const ok = await startCamera();
-        if (!ok) return;
-      }
+      const ok = await ensureLiveSource();
+      if (!ok) return;
       const burst = [];
-      for (let i = 0; i < 3; i += 1) {
-        const blob = await captureBlob();
+      for (let i = 0; i < 4; i += 1) {
+        const blob = await captureBlob(0.94, 1280);
         if (blob) burst.push(blob);
-        if (i < 2) await new Promise((r) => setTimeout(r, 90));
+        if (i < 3) await new Promise((r) => setTimeout(r, 70));
       }
       if (!burst.length) {
-        toast("还没有画面。请先点「开启摄像头」，看到自己后再识别。", "err");
+        const miss = {
+          camera: "还没有画面。请先点「开启摄像头」，看到自己后再识别。",
+          video: "还没有画面。请先选择一段本地视频。",
+          screen: "还没有画面。请先分享屏幕。",
+        };
+        toast(miss[state.mode] || "还没有可识别的画面。", "err");
         return;
       }
-      await recognize(burst, "camera");
+      await recognize(burst, liveSource());
     } else if (state.lastFile) {
       await recognize(state.lastFile, "upload");
     } else {
@@ -1815,17 +2441,130 @@
     }
   }
 
+  const faceChannel = "BroadcastChannel" in window ? new BroadcastChannel("emotune-face") : null;
+
+  function onFacePopClosed() {
+    if (state.facePopWatch) {
+      clearInterval(state.facePopWatch);
+      state.facePopWatch = 0;
+    }
+    state.facePop = null;
+    state.facePopActive = false;
+    const btn = $("#btn-face-pop");
+    if (btn) btn.textContent = "弹出人脸窗";
+    updateLiveChrome();
+    if (state.mode === "camera") startCamera();
+  }
+
+  function openFacePop() {
+    const live = state.live;
+    stopLive();
+    stopCameraStream();
+    state.facePopActive = true;
+    ui.empty.hidden = false;
+    setCamHint("人脸检测已移到弹出窗口。关闭人脸窗后可回到本页。");
+    const params = new URLSearchParams();
+    if (live) params.set("live", "1");
+    if (state.faceMode) params.set("mode", state.faceMode);
+    if (state.camId) params.set("cam", state.camId);
+    const qs = params.toString();
+    const url = `/face${qs ? `?${qs}` : ""}`;
+    const win = window.open(url, "emotune-face", "popup=yes,width=1100,height=820,left=48,top=48");
+    if (!win) {
+      state.facePopActive = false;
+      toast("浏览器拦住了弹出窗口，请允许本站弹出窗口后再试。", "err");
+      return;
+    }
+    state.facePop = win;
+    const btn = $("#btn-face-pop");
+    if (btn) btn.textContent = "人脸窗已打开";
+    try {
+      win.focus();
+    } catch {
+      /* ignore */
+    }
+    if (state.facePopWatch) clearInterval(state.facePopWatch);
+    state.facePopWatch = setInterval(() => {
+      if (!state.facePop || state.facePop.closed) onFacePopClosed();
+    }, 700);
+    toast(
+      state.faceMode === "crowd"
+        ? "已弹出人脸窗：当前为多人远场，歌曲按人数最多的情绪来。"
+        : "已弹出人脸窗：当前为单人精检，只认近景主脸。"
+    );
+  }
+
+  if (faceChannel) {
+    faceChannel.addEventListener("message", (ev) => {
+      const msg = ev.data || {};
+      if (msg.type === "hello") {
+        state.facePopActive = true;
+        stopCameraStream();
+        ui.empty.hidden = false;
+        setCamHint("人脸检测已移到弹出窗口。关闭人脸窗后可回到本页。");
+      } else if (msg.type === "bye") {
+        onFacePopClosed();
+      } else if (msg.type === "live") {
+        if (msg.on) {
+          state.live = true;
+          startHoldTick();
+          syncLiveHudDot();
+        } else stopLive();
+      } else if (msg.type === "track") {
+        /* 主画面已让出摄像头，结果在人脸窗里看 */
+      } else if (msg.type === "result") {
+        handleRecognizeData(msg.data, msg.source || "camera", 0);
+      } else if (msg.type === "face-mode" && msg.id) {
+        setFaceMode(msg.id, false);
+      }
+    });
+  }
+
   function bind() {
     $$(".tab").forEach((t) => t.addEventListener("click", () => setMode(t.dataset.mode)));
     $("#btn-cam").addEventListener("click", () => {
       unlockAudio();
       startCamera();
     });
+    const btnScreen = $("#btn-screen");
+    if (btnScreen) {
+      btnScreen.addEventListener("click", () => {
+        unlockAudio();
+        startScreen();
+      });
+    }
+    const videoInput = $("#video-input");
+    if (videoInput) {
+      videoInput.addEventListener("change", () => {
+        const file = videoInput.files && videoInput.files[0];
+        if (file) useVideoFile(file);
+      });
+    }
+    const camSelect = $("#cam-select");
+    if (camSelect) {
+      camSelect.addEventListener("change", async () => {
+        const id = camSelect.value || "";
+        state.camId = id;
+        localStorage.setItem("emotune-cam", id);
+        if (state.mode === "camera") {
+          stopCameraStream();
+          await startCamera();
+        }
+      });
+    }
+    $$("#face-mode-picks [data-face-mode]").forEach((btn) => {
+      btn.addEventListener("click", () => setFaceMode(btn.dataset.faceMode, true));
+    });
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+      navigator.mediaDevices.addEventListener("devicechange", () => {
+        listCameras();
+      });
+    }
     $("#btn-recognize").addEventListener("click", recognizeNow);
     $("#live-toggle").addEventListener("change", async (e) => {
       if (e.target.checked) {
         unlockAudio();
-        const ok = await startCamera();
+        const ok = await ensureLiveSource();
         if (!ok) {
           e.target.checked = false;
           return;
@@ -1836,9 +2575,9 @@
         syncLiveHudDot();
         toast("实时捕捉已打开：画面会标出人脸框，认到表情就推荐歌曲。惊讶、恐惧松开后也不会马上换歌。");
         state.liveTimer = setInterval(async () => {
-          if (state.mode !== "camera" || state.recognizing || !cameraReady()) return;
-          const blob = await captureBlob(0.8);
-          if (blob) recognize(blob, "camera-live");
+          if (!isLiveMode() || state.recognizing || !frameReady()) return;
+          const blob = await captureBlob(0.92, 1280);
+          if (blob) recognize(blob, liveSource());
         }, 1600);
       } else stopLive();
     });
@@ -1882,7 +2621,10 @@
       if (prev >= 0) playAt(prev);
     });
     $("#btn-next").addEventListener("click", playNext);
-    audio.addEventListener("play", () => ($("#btn-play").textContent = "❚❚"));
+    audio.addEventListener("play", () => {
+      $("#btn-play").textContent = "❚❚";
+      startVizLoop();
+    });
     audio.addEventListener("pause", () => ($("#btn-play").textContent = "▶"));
     audio.addEventListener("ended", () => {
       if (isSilentOrEmpty()) return;
@@ -1959,6 +2701,33 @@
         toast(state.coverOn ? "封面已打开，播放时会显示歌曲封面。" : "封面已关闭。");
       });
     }
+    const vizToggle = $("#viz-toggle");
+    if (vizToggle) {
+      vizToggle.checked = state.vizOn;
+      vizToggle.addEventListener("change", () => {
+        state.vizOn = vizToggle.checked;
+        localStorage.setItem("emotune-viz", state.vizOn ? "1" : "0");
+        applyPlayerView();
+        if (state.vizOn) {
+          startVizLoop();
+          toast("波形已打开，播放时显示实时波形和频率。");
+        } else toast("波形已关闭。");
+      });
+    }
+    const btnFacePop = $("#btn-face-pop");
+    if (btnFacePop) {
+      btnFacePop.addEventListener("click", () => {
+        if (state.facePop && !state.facePop.closed) {
+          try {
+            state.facePop.focus();
+          } catch {
+            /* ignore */
+          }
+          return;
+        }
+        openFacePop();
+      });
+    }
     applyPlayerView();
     const voiceToggle = $("#voice-toggle");
     if (voiceToggle) {
@@ -2004,6 +2773,7 @@
     });
     $("#btn-about").addEventListener("click", () => $("#about-dialog").showModal());
     $("#btn-close-about").addEventListener("click", () => $("#about-dialog").close());
+    bindStrategyPicks();
 
     window.addEventListener("keydown", (e) => {
       if (e.code === "Space" && e.target === document.body) {
@@ -2018,14 +2788,20 @@
     renderSongs([]);
     bind();
     applyTheme(state.theme, false);
+    paintFaceMode();
+    updateLiveChrome();
+    listCameras();
     try {
       const prefs = await (await fetch("/api/prefs")).json();
       if (prefs && prefs.theme) applyTheme(prefs.theme, false);
+      if (prefs && prefs.strategy) setStrategy(prefs.strategy, false, false);
+      if (prefs && prefs.face_mode) setFaceMode(prefs.face_mode, false);
     } catch {
       /* 主题可只用本机记忆 */
     }
     loadDemo();
     loadHistory();
+    loadStrategies();
     try {
       const health = await (await fetch("/api/health")).json();
       if (!health.ok) toast("服务未就绪", "err");
@@ -2033,7 +2809,7 @@
       else if (health.offline_ready) {
         const n = health.local_songs || 0;
         const hint = $("#stage-hint");
-        if (hint) hint.textContent = `本机模型已就绪，本地曲库 ${n} 首。没有网络也能识别和播放。摄像头请用 http://127.0.0.1:5000 打开。`;
+        if (hint) hint.textContent = `本机模型已就绪，本地曲库 ${n} 首。没有网络也能识别和播放。算法与理论见「说明」。摄像头请用 http://127.0.0.1:5000 打开。`;
       }
     } catch {
       toast("后端未连接。请先启动本机服务。", "err");
@@ -2055,11 +2831,17 @@
       live: state.live,
       titles: state.songs.map((s) => s.title),
       overlay: state.lastOverlay,
+      vote: state.lastVote,
+      facePop: state.facePopActive,
+      vizOn: state.vizOn,
+      strategy: state.strategy,
       onlineOn: state.onlineOn,
       historyId: state.historyId,
       trailCount: (state.history || []).length,
       replayHistory: state.replayHistory,
       played: state.playedByEmotion,
+      faceMode: state.faceMode,
+      mode: state.mode,
     }),
     fallbackToLocal,
     stopLive,

@@ -32,6 +32,7 @@ from config import (
 )
 from backend import history
 from backend.recommender import recommend, song_file
+from backend.strategy import DEFAULT_STRATEGY, public_catalog
 
 if hasattr(sys.stdout, "reconfigure"):
     try:
@@ -70,7 +71,9 @@ def allow_local_lecture(resp):
     if origin:
         resp.headers["Access-Control-Allow-Origin"] = origin
         resp.headers["Vary"] = "Origin"
-        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, X-Emo-Source, X-Emo-Online"
+        resp.headers["Access-Control-Allow-Headers"] = (
+            "Content-Type, X-Emo-Source, X-Emo-Online, X-Emo-Strategy, X-Emo-Face-Mode"
+        )
         resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     return resp
 
@@ -88,6 +91,20 @@ def _b64_to_bytes(raw: str) -> bytes:
     if "," in raw and raw.strip().startswith("data:"):
         raw = raw.split(",", 1)[1]
     return base64.b64decode(raw)
+
+
+def _read_face_mode() -> str:
+    from backend.emotion import DEFAULT_FACE_MODE, normalize_face_mode
+
+    raw = (
+        request.headers.get("X-Emo-Face-Mode")
+        or request.args.get("mode")
+        or request.args.get("face_mode")
+        or ""
+    ).strip()
+    if not raw and request.is_json:
+        raw = str((request.get_json(silent=True) or {}).get("mode") or "")
+    return normalize_face_mode(raw) if raw else DEFAULT_FACE_MODE
 
 
 def _collect_frames() -> list[bytes]:
@@ -134,9 +151,21 @@ def index():
     return render_template("index.html", emotions=EMOTIONS)
 
 
+@app.route("/face")
+def face_pop():
+    _session_id()
+    return render_template("face.html", emotions=EMOTIONS)
+
+
+@app.route("/guide")
+def guide():
+    _session_id()
+    return render_template("guide.html", emotions=EMOTIONS, strategies=public_catalog())
+
+
 @app.route("/api/health")
 def health():
-    from config import FER_FILE, MODEL_DIR, ONLINE_APIS, YUNET_FILE
+    from config import DEFAULT_FACE_MODE, FER_FILE, MODEL_DIR, ONLINE_APIS, YUNET_FILE
     from backend.recommender import load_catalog
 
     yunet = (MODEL_DIR / YUNET_FILE).exists()
@@ -152,6 +181,12 @@ def health():
             "offline_ready": bool(yunet and fer and local_n >= 20),
             "online_apis": list(ONLINE_APIS),
             "emotions": list(EMOTIONS.keys()),
+            "algorithms": {
+                "face": "YuNet + MobileFaceNet FER × HSEmotion，可切换单人精检 / 多人远场",
+                "music": "Thayer 二维模型 + Krumhansl–Kessler 调式",
+                "recommend": "可选多种推荐方式（默认同频）",
+            },
+            "face_mode": DEFAULT_FACE_MODE,
         }
     )
 
@@ -181,7 +216,7 @@ def recognize():
     t0 = time.perf_counter()
     frames = _collect_frames()
     if not frames:
-        return jsonify({"ok": False, "error": "请先开启摄像头或上传一张人脸照片", "code": "NO_IMAGE"}), 400
+        return jsonify({"ok": False, "error": "请先开启摄像头、分享屏幕、打开视频，或上传一张人脸照片", "code": "NO_IMAGE"}), 400
     source = (request.headers.get("X-Emo-Source") or request.args.get("source") or "upload").strip()
     if request.is_json:
         source = (request.get_json(silent=True) or {}).get("source", source)
@@ -189,10 +224,11 @@ def recognize():
     from backend.emotion import get_recognizer
 
     rec = get_recognizer()
+    face_mode = _read_face_mode()
     if len(frames) == 1:
-        result = rec.predict_bytes(frames[0])
+        result = rec.predict_bytes(frames[0], mode=face_mode)
     else:
-        result = rec.predict_many_bytes(frames[:5])
+        result = rec.predict_many_bytes(frames[:5], mode=face_mode)
 
     if not result.get("ok"):
         result["elapsed_ms"] = round(result.get("elapsed_ms") or (time.perf_counter() - t0) * 1000.0, 1)
@@ -202,9 +238,22 @@ def recognize():
     want_online = (
         (request.args.get("online") or request.headers.get("X-Emo-Online") or "1").strip() == "1"
     )
+    strategy = (request.args.get("strategy") or request.headers.get("X-Emo-Strategy") or DEFAULT_STRATEGY).strip()
     exclude = history.played_keys(emotion_id)
-    recs = recommend(emotion_id, want_online=want_online, exclude=exclude)
+    recs = recommend(
+        emotion_id,
+        want_online=want_online,
+        exclude=exclude,
+        face_scores=(result.get("emotion") or {}).get("scores"),
+        strategy=strategy,
+    )
     result["recommendations"] = recs
+    result["algorithms"] = {
+        "face": "YuNet + MobileFaceNet FER",
+        "music": recs.get("strategy", {}).get("music"),
+        "recommend": recs.get("strategy", {}).get("name"),
+        "strategy": recs.get("strategy"),
+    }
     result["source"] = source
     result["played_keys"] = exclude
     total_ms = (time.perf_counter() - t0) * 1000.0
@@ -236,7 +285,8 @@ def track():
     from backend.emotion import get_recognizer
 
     rec = get_recognizer()
-    result = rec.predict_bytes(frames[0], want_crop=False)
+    face_mode = _read_face_mode()
+    result = rec.predict_bytes(frames[0], want_crop=False, mode=face_mode)
     result["track"] = True
     return jsonify(result)
 
@@ -245,10 +295,57 @@ def track():
 def recommend_api():
     emotion = (request.args.get("emotion") or "neutral").strip()
     want_online = request.args.get("online", "1") == "1"
+    strategy = (request.args.get("strategy") or DEFAULT_STRATEGY).strip()
     exclude = history.played_keys(emotion)
-    data = recommend(emotion, want_online=want_online, exclude=exclude)
+    data = recommend(emotion, want_online=want_online, exclude=exclude, strategy=strategy)
     data["played_keys"] = exclude
     return jsonify({"ok": True, **data})
+
+
+@app.route("/api/strategies")
+def strategies_api():
+    return jsonify({"ok": True, "default": DEFAULT_STRATEGY, "strategies": public_catalog()})
+
+
+@app.route("/api/face-modes")
+def face_modes_api():
+    from backend.emotion import DEFAULT_FACE_MODE, public_face_modes
+
+    return jsonify({"ok": True, "default": DEFAULT_FACE_MODE, "modes": public_face_modes()})
+
+
+@app.route("/api/algorithms")
+def algorithms_api():
+    from backend.music_emotion import ALGO_NAME
+    from backend.emotion import DEFAULT_FACE_MODE, public_face_modes
+
+    catalog = public_catalog()
+    return jsonify(
+        {
+            "ok": True,
+            "guide": "/guide",
+            "face": {
+                "name": "YuNet + MobileFaceNet FER × HSEmotion B0",
+                "classic": "Ekman 七类基本情绪；OpenCV Zoo 人脸表情识别；HSEmotion AffectNet",
+                "acc": "RAF-DB 88.27%（MobileFaceNet）；单人精检叠加 TTA 与 HSEmotion 融合，本机稳健测试 ≥90%",
+                "where": "本机 ONNX，不上传图像",
+                "default_mode": DEFAULT_FACE_MODE,
+                "modes": public_face_modes(),
+            },
+            "music": {
+                "name": ALGO_NAME,
+                "classic": "Thayer 1989 效价-唤醒 + Krumhansl–Kessler 1982 调式 + Juslin 2001 声学线索",
+                "where": "本机 numpy / scipy，不依赖云端",
+            },
+            "recommend": {
+                "name": "多种可选推荐方式",
+                "classic": "ISO 原则、心境管理、Russell 环面、Thayer 唤醒调节",
+                "rule": "主页点选同频 / 修复 / 先同频再修复等；完整理论见 /guide",
+                "default": DEFAULT_STRATEGY,
+                "strategies": catalog,
+            },
+        }
+    )
 
 
 @app.route("/api/play", methods=["POST"])

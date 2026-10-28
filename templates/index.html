@@ -3,13 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>心弦 · 人脸情绪识曲</title>
-  <meta name="description" content="实时识别七类基本情绪，并把此刻的表情换成刚好的一首歌。" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect rx='14' width='64' height='64' fill='%230c0b09'/%3E%3Cpath d='M12 40c8-18 32-18 40 0' fill='none' stroke='%23c4a574' stroke-width='4'/%3E%3Ccircle cx='32' cy='24' r='6' fill='%23f0c14b'/%3E%3C/svg%3E" />
+  <title>当AI遇见旋律：从表情感知到智能音乐推荐</title>
+  <meta name="description" content="心弦 EmoTune：本机识别七类基本情绪，并把此刻的表情换成刚好的一首歌。" />
+  <meta property="og:title" content="当AI遇见旋律：从表情感知到智能音乐推荐" />
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}?v=50" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v=50" />
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}?v=50" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=37" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=50" />
 </head>
 <body data-emotion="idle">
   <div class="grain" aria-hidden="true"></div>
@@ -18,7 +21,14 @@
   <header class="top">
     <a class="brand" href="/" aria-label="心弦首页">
       <span class="mark" aria-hidden="true">
-        <svg viewBox="0 0 48 48" width="28" height="28"><path d="M6 32c7-16 29-16 36 0" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="24" cy="16" r="4.5" fill="currentColor"/></svg>
+        <svg viewBox="0 0 48 48" width="30" height="30" fill="none">
+          <rect x="2.2" y="2.2" width="43.6" height="43.6" rx="11.5" stroke="currentColor" stroke-width="1.35" opacity=".5"/>
+          <path d="M15.2 13.2c-1.3 7.6-1.2 15.2 3 20.4 2.1 2.6 6.3 3.8 8.6 1.7 4.3-3.9 5.5-12.1 4.5-22.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          <path d="M16.4 16.2h15.2" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
+          <path d="M19.2 16.7v16.2M24 16.7v18.2M28.8 16.7v16.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+          <ellipse cx="24" cy="25.2" rx="3.7" ry="4.4" stroke="currentColor" stroke-width="1.2"/>
+          <circle cx="24" cy="25.2" r="1.05" fill="currentColor"/>
+        </svg>
       </span>
       <span class="brand-text">
         <strong>心弦</strong>
@@ -43,6 +53,10 @@
         <input type="checkbox" id="cover-toggle" checked />
         <span>封面</span>
       </label>
+      <label class="switch voice-switch" title="播放时显示实时波形和频率">
+        <input type="checkbox" id="viz-toggle" checked />
+        <span>波形</span>
+      </label>
       <div class="theme-picks" role="radiogroup" aria-label="主题">
         <button type="button" class="theme-pick is-on" data-theme="night" title="夜金" aria-label="夜金"><i></i>夜金</button>
         <button type="button" class="theme-pick" data-theme="paper" title="宣纸" aria-label="宣纸"><i></i>宣纸</button>
@@ -51,6 +65,7 @@
         <button type="button" class="theme-pick" data-theme="celadon" title="青瓷" aria-label="青瓷"><i></i>青瓷</button>
         <button type="button" class="theme-pick" data-theme="moon" title="月白" aria-label="月白"><i></i>月白</button>
       </div>
+      <a class="ghost" id="btn-guide" href="/guide">说明</a>
       <button type="button" class="ghost" id="btn-history" aria-controls="history-drawer">历史</button>
       <button type="button" class="ghost" id="btn-about" aria-controls="about-dialog">关于</button>
     </nav>
@@ -62,38 +77,66 @@
         <h1 id="stage-title">情绪识别</h1>
         <div class="tabs" role="tablist">
           <button type="button" class="tab is-on" data-mode="camera" role="tab" aria-selected="true">摄像头</button>
-          <button type="button" class="tab" data-mode="upload" role="tab" aria-selected="false">上传照片</button>
+          <button type="button" class="tab" data-mode="upload" role="tab" aria-selected="false">照片</button>
+          <button type="button" class="tab" data-mode="video" role="tab" aria-selected="false">视频</button>
+          <button type="button" class="tab" data-mode="screen" role="tab" aria-selected="false">屏幕</button>
         </div>
       </div>
 
-      <div class="stage-body" data-view="camera">
+      <div class="face-mode-bar" id="face-mode-bar">
+        <span class="strat-label">检测方式</span>
+        <div class="strat-picks" id="face-mode-picks" role="radiogroup" aria-label="人脸检测方式">
+          <button type="button" class="strat-pick is-on" data-face-mode="solo" role="radio" aria-checked="true" title="只取最大最稳的一张脸">单人精检</button>
+          <button type="button" class="strat-pick" data-face-mode="crowd" role="radio" aria-checked="false" title="多张脸与远景小脸，按人数最多的情绪">多人远场</button>
+        </div>
+        <p class="strat-hint" id="face-mode-hint">只取画面里最大、最稳的一张脸，检测阈值更高，不扫远景杂脸。</p>
+      </div>
+
+      <div class="stage-body" data-view="live">
         <div class="viewport" id="viewport">
-          <video id="cam" playsinline webkit-playsinline autoplay muted></video>
+          <video id="cam" class="is-mirror" playsinline webkit-playsinline autoplay muted></video>
           <canvas id="shot" hidden></canvas>
           <canvas id="face-overlay" class="face-overlay" aria-hidden="true"></canvas>
           <img id="preview" alt="待识别的人脸照片" hidden />
-          <div class="guide" aria-hidden="true"></div>
+          <div class="guide" id="cam-guide" aria-hidden="true"></div>
           <div class="live-emo-hud" id="live-emo-hud" hidden data-emo="idle">
             <span class="live-emo-dot" id="live-emo-dot" hidden></span>
             <strong id="live-emo-zh"></strong>
             <span id="live-emo-name">寻找人脸</span>
             <em id="live-emo-pct"></em>
+            <em id="live-emo-count"></em>
           </div>
           <div class="scan" id="scan" hidden></div>
           <div class="cam-empty" id="cam-empty">
             <p id="cam-empty-text">点下面的按钮开启摄像头，把面部落在椭圆里</p>
             <button type="button" class="primary" id="btn-cam">开启摄像头</button>
+            <button type="button" class="primary" id="btn-screen" hidden>分享屏幕</button>
+            <label class="primary" id="btn-video" hidden for="video-input">选择视频</label>
           </div>
         </div>
         <div class="stage-tools">
+          <div class="source-row" id="cam-select-row">
+            <label class="source-label" for="cam-select">摄像头</label>
+            <select id="cam-select" aria-label="选择摄像头">
+              <option value="">开启后列出可用摄像头</option>
+            </select>
+          </div>
+          <div class="source-row" id="video-row" hidden>
+            <label class="source-label" for="video-input">本地视频</label>
+            <input id="video-input" type="file" accept="video/mp4,video/webm,video/quicktime,video/*" />
+          </div>
           <div class="live-wrap">
-            <label class="switch">
+            <label class="switch" for="live-toggle">
               <input type="checkbox" id="live-toggle" />
               <span>实时捕捉</span>
             </label>
-            <p class="live-hint" id="live-hint">打开后持续识别表情并推荐歌曲，可随时关闭。惊讶、恐惧很难一直摆着：认到后会锁定歌单，脸松开也不会换歌；点「识别此刻」会截取当前画面，并自动关闭实时捕捉。</p>
+            <button type="button" class="hint-dot" id="live-hint-btn" aria-describedby="live-hint" aria-label="实时捕捉说明">?</button>
           </div>
-          <button type="button" class="primary" id="btn-recognize" title="截取当前画面识别并播放，同时关闭实时捕捉">识别此刻</button>
+          <div class="stage-ops">
+            <button type="button" class="ghost" id="btn-face-pop" title="在独立窗口里看人脸检测">弹出人脸窗</button>
+            <button type="button" class="primary" id="btn-recognize" title="截取当前画面识别并播放，同时关闭实时捕捉">识别此刻</button>
+          </div>
+          <p class="live-hint" id="live-hint" role="tooltip">打开后持续识别表情并推荐歌曲，可随时关闭。默认「单人精检」只认近景主脸；需要课堂合影或远景时再切「多人远场」，歌曲按人数最多的情绪来。惊讶、恐惧很难一直摆着：认到后会锁定歌单，脸松开也不会换歌；点「识别此刻」会截取当前画面，并自动关闭实时捕捉。</p>
         </div>
       </div>
 
@@ -112,7 +155,7 @@
           <div class="demo-list" id="demo-list"></div>
         </div>
       </div>
-      <p class="hint" id="stage-hint">人脸识别和歌曲都在本机完成，没有网络也能听。摄像头请用 http://127.0.0.1:5000 打开。</p>
+      <p class="hint" id="stage-hint">四种输入：摄像头、照片、视频、屏幕。检测默认为单人精检；多人远场可同时检多张脸和远景小脸，歌曲按人数最多的情绪来。算法见「说明」。摄像头请用 http://127.0.0.1:5000 打开。</p>
     </section>
 
     <section class="panel result" id="result" aria-labelledby="result-title">
@@ -143,14 +186,15 @@
           </div>
         </div>
         <div class="emo-label">
-          <p class="emo-kicker" id="emo-kicker">等待识别</p>
+          <p class="emo-kicker" id="emo-kicker">YuNet · MobileFaceNet FER</p>
           <p class="zh" id="emo-zh">待识别</p>
           <p class="name" id="emo-name">面向镜头，点识别此刻</p>
           <p class="conf" id="emo-conf"></p>
         </div>
       </div>
       <div class="emo-tags" id="emo-tags" role="list" aria-label="七类情绪标签"></div>
-      <p class="copy" id="emo-copy">识别后会对照人脸与情绪，并自动连播匹配歌曲。惊讶、恐惧等表情松开后，歌曲仍会按这次情绪继续播。</p>
+      <p class="copy" id="emo-copy">识别后会对照人脸与情绪，并按你选的推荐方式自动连播。惊讶、恐惧等表情松开后，歌曲仍会按这次情绪继续播。</p>
+      <p class="algo-live" id="algo-live">当前推荐：<strong id="strat-now">同频</strong> · <a href="/guide#recommend">算法、理论与使用说明</a></p>
       <p class="hold-note" id="hold-note">惊讶、恐惧、愤怒这类表情很难长时间保持。打开实时捕捉后会锁定当前歌单，脸松开或变回平静时不会立刻换歌，方便把这首听完；做出另一种明显表情并确认后才会切换。点「识别此刻」会截图识别并关闭实时捕捉。</p>
       <p class="emo-hold" id="emo-hold" hidden></p>
       <p class="genre" id="emo-genre" hidden></p>
@@ -168,14 +212,24 @@
   </section>
 
   <section class="panel recs" id="recs" aria-labelledby="recs-title">
-    <div class="panel-head">
+    <div class="panel-head recs-head">
       <h2 id="recs-title">歌曲</h2>
-      <p class="meta" id="recs-meta">识别后自动连播；惊讶、恐惧松开后也不会马上换歌</p>
+      <p class="meta" id="recs-meta">选一种推荐方式 · 未播优先 · <a href="/guide#recommend">理论说明</a></p>
+    </div>
+    <div class="strat-bar" id="strat-bar">
+      <span class="strat-label">推荐方式</span>
+      <div class="strat-picks" id="strat-picks" role="radiogroup" aria-label="推荐方式"></div>
+      <a class="ghost mini" href="/guide#recommend">说明</a>
+      <p class="strat-hint" id="strat-hint">贴着当前表情，播同一类最贴的歌。</p>
     </div>
     <div class="songs" id="songs"></div>
   </section>
 
   <aside class="player" id="player" hidden>
+    <div class="audio-viz" id="audio-viz" aria-hidden="true">
+      <canvas id="viz-wave" aria-label="实时波形"></canvas>
+      <canvas id="viz-freq" aria-label="实时频率"></canvas>
+    </div>
     <div class="nowplay" id="nowplay">
       <img id="nowplay-cover" alt="正在播放的封面" onerror="this.style.opacity='.2'" />
       <div class="lyrics" id="lyrics" aria-live="polite">
@@ -187,7 +241,10 @@
     <div class="player-bar">
       <img id="player-cover" alt="" />
       <div class="player-info">
-        <strong id="player-title">未播放</strong>
+        <div class="player-title-row">
+          <strong id="player-title">未播放</strong>
+          <span id="player-emo" class="song-emo" hidden></span>
+        </div>
         <span id="player-sub"></span>
       </div>
       <div class="player-core">
@@ -219,21 +276,16 @@
 
   <dialog id="about-dialog">
     <h2>关于心弦</h2>
-    <p>心弦用摄像头或本地照片识别七类基本情绪（喜、怒、哀、惧、惊、厌、中性），再按情绪推荐歌曲。</p>
+    <p>心弦用摄像头、照片、视频或屏幕画面识别七类基本情绪，再按你选的推荐方式播放歌曲。</p>
     <ul>
-      <li>识别模型在本机运行，公开评测准确率 88.27%，不依赖云端。</li>
-      <li>本地曲库：224 首按情绪分类的华语校园热歌试听（每类 32 首，少量英文），缺文件时按规则现场生成旋律，断网也能连播。</li>
-      <li>默认使用在线曲库，并行检索苹果音乐、网易云、咪咕、酷狗、QQ 音乐、酷我；可手动关掉「在线曲库」只用本地。在线歌曲长时间播放失败会提示并自动切到本地。</li>
-      <li>识别成功后自动播放匹配歌曲，当前列表播完自动切到下一首。</li>
-      <li>摄像头打开后会实时画出人脸框，并在画面上动态显示当前表情文字。</li>
-      <li>「实时捕捉」打开后持续识别表情并推荐歌曲，可随时关闭。惊讶、恐惧、愤怒等表情很难长时间保持，会锁定当前歌单，脸松开或变回平静时不会立刻换歌；做出另一种明显表情并确认后才会切换。</li>
-      <li>点「识别此刻」会截取当前画面来识别并播放歌曲，同时自动关闭实时捕捉。</li>
-      <li>情绪标签变化时可语音播报，顶部「语音提示」可随时打开或关闭。</li>
-      <li>播放时显示实时歌词与歌曲封面，顶部「歌词」「封面」可随时打开或关闭。</li>
-      <li>当前情绪图标旁会对照显示用于判断的人脸截图；情绪足迹与历史同样按「识别人脸 | 判断情绪」双列对照，并列出当时播放过的歌曲。</li>
-      <li>情绪足迹会全部保存，不会丢掉旧记录。每条都留下表情图标、真实人脸截图和播过的歌；点选可回放当时的歌。相同情绪再次识别时，会尽量换没听过的歌。</li>
-      <li>识别历史写在项目的 data 与 static/history 目录，换一台设备复制整个文件夹部署也会保留。</li>
-      <li>顶部可切换夜金、宣纸、墨青、朱砂、青瓷、月白六种主题。</li>
+      <li>算法、理论与完整使用说明在独立页面：点顶部「说明」，或打开 <a href="/guide">/guide</a>。人脸 YuNet + MobileFaceNet FER（RAF-DB 88.27%）并在单人精检中与 HSEmotion EfficientNet-B0 融合，曲调 Thayer + Krumhansl，推荐默认同频余弦，也可选修复、先同频再修复等。</li>
+      <li>推荐方式可在歌曲区点选：同频、修复、先同频再修复，以及对比、回暖、降唤醒、升效价、强化、平衡。</li>
+      <li>人脸本机识别。默认「单人精检」只取近景主脸，五点精修对齐后做翻转/微转 TTA，再与 HSEmotion 野外模型加权融合、多帧平均；「多人远场」可同时检多张脸和远景小脸，歌曲按人数最多的情绪来。可弹出人脸窗。</li>
+      <li>四种输入：摄像头（可切换设备）、照片、本地视频、屏幕分享。</li>
+      <li>本地 280 首按情绪分类的人声试听，外加在线接口；断网也能连播。在线长时间失败会自动切本地。</li>
+      <li>播放时显示歌词、封面、波形和频率，均可单独关闭。</li>
+      <li>惊讶、恐惧很难一直摆着：实时捕捉认到后不会立刻换歌，做出另一种明显表情才会切换；点「识别此刻」会截图并关闭实时捕捉。</li>
+      <li>情绪足迹全部保存；点选可回放当时的歌。相同情绪再次识别会尽量换没听过的歌。</li>
       <li>图像只在本机处理，不上传到云端。</li>
     </ul>
     <button type="button" class="primary" id="btn-close-about">知道了</button>
@@ -241,6 +293,6 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=37"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=50"></script>
 </body>
 </html>

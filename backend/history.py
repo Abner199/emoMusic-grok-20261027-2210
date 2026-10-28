@@ -9,8 +9,8 @@ import time
 import uuid
 from typing import Any
 
-from config import DATA_DIR, HISTORY_DIR, THEMES
-from backend.songbook import title_key
+from config import DATA_DIR, EMOTIONS, HISTORY_DIR, THEMES
+from backend.songbook import emotion_of_title, title_key
 
 _LOCK = threading.Lock()
 _PATH = DATA_DIR / "history.json"
@@ -31,6 +31,8 @@ _SONG_KEYS = (
     "downloadable",
     "duration",
     "emotion",
+    "emotion_zh",
+    "emotion_name",
     "mime",
 )
 
@@ -103,12 +105,37 @@ def _save_store(store: dict) -> None:
     )
 
 
+def _song_emotion(song: dict) -> str:
+    eid = str(song.get("emotion") or "").strip()
+    if eid in EMOTIONS:
+        return eid
+    music = song.get("music") if isinstance(song.get("music"), dict) else {}
+    eid = str(music.get("emotion") or "").strip()
+    if eid in EMOTIONS:
+        return eid
+    eid = emotion_of_title(song.get("title") or "") or ""
+    return eid if eid in EMOTIONS else ""
+
+
+def _decorate_song(row: dict, src: dict | None = None) -> dict:
+    src = src if isinstance(src, dict) else row
+    eid = _song_emotion(src) or _song_emotion(row)
+    if not eid:
+        return row
+    meta = EMOTIONS.get(eid) or {}
+    row["emotion"] = eid
+    row["emotion_zh"] = src.get("emotion_zh") or row.get("emotion_zh") or meta.get("zh") or ""
+    row["emotion_name"] = src.get("emotion_name") or row.get("emotion_name") or meta.get("name") or ""
+    return row
+
+
 def _slim_songs(songs: list[dict] | None) -> list[dict]:
     out = []
     for song in songs or []:
         if not isinstance(song, dict):
             continue
-        out.append({k: song[k] for k in _SONG_KEYS if k in song})
+        row = {k: song[k] for k in _SONG_KEYS if k in song}
+        out.append(_decorate_song(row, song))
     return out
 
 
@@ -123,7 +150,7 @@ def _play_row(song: dict) -> dict | None:
     row["title"] = title or row.get("title") or ""
     row["key"] = key
     row["ts"] = int(song.get("ts") or time.time())
-    return row
+    return _decorate_song(row, song)
 
 
 def _persist_face(item_id: str, face: dict | None) -> dict:
@@ -183,6 +210,14 @@ def _needs_persist(raw: Any) -> bool:
         crop = str((src.get("face") or {}).get("crop") or "")
         if crop.startswith("data:image"):
             return True
+        for song in list(src.get("songs") or []) + list(src.get("played") or []):
+            if isinstance(song, dict) and (song.get("title") or "") and not song.get("emotion"):
+                return True
+    played = raw.get("played") if isinstance(raw.get("played"), dict) else {}
+    for rows in played.values():
+        for song in rows or []:
+            if isinstance(song, dict) and (song.get("title") or "") and not song.get("emotion"):
+                return True
     return False
 
 
@@ -193,9 +228,27 @@ def ensure_persistent() -> int:
         store = _load_store()
         store["items"] = [_migrate_item(dict(x)) for x in store["items"]]
         store["items"].sort(key=lambda x: int(x.get("ts") or 0), reverse=True)
+        store["played"] = _decorate_played(store.get("played"))
         if _needs_persist(raw):
             _save_store(store)
         return len(store["items"])
+
+
+def _decorate_played(played: dict | None) -> dict:
+    out: dict[str, list[dict]] = {}
+    for emo, rows in (played or {}).items():
+        cleaned: list[dict] = []
+        seen: set[str] = set()
+        for row in rows or []:
+            if not isinstance(row, dict):
+                continue
+            item = _play_row(row)
+            if not item or item["key"] in seen:
+                continue
+            seen.add(item["key"])
+            cleaned.append(item)
+        out[str(emo)] = cleaned
+    return out
 
 
 def list_records(_session_id: str | None = None) -> list[dict]:
@@ -204,6 +257,7 @@ def list_records(_session_id: str | None = None) -> list[dict]:
         store = _load_store()
         store["items"] = [_migrate_item(dict(x)) for x in store["items"]]
         store["items"].sort(key=lambda x: int(x.get("ts") or 0), reverse=True)
+        store["played"] = _decorate_played(store.get("played"))
         if _needs_persist(raw):
             _save_store(store)
         return list(store["items"])
@@ -323,7 +377,7 @@ def clear_records(_session_id: str | None = None) -> None:
 
 
 def load_prefs() -> dict:
-    data = {"theme": "night"}
+    data = {"theme": "night", "strategy": "iso", "face_mode": "solo"}
     if _PREFS.exists():
         try:
             loaded = json.loads(_PREFS.read_text(encoding="utf-8"))
@@ -338,10 +392,29 @@ def save_prefs(patch: dict) -> dict:
     data = load_prefs()
     if "theme" in patch and patch["theme"] in THEMES:
         data["theme"] = patch["theme"]
+    if "strategy" in patch:
+        from backend.strategy import normalize
+
+        data["strategy"] = normalize(patch.get("strategy"))
+    if "face_mode" in patch:
+        from backend.emotion import normalize_face_mode
+
+        data["face_mode"] = normalize_face_mode(patch.get("face_mode"))
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     tmp = _PREFS.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(_PREFS)
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
+    last_err: OSError | None = None
+    for attempt in range(6):
+        try:
+            tmp.write_text(payload, encoding="utf-8")
+            tmp.replace(_PREFS)
+            last_err = None
+            break
+        except OSError as err:
+            last_err = err
+            time.sleep(0.04 * (attempt + 1))
+    if last_err:
+        raise last_err
     return data
 
 

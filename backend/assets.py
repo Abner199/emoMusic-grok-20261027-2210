@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from urllib.parse import quote
 
-from config import AUDIO_DIR, COVER_DIR, DATA_DIR, EMOTIONS, FER_FILE, MODEL_DIR, MODEL_URLS, YUNET_FILE
+from config import AUDIO_DIR, COVER_DIR, DATA_DIR, EMOTIONS, FER_FILE, HSE_FILE, MODEL_DIR, MODEL_URLS, YUNET_FILE
 from backend.songbook import VOCAL_SONGBOOK, fold_zh, is_instrumental, is_stock_track, pretty_text
 
 logger = logging.getLogger("emotune.assets")
@@ -412,7 +412,11 @@ def _download_file(urls: list[str], dest: Path) -> None:
 
 
 def ensure_models() -> None:
-    mapping = {YUNET_FILE: MODEL_URLS[YUNET_FILE], FER_FILE: MODEL_URLS[FER_FILE]}
+    mapping = {
+        YUNET_FILE: MODEL_URLS[YUNET_FILE],
+        FER_FILE: MODEL_URLS[FER_FILE],
+        HSE_FILE: MODEL_URLS[HSE_FILE],
+    }
     for name, urls in mapping.items():
         path = MODEL_DIR / name
         if path.exists() and path.stat().st_size > 50_000:
@@ -421,7 +425,7 @@ def ensure_models() -> None:
 
 
 _SKIP_ARTISTS = ("kidz bop", "kids bop", "karaoke", "tribute", "piano guys")
-_TITLE_NOISE = re.compile(r"[\s,，.。·\-–—_/\\'\"()（）【】\[\]]+")
+_TITLE_NOISE = re.compile(r"[\s,，.。·\-–—_/\\'\"()（）【】\[\]《》〈〉「」『』]+")
 
 
 def _plain_title(text: str) -> str:
@@ -486,15 +490,23 @@ def _itunes_lookup(
                 continue
             score = 0
             who_f = fold_zh(who)
+            who_p = _plain_title(who)
+            artist_p = _plain_title(artist)
             track_f = _plain_title(track)
             title_hit = bool(title_f) and (title_f in track_f or track_f in title_f)
             if not title_hit:
                 continue
             score += 6
-            artist_tokens = [t for t in artist_f.replace("/", " ").split() if len(t) >= 2]
-            if artist_f and (artist_f in who_f or who_f in artist_f or any(t in who_f for t in artist_tokens)):
+            artist_tokens = [t for t in artist_p.replace("/", " ").split() if len(t) >= 2]
+            if artist_p and (
+                artist_p in who_p
+                or who_p in artist_p
+                or artist_f in who_f
+                or who_f in artist_f
+                or any(t in who_p or t in who_f for t in artist_tokens)
+            ):
                 score += 8
-            if who_f == artist_f:
+            if who_p == artist_p or who_f == artist_f:
                 score += 2
             if "live" in track_f or "现场" in track or "acoustic" in track_f:
                 score -= 4
@@ -503,9 +515,10 @@ def _itunes_lookup(
             if score > best_score:
                 best_score = score
                 best = item
-        if best_score >= 14:
+        # 歌名命中且歌手对上即可（现场版 6+8-4=10）；避免因中间点号、Live 后缀漏掉原唱。
+        if best_score >= 10:
             return best
-    if best_score < 14:
+    if best_score < 10:
         return None
     return best
 
@@ -700,8 +713,8 @@ def ensure_library() -> None:
                 "mime": mime,
             }
         )
-    if len(catalog) < 224:
-        logger.warning("本地曲库不足 224 首（当前 %s）", len(catalog))
+    if len(catalog) < 280:
+        logger.warning("本地曲库不足 280 首（当前 %s）", len(catalog))
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     payload = {"songs": catalog, "count": len(catalog), "kind": "local"}
     catalog_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -15,7 +15,16 @@ from urllib.parse import quote, urlparse
 import requests
 
 from config import AUDIO_DIR, DATA_DIR, EMOTIONS, ONLINE_TIMEOUT, RECOMMEND_COUNT
+from backend.music_emotion import (
+    ALGO_NAME as MUSIC_ALGO,
+    describe_song,
+    face_vector,
+    match_score,
+    public_music,
+    target_vector,
+)
 from backend.songbook import VOCAL_SONGBOOK, fold_zh, is_vocal_song, localize_song, title_key, title_seen
+from backend.strategy import DEFAULT_STRATEGY, interleave, involved_emotions, normalize, plan, summary
 
 logger = logging.getLogger("emotune.recommender")
 
@@ -133,7 +142,7 @@ def open_remote_audio(url: str, range_header: Optional[str] = None):
     return resp
 
 
-def local_songs(emotion: str, limit: int = 32) -> list[dict]:
+def local_songs(emotion: str, limit: int = 48) -> list[dict]:
     catalog = [s for s in load_catalog() if s.get("source") == "local"]
     matched = [s for s in catalog if s.get("emotion") == emotion]
     vocals = [s for s in matched if s.get("kind") == "vocal"]
@@ -798,27 +807,66 @@ def _exclude_keys(exclude) -> list[str]:
     return keys
 
 
+def _rank_bucket(batch: list[dict], face_vec, emotion: str) -> list[dict]:
+    scored = []
+    for song in batch:
+        desc = describe_song(song, emotion)
+        match = match_score(face_vec, desc)
+        item = dict(song)
+        item["music"] = public_music(desc)
+        item["match"] = match
+        scored.append((match, item))
+    scored.sort(key=lambda x: -x[0])
+    return [item for _, item in scored]
+
+
+def _pool_songs(emotions: list[str], want_online: bool, limit: int) -> tuple[dict[str, list[dict]], dict[str, list[dict]], Optional[str]]:
+    local_map: dict[str, list[dict]] = {eid: local_songs(eid, limit=limit) for eid in emotions}
+    online_map: dict[str, list[dict]] = {eid: [] for eid in emotions}
+    online_error = None
+    if not want_online:
+        return local_map, online_map, None
+    with ThreadPoolExecutor(max_workers=min(6, max(1, len(emotions)))) as pool:
+        futs = {eid: pool.submit(online_songs, eid) for eid in emotions}
+        for eid, fut in futs.items():
+            try:
+                online_map[eid] = [s for s in (fut.result() or []) if s.get("playable") and s.get("audio")]
+            except Exception as exc:
+                online_error = str(exc)
+                logger.warning("在线推荐失败 %s: %s", eid, exc)
+                online_map[eid] = []
+    return local_map, online_map, online_error
+
+
 def recommend(
     emotion: str,
     count: int = RECOMMEND_COUNT,
     want_online: bool = True,
     exclude: Optional[list] = None,
+    face_scores=None,
+    strategy: str = DEFAULT_STRATEGY,
 ) -> dict:
     if emotion not in EMOTIONS:
         emotion = "neutral"
     meta = EMOTIONS[emotion]
-    local = local_songs(emotion, limit=max(count, 32))
-    online: list[dict] = []
-    online_error = None
-    if want_online:
-        try:
-            online = [s for s in online_songs(emotion) if s.get("playable") and s.get("audio")]
-        except Exception as exc:
-            online_error = str(exc)
-            logger.warning("在线推荐失败: %s", exc)
+    sid = normalize(strategy)
+    count = max(6, int(count or RECOMMEND_COUNT))
+    stages = plan(emotion, sid, count)
+    emos = involved_emotions(stages) or [emotion]
 
-    skip = _exclude_keys(exclude)
+    skip_src = list(exclude or [])
+    try:
+        from backend.history import played_keys
+
+        for eid in EMOTIONS:
+            skip_src.extend(played_keys(eid))
+    except Exception:
+        pass
+    skip = _exclude_keys(skip_src)
     skip_at = {key: idx for idx, key in enumerate(skip)}
+    face_vec = face_vector(face_scores, emotion)
+
+    local_map, online_map, online_error = _pool_songs(emos, want_online, limit=max(count, 48))
 
     def split(batch: list[dict]) -> tuple[list[dict], list[dict]]:
         fresh: list[dict] = []
@@ -832,31 +880,52 @@ def recommend(
         used.sort(key=lambda s: skip_at.get(title_key(s.get("title") or ""), 0))
         return fresh, used
 
-    mixed: list[dict] = []
     seen: set[str] = set()
 
-    def take(batch: list[dict]) -> None:
-        for song in batch:
-            if len(mixed) >= count:
-                return
-            key = title_key(song.get("title") or "")
-            if title_seen(key, seen):
-                continue
-            seen.add(key)
-            mixed.append(song)
+    def fill_stage(stage: dict) -> list[dict]:
+        eid = stage["emotion"]
+        n = stage["count"]
+        rank_vec = face_vec if stage.get("rank") == "face" else target_vector(eid)
+        local = local_map.get(eid) or []
+        online = online_map.get(eid) or [] if want_online else []
+        picked: list[dict] = []
 
-    online_fresh, online_used = split(online) if want_online else ([], [])
-    local_fresh, local_used = split(local)
-    if want_online:
-        take(online_fresh)
-        take(local_fresh)
-        take(online_used)
-        take(local_used)
-    else:
-        take(local_fresh)
-        take(local_used)
+        def take(batch: list[dict]) -> None:
+            for song in _rank_bucket(batch, rank_vec, eid):
+                if len(picked) >= n:
+                    return
+                key = title_key(song.get("title") or "")
+                if title_seen(key, seen):
+                    continue
+                seen.add(key)
+                item = dict(song)
+                item["rec_role"] = stage["role"]
+                item["rec_role_zh"] = stage["role_zh"]
+                item["rec_from"] = emotion
+                picked.append(item)
 
-    songs = [localize_song(s) for s in mixed[: max(6, count)]]
+        online_fresh, online_used = split(online) if want_online else ([], [])
+        local_fresh, local_used = split(local)
+        if want_online:
+            take(online_fresh)
+            take(local_fresh)
+            take(online_used)
+            take(local_used)
+        else:
+            take(local_fresh)
+            take(local_used)
+        return picked
+
+    parts = [fill_stage(stage) for stage in stages]
+    mixed = interleave(parts) if sid == "balance" else [song for part in parts for song in part]
+
+    if len(mixed) < count:
+        leftover_e = emos[-1]
+        extra_stage = dict(stages[-1] if stages else {"emotion": leftover_e, "count": count - len(mixed), "role": "iso", "role_zh": "同频", "rank": "target"})
+        extra_stage["count"] = count - len(mixed)
+        mixed.extend(fill_stage(extra_stage))
+
+    songs = [localize_song(s) for s in mixed[:count]]
     online_count = sum(1 for s in songs if s.get("source") != "local")
     if want_online and online_count == 0 and not online_error:
         online_error = "在线接口暂无可用试听"
@@ -866,6 +935,8 @@ def recommend(
         if s.get("source") != "local" and label and label not in providers:
             providers.append(label)
     mode = "online" if want_online and online_count else ("local" if not want_online else "local-fallback")
+    strat = summary(sid, emotion, stages)
+    strat["music"] = MUSIC_ALGO
     return {
         "emotion": emotion,
         "genre": meta["genre"],
@@ -876,6 +947,11 @@ def recommend(
         "online_error": online_error,
         "providers": providers,
         "mode": mode,
+        "strategy": strat,
+        "stages": [
+            {"emotion": s["emotion"], "zh": s["zh"], "name": s["name"], "role": s["role"], "role_zh": s["role_zh"], "count": s["count"]}
+            for s in stages
+        ],
     }
 
 

@@ -6,11 +6,13 @@ import json
 import sys
 from pathlib import Path
 
+import os
+
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = Path(r"C:\Users\niewe\AppData\Local\Temp")
-BASE = "http://127.0.0.1:5000"
+BASE = os.environ.get("EMOTUNE_BASE", "http://127.0.0.1:5000")
 CROP = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
 
 EMOTION = {
@@ -89,6 +91,7 @@ def main() -> int:
                 "--use-fake-device-for-media-stream",
                 "--autoplay-policy=no-user-gesture-required",
                 "--mute-audio",
+                "--no-proxy-server",
             ],
         )
         context = browser.new_context(viewport={"width": 1280, "height": 900}, locale="zh-CN")
@@ -123,9 +126,10 @@ def main() -> int:
         page.route("**/api/track**", handle_track)
         page.route("**/api/recognize**", handle_recognize)
         page.goto(BASE, wait_until="domcontentloaded", timeout=20000)
-        page.wait_for_selector("#live-hint")
-
-        live_hint = page.locator("#live-hint").inner_text()
+        page.wait_for_selector("#live-hint", state="attached")
+        page.locator(".live-wrap").hover()
+        page.wait_for_timeout(180)
+        live_hint = page.locator("#live-hint").text_content() or ""
         hold_note = page.locator("#hold-note").inner_text()
         recs_meta = page.locator("#recs-meta").inner_text()
         print("live-hint:", live_hint)
@@ -138,7 +142,7 @@ def main() -> int:
             if not cond:
                 fails += 1
 
-        chk("实时捕捉旁说明可见", "脸松开也不会换歌" in live_hint and "惊讶" in live_hint and "识别此刻" in live_hint, live_hint)
+        chk("实时捕捉说明在悬停提示里", "脸松开也不会换歌" in live_hint and "惊讶" in live_hint and "识别此刻" in live_hint, live_hint)
         chk("摄像头人脸框画布", page.locator("#face-overlay").count() == 1)
         chk("画面实时表情文字", page.locator("#live-emo-hud").count() == 1)
         chk("情绪区说明可见", "不会立刻换歌" in hold_note and "惊讶、恐惧" in hold_note, hold_note)

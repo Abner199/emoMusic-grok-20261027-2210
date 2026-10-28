@@ -4,6 +4,7 @@
 
 检测器：OpenCV YuNet（5 点关键点）
 识别器：OpenCV Zoo MobileFaceNet FER（7 类，RAF-DB 报告准确率 88.27%）
+单人精检再叠加 HSEmotion EfficientNet-B0（AffectNet 野外）+ 翻转/微转 TTA + 多帧平均。
 对齐：与官方 demo 相同的 112×112 相似变换，保证输入分布一致。
 """
 from __future__ import annotations
@@ -17,16 +18,24 @@ from typing import Optional
 import cv2
 import numpy as np
 
+from collections import defaultdict
+
 from config import (
+    DEFAULT_FACE_MODE,
     EMOTION_CONF_WARN,
     EMOTIONS,
+    FACE_MAX,
+    FACE_MODES,
     FACE_SCORE_MIN,
     FER_FILE,
+    HSE_FILE,
     INDEX_TO_ID,
     MAX_IMAGE_SIDE,
     MODEL_DIR,
     MODEL_LABELS,
     YUNET_FILE,
+    YUNET_NMS,
+    YUNET_SCORE,
 )
 
 logger = logging.getLogger("emotune.emotion")
@@ -43,9 +52,15 @@ _STD_POINTS = np.array(
     dtype=np.float64,
 )
 
+_HSE_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+_HSE_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+_HSE8 = ("angry", "contempt", "disgust", "fear", "happy", "neutral", "sad", "surprise")
 
-def _softmax(x: np.ndarray) -> np.ndarray:
+
+def _softmax(x: np.ndarray, temperature: float = 1.0) -> np.ndarray:
     z = x.astype(np.float64)
+    t = max(float(temperature), 1e-6)
+    z = z / t
     z = z - np.max(z)
     e = np.exp(z)
     return e / np.clip(e.sum(), 1e-12, None)
@@ -107,6 +122,48 @@ def decode_image(data: bytes) -> Optional[np.ndarray]:
     return img
 
 
+def normalize_face_mode(raw: str | None) -> str:
+    text = str(raw or "").strip().lower()
+    aliases = {
+        "solo": "solo",
+        "single": "solo",
+        "one": "solo",
+        "precision": "solo",
+        "near": "solo",
+        "精检": "solo",
+        "单人": "solo",
+        "crowd": "crowd",
+        "multi": "crowd",
+        "far": "crowd",
+        "多人": "crowd",
+        "远场": "crowd",
+        "远景": "crowd",
+    }
+    return aliases.get(text, DEFAULT_FACE_MODE if text in ("", "auto", "default") else DEFAULT_FACE_MODE)
+
+
+def face_mode_cfg(raw: str | None) -> dict:
+    mode = normalize_face_mode(raw)
+    return dict(FACE_MODES.get(mode) or FACE_MODES[DEFAULT_FACE_MODE])
+
+
+def public_face_modes() -> list[dict]:
+    order = ("solo", "crowd")
+    out = []
+    for key in order:
+        item = FACE_MODES.get(key) or {}
+        out.append(
+            {
+                "id": item.get("id") or key,
+                "zh": item.get("zh") or "",
+                "name": item.get("name") or "",
+                "blurb": item.get("blurb") or "",
+                "default": key == DEFAULT_FACE_MODE,
+            }
+        )
+    return out
+
+
 def resize_for_detect(image_bgr: np.ndarray, max_side: int = MAX_IMAGE_SIDE):
     h, w = image_bgr.shape[:2]
     scale = 1.0
@@ -138,17 +195,43 @@ class EmotionRecognizer:
             "onnx",
             yunet_buf,
             np.array([], dtype=np.uint8),
-            (320, 320),
-            0.7,
-            0.3,
-            5000,
+            (640, 640),
+            float(YUNET_SCORE),
+            float(YUNET_NMS),
+            50,
         )
         self.net = cv2.dnn.readNetFromONNX(fer_buf)
         self.net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
         self.net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU)
         self._haar = None
+        self._clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        self.hse = None
+        self.hse_input = "input"
         self._lock = threading.RLock()
+        self._load_hsemotion()
         logger.info("情绪识别模型已加载")
+
+    def _load_hsemotion(self) -> None:
+        hse_path = MODEL_DIR / HSE_FILE
+        if not hse_path.exists() or hse_path.stat().st_size < 1_000_000:
+            logger.warning("未找到 HSEmotion 模型，单人精检仍用 MobileFaceNet TTA")
+            return
+        try:
+            import onnxruntime as ort
+
+            opts = ort.SessionOptions()
+            opts.intra_op_num_threads = 2
+            opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            self.hse = ort.InferenceSession(
+                str(hse_path),
+                sess_options=opts,
+                providers=["CPUExecutionProvider"],
+            )
+            self.hse_input = self.hse.get_inputs()[0].name
+            logger.info("HSEmotion EfficientNet-B0 已加载")
+        except Exception:
+            self.hse = None
+            logger.exception("HSEmotion 加载失败，单人精检仍用 MobileFaceNet TTA")
 
     def _haar_cascade(self):
         if self._haar is None:
@@ -156,48 +239,175 @@ class EmotionRecognizer:
             self._haar = cv2.CascadeClassifier(xml)
         return self._haar
 
-    def detect_faces(self, image_bgr: np.ndarray) -> list[dict]:
-        img, scale = resize_for_detect(image_bgr)
-        h, w = img.shape[:2]
-        self.detector.setInputSize((w, h))
-        _, faces = self.detector.detect(img)
-        results = []
-        if faces is not None:
-            for row in faces:
-                row = row.astype(np.float32)
-                inv = 1.0 / scale
-                x, y, bw, bh = row[:4] * inv
-                lm = row[4:14].reshape(5, 2) * inv
-                score = float(row[14])
-                if score < FACE_SCORE_MIN:
-                    continue
-                results.append(
-                    {
-                        "box": [float(x), float(y), float(bw), float(bh)],
-                        "landmarks": lm.tolist(),
-                        "score": score,
-                        "area": float(max(bw, 1.0) * max(bh, 1.0)),
-                    }
-                )
-        if results:
-            results.sort(key=lambda f: f["area"], reverse=True)
-            return results
+    def _apply_detector(self, cfg: dict) -> None:
+        self.detector.setScoreThreshold(float(cfg.get("score") or YUNET_SCORE))
+        self.detector.setNMSThreshold(float(cfg.get("nms") or YUNET_NMS))
+        top_k = int(cfg.get("top_k") or 50)
+        if hasattr(self.detector, "setTopK"):
+            self.detector.setTopK(top_k)
 
-        # YuNet 未检出时，Haar 作为兜底，无关键点则走裁剪
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        haar_faces = self._haar_cascade().detectMultiScale(gray, 1.1, 5, minSize=(48, 48))
-        for (x, y, bw, bh) in haar_faces:
-            inv = 1.0 / scale
+    def _parse_yunet(self, faces, inv: float, score_min: float, min_side: float) -> list[dict]:
+        results = []
+        if faces is None:
+            return results
+        floor = max(8.0, float(min_side) * 0.45)
+        for row in faces:
+            row = np.asarray(row, dtype=np.float32).reshape(-1)
+            if row.size < 15:
+                continue
+            x, y, bw, bh = row[:4] * inv
+            lm = row[4:14].reshape(5, 2) * inv
+            score = float(row[14])
+            if score < score_min:
+                continue
+            if min(float(bw), float(bh)) < floor:
+                continue
             results.append(
                 {
-                    "box": [float(x) * inv, float(y) * inv, float(bw) * inv, float(bh) * inv],
-                    "landmarks": None,
-                    "score": 0.6,
-                    "area": float(bw * bh) * inv * inv,
+                    "box": [float(x), float(y), float(bw), float(bh)],
+                    "landmarks": lm.tolist(),
+                    "score": score,
+                    "area": float(max(bw, 1.0) * max(bh, 1.0)),
                 }
             )
-        results.sort(key=lambda f: f["area"], reverse=True)
         return results
+
+    def _yunet_detect(self, img: np.ndarray, inv: float, score_min: float, min_side: float) -> list[dict]:
+        h, w = img.shape[:2]
+        if h < 12 or w < 12:
+            return []
+        self.detector.setInputSize((w, h))
+        _, faces = self.detector.detect(img)
+        return self._parse_yunet(faces, inv, score_min, min_side)
+
+    def detect_faces(self, image_bgr: np.ndarray, mode: str | None = None) -> list[dict]:
+        cfg = face_mode_cfg(mode)
+        img, scale = resize_for_detect(image_bgr, int(cfg.get("max_side") or MAX_IMAGE_SIDE))
+        inv = 1.0 / scale if scale else 1.0
+        score_min = float(cfg.get("score_min") or FACE_SCORE_MIN)
+        min_face = float(cfg.get("min_face") or 14)
+        self._apply_detector(cfg)
+        results = self._yunet_detect(img, inv, score_min, min_face)
+
+        # 单人精检：略降阈值再试一次，仍不用 Haar / 远景放大
+        if not results and not cfg.get("upscale") and not cfg.get("haar"):
+            loose = dict(cfg)
+            loose["score"] = max(0.48, float(cfg.get("score") or 0.62) - 0.14)
+            self._apply_detector(loose)
+            results = self._yunet_detect(img, inv, max(0.42, score_min - 0.08), min_face)
+            self._apply_detector(cfg)
+
+        # 多人远场：一张都没有时放大再检，方便远景小脸
+        if not results and cfg.get("upscale"):
+            h, w = img.shape[:2]
+            long_side = max(h, w)
+            if long_side >= 80 and long_side < 1800:
+                factor = min(1.85, 1800.0 / float(long_side))
+                if factor > 1.2:
+                    big = cv2.resize(
+                        img,
+                        (int(w * factor), int(h * factor)),
+                        interpolation=cv2.INTER_CUBIC,
+                    )
+                    results = self._yunet_detect(big, inv / factor, score_min, min_face)
+
+        if results:
+            dual = float(cfg.get("dual_score") or 0.68)
+            self.detector.setScoreThreshold(dual)
+            tight = self._yunet_detect(img, inv, min(score_min, dual * 0.7), min_face)
+            self._apply_detector(cfg)
+            for face in results:
+                best = None
+                best_iou = 0.4
+                for other in tight:
+                    v = self._box_iou(face["box"], other["box"])
+                    if v > best_iou:
+                        best_iou = v
+                        best = other
+                if best:
+                    face["box"] = best["box"]
+                    face["landmarks"] = best["landmarks"]
+                    face["score"] = max(float(face["score"]), float(best["score"]))
+                    face["area"] = best["area"]
+            results.sort(key=lambda f: (f["area"], f["score"]), reverse=True)
+            return self._prune_faces(results, min_face)[: int(cfg.get("face_max") or FACE_MAX)]
+
+        if cfg.get("haar"):
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+            haar_faces = self._haar_cascade().detectMultiScale(gray, 1.08, 4, minSize=(18, 18))
+            for (x, y, bw, bh) in haar_faces:
+                results.append(
+                    {
+                        "box": [float(x) * inv, float(y) * inv, float(bw) * inv, float(bh) * inv],
+                        "landmarks": None,
+                        "score": 0.55,
+                        "area": float(bw * bh) * inv * inv,
+                    }
+                )
+            results.sort(key=lambda f: f["area"], reverse=True)
+            return self._prune_faces(results, min_face)[: int(cfg.get("face_max") or FACE_MAX)]
+        return []
+
+    def _prune_faces(self, faces: list[dict], min_face: float = 14) -> list[dict]:
+        if not faces:
+            return faces
+        kept = []
+        for face in faces:
+            x, y, bw, bh = face["box"]
+            if min(bw, bh) < float(min_face):
+                continue
+            overlap = False
+            for other in kept:
+                if self._box_iou(face["box"], other["box"]) >= 0.45:
+                    overlap = True
+                    break
+            if not overlap:
+                kept.append(face)
+        return kept or faces[:1]
+
+    def _box_iou(self, a, b) -> float:
+        ax, ay, aw, ah = [float(v) for v in a]
+        bx, by, bw, bh = [float(v) for v in b]
+        x1, y1 = max(ax, bx), max(ay, by)
+        x2, y2 = min(ax + aw, bx + bw), min(ay + ah, by + bh)
+        inter = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+        ua = aw * ah + bw * bh - inter
+        return inter / ua if ua > 0 else 0.0
+
+    def _refine_face(self, image_bgr: np.ndarray, face: dict) -> dict:
+        """在人脸附近再检一次，对齐关键点，FER 更稳。"""
+        h, w = image_bgr.shape[:2]
+        x, y, bw, bh = [float(v) for v in face["box"]]
+        cx, cy = x + bw / 2.0, y + bh / 2.0
+        side = max(bw, bh) * 1.45
+        x1 = int(max(0, cx - side / 2.0))
+        y1 = int(max(0, cy - side / 2.0))
+        x2 = int(min(w, cx + side / 2.0))
+        y2 = int(min(h, cy + side / 2.0))
+        crop = image_bgr[y1:y2, x1:x2]
+        if crop.size == 0:
+            return face
+        ch, cw = crop.shape[:2]
+        target = 320.0
+        scale = target / float(max(ch, cw, 1))
+        small = cv2.resize(
+            crop,
+            (max(12, int(cw * scale)), max(12, int(ch * scale))),
+            interpolation=cv2.INTER_LINEAR if scale < 1 else cv2.INTER_CUBIC,
+        )
+        dets = self._yunet_detect(small, 1.0, 0.40, 18.0)
+        if not dets:
+            return face
+        best = max(dets, key=lambda f: f["area"])
+        inv = 1.0 / scale
+        bx, by, bbw, bbh = best["box"]
+        out = dict(face)
+        out["box"] = [bx * inv + x1, by * inv + y1, bbw * inv, bbh * inv]
+        out["area"] = float(max(bbw * inv, 1.0) * max(bbh * inv, 1.0))
+        out["score"] = max(float(face.get("score") or 0.0), float(best.get("score") or 0.0))
+        if best.get("landmarks"):
+            out["landmarks"] = [[p[0] * inv + x1, p[1] * inv + y1] for p in best["landmarks"]]
+        return out
 
     def _fer_blob(self, aligned_bgr: np.ndarray) -> np.ndarray:
         """与 OpenCV Zoo official preprocess 保持一致：RGB /255 -0.5 /0.5。"""
@@ -206,154 +416,414 @@ class EmotionRecognizer:
         image = (image - 0.5) / 0.5
         return cv2.dnn.blobFromImage(image)
 
-    def classify_face(self, image_bgr: np.ndarray, face: dict) -> dict:
-        if face.get("landmarks"):
-            aligned = align_face(image_bgr, np.array(face["landmarks"], dtype=np.float64))
-        else:
-            aligned = crop_face(image_bgr, face["box"])
-        blob = self._fer_blob(aligned)
+    def _auto_light(self, image_bgr: np.ndarray) -> np.ndarray:
+        """过暗或过曝时做轻度 CLAHE，不动正常光照，避免改变 RAF-DB 分布。"""
+        if image_bgr is None or image_bgr.size == 0:
+            return image_bgr
+        gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
+        mean = float(gray.mean())
+        if 62.0 <= mean <= 188.0:
+            return image_bgr
+        lab = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2LAB)
+        l_ch, a_ch, b_ch = cv2.split(lab)
+        lab = cv2.merge([self._clahe.apply(l_ch), a_ch, b_ch])
+        return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+
+    def _pad7(self, vec: np.ndarray) -> np.ndarray:
+        out = np.zeros(7, dtype=np.float64)
+        flat = np.asarray(vec, dtype=np.float64).reshape(-1)
+        n = min(7, int(flat.size))
+        out[:n] = flat[:n]
+        return out
+
+    def _mbf_logits(self, aligned_bgr: np.ndarray) -> np.ndarray:
+        blob = self._fer_blob(aligned_bgr)
         self.net.setInput(blob, "data")
         try:
             out = self.net.forward("label")
         except cv2.error:
             out = self.net.forward()
-        vec = np.array(out).reshape(-1).astype(np.float64)
-        if vec.size > 7:
-            vec = vec[:7]
-        if vec.size < 7:
-            pad = np.zeros(7, dtype=np.float64)
-            pad[: vec.size] = vec
-            vec = pad
-        probs = _softmax(vec)
-        order = np.argsort(probs)[::-1]
+        return self._pad7(out)
+
+    def _mbf_tta_logits(self, aligned_bgr: np.ndarray) -> np.ndarray:
+        h, w = aligned_bgr.shape[:2]
+        views = [aligned_bgr, cv2.flip(aligned_bgr, 1)]
+        center = (w * 0.5, h * 0.5)
+        for ang in (-7.0, 7.0):
+            rot = cv2.getRotationMatrix2D(center, ang, 1.0)
+            views.append(
+                cv2.warpAffine(
+                    aligned_bgr,
+                    rot,
+                    (w, h),
+                    flags=cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_REPLICATE,
+                )
+            )
+        acc = np.zeros(7, dtype=np.float64)
+        for view in views:
+            acc += self._mbf_logits(view)
+        return acc / float(len(views))
+
+    def _hse_probs7(self, face_bgr: np.ndarray) -> Optional[np.ndarray]:
+        """AffectNet-8 先 softmax，再把蔑视拆进厌恶与平静。"""
+        if self.hse is None or face_bgr is None or face_bgr.size == 0:
+            return None
+        rgb = cv2.cvtColor(face_bgr, cv2.COLOR_BGR2RGB)
+        rgb = cv2.resize(rgb, (224, 224), interpolation=cv2.INTER_LINEAR)
+        x = rgb.astype(np.float32) / 255.0
+        x = (x - _HSE_MEAN) / _HSE_STD
+        x = np.transpose(x, (2, 0, 1))[None]
+        raw = self.hse.run(None, {self.hse_input: x})[0]
+        logits8 = np.asarray(raw, dtype=np.float64).reshape(-1)
+        if logits8.size < 8:
+            return None
+        p8 = _softmax(logits8)
+        vec7 = np.zeros(7, dtype=np.float64)
+        # 8: angry contempt disgust fear happy neutral sad surprise
+        # 7: angry disgust fear happy neutral sad surprise
+        vec7[0] = p8[0]
+        vec7[1] = p8[2] + 0.55 * p8[1]
+        vec7[2] = p8[3]
+        vec7[3] = p8[4]
+        vec7[4] = p8[5] + 0.45 * p8[1]
+        vec7[5] = p8[6]
+        vec7[6] = p8[7]
+        total = float(vec7.sum())
+        if total <= 0:
+            return None
+        return vec7 / total
+
+    def _hse_ensemble_probs(self, image_bgr: np.ndarray, face: dict) -> Optional[np.ndarray]:
+        if self.hse is None:
+            return None
+        acc = np.zeros(7, dtype=np.float64)
+        n = 0
+        for margin in (0.22, 0.34):
+            crop = self._auto_light(crop_face(image_bgr, face["box"], size=224, margin=margin))
+            for view in (crop, cv2.flip(crop, 1)):
+                p = self._hse_probs7(view)
+                if p is None:
+                    continue
+                acc += p
+                n += 1
+        if n == 0:
+            return None
+        return acc / float(n)
+
+    def _fuse_probs(self, p_mbf: np.ndarray, p_hse: np.ndarray) -> np.ndarray:
+        """两模型一致时加权平均；不一致时野外模型为主，避免 MobileFaceNet 过自信带偏摄像头。"""
+        i_m = int(np.argmax(p_mbf))
+        i_h = int(np.argmax(p_hse))
+        order_m = np.argsort(p_mbf)
+        order_h = np.argsort(p_hse)
+        margin_m = float(p_mbf[order_m[-1]] - p_mbf[order_m[-2]])
+        peak_m = float(p_mbf[i_m])
+        hse_top2 = (int(order_h[-1]), int(order_h[-2]))
+        if i_m == i_h:
+            w_mbf = 0.46 + 0.14 * float(np.clip(margin_m / 0.50, 0.0, 1.0))
+        elif i_m in hse_top2 and peak_m >= 0.85:
+            w_mbf = 0.55
+        elif peak_m >= 0.96 and margin_m >= 0.75:
+            w_mbf = 0.68
+        else:
+            w_mbf = 0.26
+        fused = w_mbf * p_mbf + (1.0 - w_mbf) * p_hse
+        fused = np.clip(fused, 1e-12, None)
+        return fused / fused.sum()
+
+    def _landmark_prior(self, landmarks5: np.ndarray) -> np.ndarray:
+        pts = np.asarray(landmarks5, dtype=np.float64).reshape(5, 2)
+        le, re, _nose, ml, mr = pts
+        iod = float(np.linalg.norm(re - le)) + 1e-6
+        mouth_w = float(np.linalg.norm(mr - ml)) / iod
+        eye_y = 0.5 * (le[1] + re[1])
+        mouth_y = 0.5 * (ml[1] + mr[1])
+        mouth_lift = (eye_y + 0.82 * iod - mouth_y) / iod
+        prior = np.zeros(7, dtype=np.float64)
+        if mouth_lift > 0.12 and mouth_w > 0.78:
+            prior[3] += 0.08
+        if mouth_lift < -0.08:
+            prior[5] += 0.07
+        if mouth_w > 1.22:
+            prior[6] += 0.07
+        return prior
+
+    def classify_face(self, image_bgr: np.ndarray, face: dict, precision: bool = False) -> dict:
+        if face.get("landmarks"):
+            aligned = align_face(image_bgr, np.array(face["landmarks"], dtype=np.float64))
+        else:
+            aligned = crop_face(image_bgr, face["box"])
+        if precision:
+            aligned = self._auto_light(aligned)
+            p_mbf = _softmax(self._mbf_tta_logits(aligned), temperature=1.55)
+            p = p_mbf
+            if self.hse is not None:
+                p_hse = self._hse_ensemble_probs(image_bgr, face)
+                if p_hse is not None:
+                    p = self._fuse_probs(p_mbf, p_hse)
+            if face.get("landmarks"):
+                order = np.argsort(p)
+                margin = float(p[order[-1]] - p[order[-2]])
+                if margin < 0.22:
+                    prior = self._landmark_prior(np.array(face["landmarks"], dtype=np.float64))
+                    p = np.clip(p + prior, 1e-12, None)
+                    p = p / p.sum()
+        else:
+            p = _softmax(self._mbf_logits(aligned))
+        scores = self._scores_from_vec(p)
+        emo = self._emotion_from_id(scores[0]["id"], scores)
+        if precision and len(scores) >= 2:
+            margin = float(scores[0]["prob"] - scores[1]["prob"])
+            if margin < 0.10:
+                emo["low_confidence"] = True
+        return emo
+
+    def _scores_from_vec(self, vec: np.ndarray) -> list[dict]:
+        order = np.argsort(vec)[::-1]
         scores = []
         for idx in order:
             eid = INDEX_TO_ID[int(idx)]
             meta = EMOTIONS[eid]
-            scores.append(
-                {
-                    "id": eid,
-                    "zh": meta["zh"],
-                    "name": meta["name"],
-                    "prob": float(probs[idx]),
-                }
-            )
-        top = scores[0]
-        return {
-            "id": top["id"],
-            "zh": top["zh"],
-            "name": top["name"],
-            "english": EMOTIONS[top["id"]]["english"],
-            "prob": top["prob"],
+            scores.append({"id": eid, "zh": meta["zh"], "name": meta["name"], "prob": float(vec[idx])})
+        return scores
+
+    def _emotion_from_id(self, eid: str, scores: list[dict], extra: Optional[dict] = None) -> dict:
+        meta = EMOTIONS[eid]
+        top = next((s for s in scores if s["id"] == eid), scores[0] if scores else None)
+        prob = float(top["prob"]) if top else 0.0
+        out = {
+            "id": eid,
+            "zh": meta["zh"],
+            "name": meta["name"],
+            "english": meta["english"],
+            "prob": prob,
             "scores": scores,
-            "low_confidence": top["prob"] < EMOTION_CONF_WARN,
-            "genre": EMOTIONS[top["id"]]["genre"],
-            "copy": EMOTIONS[top["id"]]["copy"],
-            "color": EMOTIONS[top["id"]]["color"],
+            "low_confidence": prob < EMOTION_CONF_WARN,
+            "genre": meta["genre"],
+            "copy": meta["copy"],
+            "color": meta["color"],
+        }
+        if extra:
+            out.update(extra)
+        return out
+
+    def _majority(self, classified: list[dict]) -> tuple[dict, dict, dict]:
+        counts: dict[str, int] = defaultdict(int)
+        areas: dict[str, float] = defaultdict(float)
+        probs: dict[str, float] = defaultdict(float)
+        acc = np.zeros(7, dtype=np.float64)
+        for item in classified:
+            emo = item["emotion"]
+            eid = emo["id"]
+            counts[eid] += 1
+            areas[eid] += float(item.get("area") or 0.0)
+            probs[eid] += float(emo.get("prob") or 0.0)
+            vec = np.zeros(7, dtype=np.float64)
+            for s in emo.get("scores") or []:
+                if s.get("id") in MODEL_LABELS:
+                    vec[MODEL_LABELS.index(s["id"])] = float(s.get("prob") or 0.0)
+            acc += vec
+        n = max(1, len(classified))
+        acc = acc / float(n)
+        winner = max(counts.keys(), key=lambda k: (counts[k], areas[k], probs[k]))
+        scores = self._scores_from_vec(acc)
+        maj = counts[winner]
+        mean_prob = probs[winner] / max(1, maj)
+        emotion = self._emotion_from_id(
+            winner,
+            scores,
+            extra={"prob": float(mean_prob), "low_confidence": mean_prob < EMOTION_CONF_WARN},
+        )
+        majority_faces = [f for f in classified if f["emotion"]["id"] == winner]
+        primary = max(majority_faces or classified, key=lambda f: float(f.get("area") or 0.0))
+        vote = {
+            "id": winner,
+            "zh": emotion["zh"],
+            "name": emotion["name"],
+            "total": len(classified),
+            "majority": maj,
+            "counts": {k: int(v) for k, v in counts.items()},
+        }
+        return emotion, vote, primary
+
+    def _public_face(self, item: dict, primary: bool) -> dict:
+        emo = item.get("emotion") or {}
+        return {
+            "box": [round(float(v), 1) for v in item["box"]],
+            "score": round(float(item.get("score") or 0.0), 3),
+            "area": round(float(item.get("area") or 0.0), 1),
+            "primary": bool(primary),
+            "emotion": {
+                "id": emo.get("id"),
+                "zh": emo.get("zh"),
+                "name": emo.get("name"),
+                "prob": round(float(emo.get("prob") or 0.0), 4),
+                "color": emo.get("color"),
+            },
         }
 
-    def predict_bgr(self, image_bgr: np.ndarray, want_crop: bool = True) -> dict:
+    def predict_bgr(self, image_bgr: np.ndarray, want_crop: bool = True, mode: str | None = None) -> dict:
         with self._lock:
-            return self._predict_bgr(image_bgr, want_crop=want_crop)
+            return self._predict_bgr(image_bgr, want_crop=want_crop, mode=mode)
 
-    def _predict_bgr(self, image_bgr: np.ndarray, want_crop: bool = True) -> dict:
+    def _predict_bgr(self, image_bgr: np.ndarray, want_crop: bool = True, mode: str | None = None) -> dict:
         t0 = time.perf_counter()
+        cfg = face_mode_cfg(mode)
         if image_bgr is None or image_bgr.size == 0:
-            return {"ok": False, "error": "图像为空", "code": "NO_IMAGE", "elapsed_ms": 0, "faces": []}
-        faces = self.detect_faces(image_bgr)
-        if not faces:
-            elapsed = (time.perf_counter() - t0) * 1000.0
             return {
                 "ok": False,
-                "error": "未检测到人脸。请正对镜头、保证光线充足，或换一张更清晰的正面照片。",
+                "error": "图像为空",
+                "code": "NO_IMAGE",
+                "elapsed_ms": 0,
+                "faces": [],
+                "vote": None,
+                "face_mode": cfg["id"],
+            }
+        faces = self.detect_faces(image_bgr, cfg["id"])
+        if not faces:
+            elapsed = (time.perf_counter() - t0) * 1000.0
+            hint = (
+                "未检测到清晰近景人脸。请正对镜头、光线均匀；若要检远景或多张脸，请切到「多人远场」。"
+                if cfg["id"] == "solo"
+                else "未检测到人脸。请正对镜头、保证光线充足，或换一张更清晰的正面照片。"
+            )
+            return {
+                "ok": False,
+                "error": hint,
                 "code": "NO_FACE",
                 "elapsed_ms": round(elapsed, 1),
                 "faces": [],
+                "vote": None,
+                "face_count": 0,
+                "face_mode": cfg["id"],
             }
-        primary = faces[0]
-        emotion = self.classify_face(image_bgr, primary)
+        classified = []
+        limit = int(cfg.get("face_max") or FACE_MAX)
+        precision = cfg["id"] == "solo"
+        for face in faces[:limit]:
+            chosen = face
+            refined = self._refine_face(image_bgr, face)
+            if precision:
+                if refined is not face:
+                    chosen = refined
+                emo = self.classify_face(image_bgr, chosen, precision=True)
+            else:
+                emo = self.classify_face(image_bgr, face, precision=False)
+                if refined is not face:
+                    emo_ref = self.classify_face(image_bgr, refined, precision=False)
+                    if float(emo_ref.get("prob") or 0) > float(emo.get("prob") or 0):
+                        emo = emo_ref
+                        chosen = refined
+            classified.append({**chosen, "emotion": emo})
+        if cfg.get("majority") and len(classified) > 1:
+            emotion, vote, primary = self._majority(classified)
+        else:
+            primary = max(classified, key=lambda f: (float(f.get("area") or 0.0), float(f.get("score") or 0.0)))
+            emotion = dict(primary["emotion"])
+            vote = {
+                "id": emotion["id"],
+                "zh": emotion["zh"],
+                "name": emotion["name"],
+                "total": len(classified),
+                "majority": 1,
+                "counts": {emotion["id"]: 1},
+                "mode": cfg["id"],
+            }
+        vote["mode"] = cfg["id"]
         elapsed = (time.perf_counter() - t0) * 1000.0
         h, w = image_bgr.shape[:2]
         crop = encode_face_crop(image_bgr, primary["box"]) if want_crop else ""
-        boxes = [
-            {
-                "box": [round(v, 1) for v in face["box"]],
-                "score": round(float(face["score"]), 3),
-                "primary": i == 0,
-            }
-            for i, face in enumerate(faces[:4])
-        ]
+        boxes = [self._public_face(item, item is primary) for item in classified]
         return {
             "ok": True,
             "emotion": emotion,
+            "vote": vote,
             "face": {
                 "box": [round(v, 1) for v in primary["box"]],
-                "score": round(primary["score"], 3),
+                "score": round(float(primary["score"]), 3),
                 "image_size": [int(w), int(h)],
                 "crop": crop,
             },
             "faces": boxes,
-            "face_count": len(faces),
+            "face_count": len(classified),
+            "face_mode": cfg["id"],
             "elapsed_ms": round(elapsed, 1),
         }
 
-    def predict_bytes(self, data: bytes, want_crop: bool = True) -> dict:
+    def predict_bytes(self, data: bytes, want_crop: bool = True, mode: str | None = None) -> dict:
         img = decode_image(data)
         if img is None:
             return {"ok": False, "error": "无法解析图像，请使用 JPG / PNG / WEBP", "code": "BAD_IMAGE"}
-        return self.predict_bgr(img, want_crop=want_crop)
+        return self.predict_bgr(img, want_crop=want_crop, mode=mode)
 
-    def predict_many_bytes(self, frames: list[bytes]) -> dict:
-        """多帧概率平均，提升摄像头实时识别稳定性。"""
+    def predict_many_bytes(self, frames: list[bytes], mode: str | None = None) -> dict:
+        """多帧里选最稳的一帧。单人精检看置信度，多人远场看脸数。"""
         t0 = time.perf_counter()
-        acc = None
-        last_ok = None
+        cfg = face_mode_cfg(mode)
+        oks = []
         last_fail = None
-        used = 0
         for data in frames:
             img = decode_image(data)
             if img is None:
                 continue
-            one = self.predict_bgr(img)
+            one = self.predict_bgr(img, mode=cfg["id"])
             if not one.get("ok"):
                 last_fail = one
                 continue
-            last_ok = one
-            vec = np.zeros(7, dtype=np.float64)
-            for item in one["emotion"]["scores"]:
-                idx = MODEL_LABELS.index(item["id"])
-                vec[idx] = item["prob"]
-            acc = vec if acc is None else acc + vec
-            used += 1
-        if acc is None or last_ok is None:
+            oks.append(one)
+        if not oks:
             fail = last_fail or {"ok": False, "error": "未检测到人脸", "code": "NO_FACE"}
             fail["elapsed_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
+            fail["face_mode"] = cfg["id"]
             return fail
-        acc = acc / float(used)
-        order = np.argsort(acc)[::-1]
-        scores = []
-        for idx in order:
-            eid = INDEX_TO_ID[int(idx)]
-            meta = EMOTIONS[eid]
-            scores.append({"id": eid, "zh": meta["zh"], "name": meta["name"], "prob": float(acc[idx])})
-        top = scores[0]
-        last_ok["emotion"].update(
-            {
-                "id": top["id"],
-                "zh": top["zh"],
-                "name": top["name"],
-                "english": EMOTIONS[top["id"]]["english"],
-                "prob": top["prob"],
-                "scores": scores,
-                "low_confidence": top["prob"] < EMOTION_CONF_WARN,
-                "genre": EMOTIONS[top["id"]]["genre"],
-                "copy": EMOTIONS[top["id"]]["copy"],
-                "color": EMOTIONS[top["id"]]["color"],
-            }
-        )
-        last_ok["frames_used"] = used
-        last_ok["elapsed_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
-        return last_ok
+        if cfg.get("majority"):
+            best = max(
+                oks,
+                key=lambda r: (
+                    int((r.get("vote") or {}).get("total") or r.get("face_count") or 0),
+                    float((r.get("emotion") or {}).get("prob") or 0.0),
+                ),
+            )
+        elif len(oks) > 1:
+            acc = np.zeros(7, dtype=np.float64)
+            for row in oks:
+                for item in (row.get("emotion") or {}).get("scores") or []:
+                    eid = item.get("id")
+                    if eid in MODEL_LABELS:
+                        acc[MODEL_LABELS.index(eid)] += float(item.get("prob") or 0.0)
+            acc = acc / float(len(oks))
+            eid = MODEL_LABELS[int(np.argmax(acc))]
+            scores = self._scores_from_vec(acc)
+            matched = [row for row in oks if (row.get("emotion") or {}).get("id") == eid] or oks
+            best = dict(
+                max(
+                    matched,
+                    key=lambda r: (
+                        float((r.get("emotion") or {}).get("prob") or 0.0),
+                        float((r.get("face") or {}).get("score") or 0.0),
+                    ),
+                )
+            )
+            best["emotion"] = self._emotion_from_id(eid, scores)
+            if best.get("vote"):
+                best["vote"] = dict(best["vote"])
+                best["vote"]["id"] = eid
+                best["vote"]["zh"] = best["emotion"]["zh"]
+                best["vote"]["name"] = best["emotion"]["name"]
+                best["vote"]["counts"] = {eid: 1}
+        else:
+            best = max(
+                oks,
+                key=lambda r: (
+                    float((r.get("emotion") or {}).get("prob") or 0.0),
+                    float((r.get("face") or {}).get("score") or 0.0),
+                ),
+            )
+        best["frames_used"] = len(oks)
+        best["elapsed_ms"] = round((time.perf_counter() - t0) * 1000.0, 1)
+        best["face_mode"] = cfg["id"]
+        return best
 
 
 _recognizer: Optional[EmotionRecognizer] = None

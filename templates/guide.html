@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="night">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>当AI遇见旋律：算法、理论与使用说明</title>
+  <meta name="description" content="心弦的使用方法、人脸情绪识别、旋律曲调分析，以及多种可选推荐策略的理论说明。" />
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}?v=50" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v=50" />
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}?v=50" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=50" />
+</head>
+<body class="guide-page">
+  <div class="grain" aria-hidden="true"></div>
+  <header class="top">
+    <a class="brand" href="/" aria-label="心弦首页">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="30" height="30" fill="none">
+          <rect x="2.2" y="2.2" width="43.6" height="43.6" rx="11.5" stroke="currentColor" stroke-width="1.35" opacity=".5"/>
+          <path d="M15.2 13.2c-1.3 7.6-1.2 15.2 3 20.4 2.1 2.6 6.3 3.8 8.6 1.7 4.3-3.9 5.5-12.1 4.5-22.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          <path d="M16.4 16.2h15.2" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
+          <path d="M19.2 16.7v16.2M24 16.7v18.2M28.8 16.7v16.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+          <ellipse cx="24" cy="25.2" rx="3.7" ry="4.4" stroke="currentColor" stroke-width="1.2"/>
+          <circle cx="24" cy="25.2" r="1.05" fill="currentColor"/>
+        </svg>
+      </span>
+      <span class="brand-text"><strong>心弦</strong><em>说明</em></span>
+    </a>
+    <p class="tagline">算法 · 理论 · 使用，都写在这一页</p>
+    <nav class="top-actions guide-nav">
+      <a class="ghost mini" href="#use">使用</a>
+      <a class="ghost mini" href="#face">人脸</a>
+      <a class="ghost mini" href="#music">曲调</a>
+      <a class="ghost mini" href="#recommend">推荐</a>
+      <a class="ghost mini" href="#library">曲库</a>
+      <a class="ghost mini" href="#setup">换电脑</a>
+      <a class="primary mini" href="/">回到识曲</a>
+    </nav>
+  </header>
+
+  <article class="guide-shell">
+    <section class="panel guide-hero" id="top">
+      <p class="algo-kicker">心弦 EmoTune · 独立说明页</p>
+      <h1>把表情换成歌之前，先把方法讲清楚</h1>
+      <p>主页只做识别和播放。算法是怎么做的、为什么这样推荐、界面怎么用，都在这一页。三套核心方法都在本机跑：人脸不上传，曲调不靠云端，推荐方式可以自己选。</p>
+    </section>
+
+    <nav class="panel guide-toc" aria-label="本页目录">
+      <a href="#use">使用说明</a>
+      <a href="#face">人脸情绪算法</a>
+      <a href="#music">旋律曲调算法</a>
+      <a href="#recommend">推荐策略与理论</a>
+      <a href="#library">曲库与接口</a>
+    </nav>
+
+    <section class="panel" id="use">
+      <div class="panel-head">
+        <h2>使用说明</h2>
+        <p class="meta">主页操作一遍就会</p>
+      </div>
+      <ol class="guide-steps">
+        <li>用 Chrome 或 Edge 打开 <code>http://127.0.0.1:5000</code>（本机占用时用启动时提示的端口）。摄像头必须走本机地址。</li>
+        <li>四种输入都可做人脸情绪检测：<strong>摄像头</strong>（可切换设备）、<strong>照片</strong>、<strong>本地视频</strong>、<strong>屏幕分享</strong>。视频和屏幕只截当前帧，不把整段文件上传。</li>
+        <li>检测方式默认为「单人精检」：只取近景里最大最稳的一张脸，阈值更高，适合自拍和对镜。课堂合影或远镜头再切「多人远场」。</li>
+        <li>点「开启摄像头」，把面部落在椭圆里。可用下拉框切换多个摄像头。画面会框出人脸并标出情绪。</li>
+        <li>打开「实时捕捉」可持续识别并按当前推荐方式连播。惊讶、恐惧、愤怒、厌恶很难一直摆着：认到后会锁歌单，脸松开也不会立刻换歌。</li>
+        <li>点「识别此刻」会截取当前画面识别并播放，同时关掉实时捕捉。</li>
+        <li>也可切到「照片」，拖入 JPG / PNG / WEBP，或点选已命名的示例表情；「视频」选本地 MP4 / WEBM；「屏幕」分享窗口或整屏。</li>
+        <li>点「弹出人脸窗」可把人脸画面放到独立窗口，方便放到第二块屏幕。弹窗独占摄像头，也可切换设备和检测方式。</li>
+        <li>「多人远场」下多人同时入镜时，每张脸各自识别；歌曲按<strong>人数最多</strong>的情绪执行，票数相同再比面积和置信度。</li>
+        <li>歌曲区上方可选推荐方式：同频、修复、先同频再修复、对比、回暖、降唤醒、升效价、强化、平衡。换方式会立刻重排歌单。</li>
+        <li>顶部可开关：在线曲库、语音提示、歌词、封面、波形。在线长时间播不了会提示并自动切本地。</li>
+        <li>情绪足迹全部保存。点选可回放当时的歌，回放不计入新的已播。相同情绪再次识别会尽量换没听过的歌。</li>
+      </ol>
+    </section>
+
+    <section class="panel" id="face">
+      <div class="panel-head">
+        <h2>人脸情绪识别</h2>
+        <p class="meta">YuNet + MobileFaceNet FER × HSEmotion</p>
+      </div>
+      <p class="algo-classic">经典：Ekman 七类基本情绪（1992）；OpenCV Zoo 人脸表情识别；公开评测 RAF-DB <strong>88.27%</strong>；HSEmotion EfficientNet-B0（AffectNet 野外）</p>
+      <ol>
+        <li>两种可切换模式。默认<strong>单人精检</strong>：检测阈值更高，只保留最大最稳的一张近景脸，不做远景放大和 Haar 补检。检出后在脸附近再检一次，把五点对齐到 112×112。</li>
+        <li>单人精检分类走高精度路径：MobileFaceNet FER 做原图、水平翻转和 ±7° 微转的 TTA；再跑 HSEmotion EfficientNet-B0（AffectNet 野外人脸，多尺度裁剪 + 翻转）。两模型判断一致时加权平均；不一致时更信野外模型，避免实验室模型在摄像头上过自信。多帧截图按七类概率平均，不取单帧最高分。</li>
+        <li><strong>多人远场</strong>：YuNet 在较高分辨率上检出画面里的每一张脸，包括远景小脸（输入约 1280，阈值放宽后再用高阈值对齐近景）。找不到脸时会放大再检，再不行走 Haar。</li>
+        <li>每张脸输出七类概率：喜、怒、哀、惧、惊、厌、中性。单人精检按主脸情绪推荐。多人远场按人数最多的情绪执行；并列时取面积更大、再取平均置信度更高的一类。</li>
+      </ol>
+      <p class="algo-note">模型是本机 ONNX，图像不上传。可弹出独立人脸窗查看人脸框和标签。单人精检通常一两百毫秒，摄像头截图用更高 JPEG 质量以保住眉眼细节。</p>
+    </section>
+
+    <section class="panel" id="music">
+      <div class="panel-head">
+        <h2>歌曲旋律曲调情绪</h2>
+        <p class="meta">Thayer 二维模型 + Krumhansl–Kessler 调式</p>
+      </div>
+      <p class="algo-classic">经典：Thayer 1989 效价-唤醒 · Krumhansl–Kessler 1982 大小调剖面 · Juslin 2001 声学线索</p>
+      <ol>
+        <li>能量包络自相关网格搜索速度（54–176 BPM）。</li>
+        <li>12 音级直方图与 Krumhansl–Kessler 大小调剖面求相关，判断大调 / 小调。</li>
+        <li>调式决定效价 valence，速度与能量决定唤醒 arousal，再投到七类情绪。</li>
+      </ol>
+      <p class="algo-note">能解码的波形直接抽特征；人声 AAC 试听在未装解码器时，用同一规则分析该情绪的典型旋律骨架，并与 Juslin 对照表印证。全程本机 numpy / scipy。</p>
+    </section>
+
+    <section class="panel" id="recommend">
+      <div class="panel-head">
+        <h2>推荐策略与理论</h2>
+        <p class="meta">主页可选，默认同频</p>
+      </div>
+      <p>推荐在「未播优先、已播回绕」的分档之上，再按你选的方式决定<strong>听哪一类情绪的歌、按什么顺序听</strong>。档内仍用人脸或目标向量与曲调向量做余弦相似度（基于内容的推荐，Pazzani / Billsus）。</p>
+      <div class="guide-strats">
+        {% for s in strategies %}
+        <article class="algo-card" id="strat-{{ s.id }}">
+          <p class="algo-kicker">{{ loop.index }} · {{ s.zh }}</p>
+          <h3>{{ s.name }}</h3>
+          <p class="algo-classic">经典：{{ s.classic }}</p>
+          <p>{{ s.theory }}</p>
+          <p><strong>怎么执行：</strong>{{ s.how }}</p>
+          <p><strong>什么时候选：</strong>{{ s.when }}</p>
+          <p class="algo-note">规则：{{ s.rule }}</p>
+        </article>
+        {% endfor %}
+      </div>
+      <h3 class="guide-sub">对照简表</h3>
+      <div class="guide-table-wrap">
+        <table class="guide-table">
+          <thead>
+            <tr>
+              <th>当前表情</th>
+              <th>同频</th>
+              <th>修复</th>
+              <th>先同频再修复</th>
+              <th>对比</th>
+              <th>回暖</th>
+              <th>降唤醒</th>
+              <th>升效价</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>喜</td><td>喜</td><td>喜</td><td>喜</td><td>哀</td><td>喜</td><td>平静</td><td>喜</td></tr>
+            <tr><td>怒</td><td>怒</td><td>平静</td><td>怒 → 平静 → 喜</td><td>喜</td><td>怒 → 惊 → 喜</td><td>哀</td><td>惊</td></tr>
+            <tr><td>哀</td><td>哀</td><td>喜</td><td>哀 → 平静 → 喜</td><td>喜</td><td>哀 → 平静 → 喜</td><td>哀</td><td>喜</td></tr>
+            <tr><td>惧</td><td>惧</td><td>平静</td><td>惧 → 平静 → 喜</td><td>喜</td><td>惧 → 惊 → 喜</td><td>哀</td><td>惊</td></tr>
+            <tr><td>惊</td><td>惊</td><td>喜</td><td>惊 → 喜</td><td>哀</td><td>惊 → 喜</td><td>平静</td><td>喜</td></tr>
+            <tr><td>厌</td><td>厌</td><td>喜</td><td>厌 → 平静 → 喜</td><td>喜</td><td>厌 → 平静 → 喜</td><td>哀</td><td>喜</td></tr>
+            <tr><td>平静</td><td>平静</td><td>喜</td><td>平静 → 喜</td><td>惊</td><td>平静 → 喜</td><td>平静</td><td>喜</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="algo-note">强化：仍用当前类，把更典型的歌排前面。平衡：一半同频、一半修复，交错播放。</p>
+    </section>
+
+    <section class="panel" id="library">
+      <div class="panel-head">
+        <h2>曲库与在线接口</h2>
+        <p class="meta">人声试听，不是纯音乐</p>
+      </div>
+      <ul>
+        <li>本地曲库按七类情绪分好，每类 40 首华语校园热歌（少量英文），共 280 首 30 秒人声试听。缺文件时按规则生成旋律兜底，断网也能连播。</li>
+        <li>默认走在线接口，并行检索苹果音乐、网易云、咪咕、酷狗、QQ 音乐、酷我；可手动关掉「在线曲库」。在线长时间播不了会提示并切回本地。</li>
+        <li>在线试听经本机 <code>/api/stream</code> 同源代理，播放器才能画实时波形和频率。</li>
+        <li>歌词按曲目准备 0–30 秒逐行文本，随进度显示，可关。</li>
+      </ul>
+    </section>
+
+    <section class="panel" id="setup">
+      <div class="panel-head">
+        <h2>换电脑部署</h2>
+        <p class="meta">完整步骤见仓库里的 SETUP.md</p>
+      </div>
+      <ol>
+        <li>新电脑安装 Python 3.10 或 3.11，以及 Chrome / Edge。</li>
+        <li>克隆仓库并回到本快照：<code>git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git</code> 后执行 <code>git checkout snapshot-20261028-0951</code>。</li>
+        <li>在项目目录执行 <code>python -m pip install -r requirements.txt</code>，再 <code>python app.py</code> 或双击 <code>run.bat</code>。</li>
+        <li>浏览器打开 <code>http://127.0.0.1:5000</code>。摄像头必须用 127.0.0.1 或 localhost。端口被占用时：<code>set EMOTUNE_PORT=18765</code> 再启动。</li>
+        <li>若要带走旧足迹，把原来电脑的 <code>data/history.json</code>、<code>data/prefs.json</code>、<code>static/history/</code> 一并拷过来。这三处不进 GitHub。</li>
+        <li>核对：<code>python tests/selfcheck.py</code>。详细说明见项目根目录 <code>SETUP.md</code> 与 <code>VERSION.md</code>。</li>
+      </ol>
+    </section>
+
+    <p class="guide-foot">参考文献（经典来源，供对照，不是本页要背的作业）：Ekman 1992；Altshuler 1948；Gaston 1968；Bower 1981；Zillmann 1988；Saarikallio &amp; Erkkilä 2007；Thayer 1989；Russell 1980；Hevner 1936；Krumhansl &amp; Kessler 1982；Juslin 2001；Pazzani &amp; Billsus 2007。</p>
+  </article>
+
+  <script>
+    (function () {
+      const theme = localStorage.getItem("emotune-theme") || "night";
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
+</body>
+</html>

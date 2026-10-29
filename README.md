@@ -2,7 +2,7 @@
 
 品牌 **心弦 EmoTune**。
 
-> **当前快照（今天讲座版本）** 2026-10-28 12:52 · 标签 `snapshot-20261028-1252` · 仓库 [emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）  
+> **当前快照** 【20261028日  小学40分钟  10月28日下午15:25-16:05】 · 标签 `snapshot-20261028-1525` · 仓库 [emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）  
 > 换电脑：conda 新建空环境 `emotune` + **Python 3.12** + **CPU 版 onnxruntime** + 足迹打包，见 [SETUP.md](SETUP.md)。固定版本与如何继续开发见 [VERSION.md](VERSION.md)。  
 > 静态介绍页：https://emomusic-grok-20261028-1252.surge.sh
 
@@ -77,7 +77,7 @@ python app.py
 
 摄像头必须用 `http://127.0.0.1:5000`（或 localhost / HTTPS）打开。请用 Chrome 或 Edge。
 
-换一台电脑：按 [SETUP.md](SETUP.md) 克隆并检出 `snapshot-20261028-1252`，再用 conda 新建空环境 `emotune`（Python 3.12，CPU 版 onnxruntime）。示例表情和本地曲库在项目里。情绪足迹不进 GitHub：旧电脑 `tools\pack-local-data.bat`，新电脑 `tools\unpack-local-data.bat`。
+换一台电脑：按 [SETUP.md](SETUP.md) 克隆并检出 `snapshot-20261028-1525`（20261028 小学40分钟 15:25-16:05），再用 conda 新建空环境 `emotune`（Python 3.12，CPU 版 onnxruntime）。示例表情和本地曲库在项目里。情绪足迹不进 GitHub：旧电脑 `tools\pack-local-data.bat`，新电脑 `tools\unpack-local-data.bat`。
 
 ## 使用
 

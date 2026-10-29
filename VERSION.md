@@ -6,7 +6,88 @@
 
 ---
 
-## 当前快照 2026-10-28 12:52 · 讲座版本
+## 当前快照 2026-10-28 15:25 · 小学 40 分钟成功场
+
+**【20261028日  小学40分钟  10月28日下午15:25-16:05】**
+
+这场小学 40 分钟讲座比较成功。本标签把当时实际使用的软件系统固定下来，方便以后直接恢复、继续开发。功能与 `snapshot-20261028-1252` 相同，这一版专门标记这场课。
+
+| 项 | 内容 |
+| --- | --- |
+| 快照时间 | **2026-10-28 15:25–16:05**（小学 40 分钟） |
+| 用途 | **20261028日 小学40分钟 10月28日下午15:25-16:05** |
+| 仓库 | [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开） |
+| Git 标签 | `snapshot-20261028-1525` |
+| 发布名 | 心弦 EmoTune 20261028 小学40分钟 15:25-16:05 |
+| 分支 | `main` |
+| 说明页 | https://emomusic-grok-20261028-1252.surge.sh （软件相同） |
+| Python | **3.12**（conda 新建空环境 `emotune`，已验证 3.12.16） |
+| 推理 | **CPU 版** pip 包 `onnxruntime` |
+| 网页标题 | 当AI遇见旋律：从表情感知到智能音乐推荐 |
+
+本仓库 `main` 指向这一版。克隆后默认已在该版本；用标签 `snapshot-20261028-1525` 可以随时精确回到这场小学课用的系统。
+
+上一版 `snapshot-20261028-1252`（讲座准备）、`snapshot-20261028-1105`、`snapshot-20261028-1043`、`snapshot-20261028-0951` 与 `snapshot-20261027-2210`（224 首）仍然保留，**不会被本标签覆盖**。
+
+### 这一版相对上一版做了什么
+
+- 把 **2026-10-28 下午 15:25–16:05 小学 40 分钟成功讲座** 打成独立可恢复版本
+- 软件与 12:52 讲座准备版相同：conda `emotune` + Python 3.12 + CPU onnxruntime + 280 首 + 足迹打包
+- 现场已跑通：本机 http://127.0.0.1:5000
+
+### 快速恢复这一版（继续开发请从这里开分支）
+
+```bat
+git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
+cd emoMusic-grok-20261027-2210
+git checkout snapshot-20261028-1525
+conda create -n emotune python=3.12 pip -y
+conda activate emotune
+python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+python tools\verify_cpu.py
+python app.py
+```
+
+也可双击 `tools\setup-conda.bat`，再双击 `run.bat`。浏览器打开 [http://127.0.0.1:5000](http://127.0.0.1:5000)。
+
+本机已有目录：
+
+```bat
+cd /d E:\F_当AI遇见旋律\Grok20261023_当AI遇见旋律\emoMusic
+git fetch --tags
+git checkout snapshot-20261028-1525
+conda activate emotune
+python app.py
+```
+
+### 从这一版继续开发
+
+```bat
+git fetch --tags
+git checkout snapshot-20261028-1525
+git checkout -b dev/continue snapshot-20261028-1525
+conda activate emotune
+```
+
+随时回到这场小学课用的系统：
+
+```bat
+git fetch --tags
+git switch --detach snapshot-20261028-1525
+conda activate emotune
+```
+
+对比当前代码和本快照：
+
+```bat
+git diff snapshot-20261028-1525
+```
+
+不要把 `data/history.json`、`static/history/`、`data/emotune-local-data.zip` 加进 Git。逐步部署见 [SETUP.md](SETUP.md)。
+
+---
+
+## 上一版快照 2026-10-28 12:52 · 讲座准备版
 
 | 项 | 内容 |
 | --- | --- |
@@ -15,13 +96,13 @@
 | 仓库 | [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开） |
 | Git 标签 | `snapshot-20261028-1252` |
 | 发布名 | 心弦 EmoTune 讲座快照 2026-10-28 12:52 |
-| 分支 | `main` |
+| 分支 | 当时的 `main` |
 | Surge 介绍页 | https://emomusic-grok-20261028-1252.surge.sh |
 | Python | **3.12**（conda 新建空环境 `emotune`，已验证 3.12.16） |
 | 推理 | **CPU 版** pip 包 `onnxruntime`（不要 GPU / 不要 conda-forge CUDA） |
 | 网页标题 | 当AI遇见旋律：从表情感知到智能音乐推荐 |
 
-本仓库 `main` 指向这一版。克隆后默认已在该版本；用标签可以随时精确回到讲座此刻。
+`snapshot-20261028-1252` 是讲座准备版。该标签本身不移动。小学 40 分钟成功场见 `snapshot-20261028-1525`。
 
 上一版 `snapshot-20261028-1105`、`snapshot-20261028-1043`、`snapshot-20261028-0951` 与更早的 `snapshot-20261027-2210`（224 首）仍然保留，**不会被本标签覆盖**。
 

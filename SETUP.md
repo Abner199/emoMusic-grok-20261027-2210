@@ -2,8 +2,8 @@
 
 品牌 **心弦 EmoTune**。本页写给要把**讲座这一版原样**装到另一台 Windows 电脑、并从零跑起来的人，**包含情绪足迹怎么带走**。固定版本、标签和如何回到某一版，见 [VERSION.md](VERSION.md)。
 
-**当前快照（今天讲座版本）：2026-10-28 12:52**  
-标签 `snapshot-20261028-1252` · 仓库 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）
+**当前快照：【20261028日  小学40分钟  10月28日下午15:25-16:05】**  
+标签 `snapshot-20261028-1525` · 仓库 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）
 
 静态介绍页（不能跑摄像头）：https://emomusic-grok-20261028-1252.surge.sh
 
@@ -18,7 +18,7 @@
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
-git checkout snapshot-20261028-1252
+git checkout snapshot-20261028-1525
 ```
 
 双击 `tools\setup-conda.bat`，等它打印 `PASS onnxruntime CPU`。再双击 `run.bat`。
@@ -108,7 +108,7 @@ conda tos accept
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
-git checkout snapshot-20261028-1252
+git checkout snapshot-20261028-1525
 ```
 
 `main` 一般已指向同一提交；用标签可以精确钉在讲座这一版，以后 `main` 再往前走也不怕。
@@ -145,7 +145,7 @@ OpenCV 读 ONNX 已按内存加载，中文路径可用。
 ### 方式 C：Git 克隆 + 单独恢复足迹（代码用仓库、历史用打包）
 
 1. 在**旧电脑**项目根目录打包足迹（见第 8 节）。
-2. 在**新电脑**按方式 A 克隆并检出 `snapshot-20261028-1252`。
+2. 在**新电脑**按方式 A 克隆并检出 `snapshot-20261028-1525`。
 3. 按第 4、5 节建好 conda 环境。
 4. 把 `emotune-local-data.zip` 拷到新项目的 `data\` 下，运行解包脚本。
 5. 再启动 Flask，打开页面点「历史」。
@@ -447,7 +447,7 @@ python tools\pack_local_data.py --unpack data\emotune-local-data.zip
 
 ```bat
 git fetch --tags
-git checkout snapshot-20261028-1252
+git checkout snapshot-20261028-1525
 conda activate emotune
 python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 python tools\verify_cpu.py
@@ -455,6 +455,12 @@ python app.py
 ```
 
 若新电脑还没有环境：先 `tools\setup-conda.bat`。
+
+回到 2026-10-28 12:52 讲座准备版：
+
+```bat
+git checkout snapshot-20261028-1252
+```
 
 回到 2026-10-28 11:05（conda 3.12 文档版，CPU 包尚未打进该标签）：
 
@@ -480,19 +486,19 @@ git checkout snapshot-20261028-0951
 git checkout snapshot-20261027-2210
 ```
 
-旧标签也可以在现在的 `emotune`（3.12）里运行；请仍用 conda，不要退回系统 Python。讲座请用 `snapshot-20261028-1252`。
+旧标签也可以在现在的 `emotune`（3.12）里运行；请仍用 conda，不要退回系统 Python。这场小学课请用 `snapshot-20261028-1525`。
 
 在本快照上继续改代码（不要直接改标签指向的提交）：
 
 ```bat
-git checkout -b dev/continue snapshot-20261028-1252
+git checkout -b dev/continue snapshot-20261028-1525
 conda activate emotune
 ```
 
 对比当前与本快照：
 
 ```bat
-git diff snapshot-20261028-1252
+git diff snapshot-20261028-1525
 ```
 
 更完整的标签说明见 [VERSION.md](VERSION.md)。

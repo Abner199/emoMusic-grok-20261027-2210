@@ -42,10 +42,10 @@ EMOTIONS = {
         "hint": "嘴角上扬，眼周出现笑纹，面颊抬起",
         "genre": "阳光蹦跳 · 开口就笑",
         "copy": "喜就是亮的：热爱105°C的你、小苹果、暖暖、告白气球，一开口就往上扬。",
-        "color": "#F0C14B",
-        "color2": "#FF8A3D",
-        "bg": "#2A1F0A",
-        "search": ["热爱105度的你 阿肆", "被风吹过的夏天 金莎", "夏日之风 温岚", "Good Time Owl City"],
+        "color": "#FFD400",
+        "color2": "#FF9F1A",
+        "bg": "#2A2200",
+        "search": ["小苹果 筷子兄弟", "热爱105度的你 阿肆", "告白气球 周杰伦", "粉色海洋 周杰伦"],
     },
     "angry": {
         "id": "angry",
@@ -55,10 +55,10 @@ EMOTIONS = {
         "hint": "眉头紧锁下压，目光锐利，唇线绷紧",
         "genre": "攻击性摇滚 · 宣泄",
         "copy": "怒是冲的：双截棍、死了都要爱、我管你、霍元甲，用来砸开，不是用来励志。",
-        "color": "#E23D3D",
-        "color2": "#8B1E1E",
+        "color": "#E02020",
+        "color2": "#9B1212",
         "bg": "#2A0C0C",
-        "search": ["双截棍 周杰伦", "杀破狼 JS", "悟空 戴荃", "One Step Closer LINKIN PARK"],
+        "search": ["双截棍 周杰伦", "摩天动物园 邓紫棋", "新世界 华晨宇", "霍元甲 周杰伦"],
     },
     "sad": {
         "id": "sad",
@@ -68,10 +68,10 @@ EMOTIONS = {
         "hint": "眉头内侧上提，嘴角下垂，目光湿润",
         "genre": "哭腔情歌",
         "copy": "哀是沉的：后来、说散就散、我怀念的、十年，KTV 一放就鼻酸。",
-        "color": "#5B8CFF",
-        "color2": "#7EC8E3",
-        "bg": "#0C1628",
-        "search": ["后来 刘若英", "红豆 王菲", "刻在我心底的名字 卢广仲", "Hello Adele"],
+        "color": "#4E7390",
+        "color2": "#7A9BB0",
+        "bg": "#0E1820",
+        "search": ["后来 刘若英", "可惜没如果 林俊杰", "说了再见 周杰伦", "十年 陈奕迅"],
     },
     "fear": {
         "id": "fear",
@@ -81,10 +81,10 @@ EMOTIONS = {
         "hint": "眉毛上扬并向中间聚拢，上眼睑抬起，嘴唇横向拉开",
         "genre": "暗夜惊悚流行",
         "copy": "惧是发凉的：夜曲、发如雪、四面楚歌、来自天堂的魔鬼，专门走暗的。",
-        "color": "#8B6CCF",
-        "color2": "#3D2A66",
-        "bg": "#160E24",
-        "search": ["夜曲 周杰伦", "杀手 林俊杰", "夜半歌声 张国荣", "Haunted Evanescence"],
+        "color": "#6B2D91",
+        "color2": "#3D1860",
+        "bg": "#160A20",
+        "search": ["夜曲 周杰伦", "黑武士 林俊杰", "来自天堂的魔鬼 邓紫棋", "断了的弦 周杰伦"],
     },
     "surprise": {
         "id": "surprise",
@@ -94,10 +94,10 @@ EMOTIONS = {
         "hint": "眉毛高高扬起，眼睛睁圆，下颌松开",
         "genre": "突然爆开 · 哇",
         "copy": "惊是跳的：本草纲目、园游会、舞娘、野狼disco，和甜甜的喜不是一路。",
-        "color": "#FF6B9D",
-        "color2": "#FFC857",
-        "bg": "#2A1220",
-        "search": ["本草纲目 周杰伦", "火力全开 王力宏", "马德里不思议 蔡依林", "Dynamite BTS"],
+        "color": "#FF7A18",
+        "color2": "#FFC44D",
+        "bg": "#2A1406",
+        "search": ["野狼disco 宝石Gem", "本草纲目 周杰伦", "达拉崩吧 周深", "公主病 周杰伦"],
     },
     "disgust": {
         "id": "disgust",
@@ -107,10 +107,10 @@ EMOTIONS = {
         "hint": "鼻梁皱起，上唇抬起，眼睛微眯",
         "genre": "嫌弃 · 自嘲 · 刺耳",
         "copy": "厌是皱的：丑八怪、算什么男人、Play我呸、不将就，故意往刺和嫌弃上走。",
-        "color": "#3D8B6E",
-        "color2": "#C4B45A",
-        "bg": "#0E1F18",
-        "search": ["丑八怪 薛之谦", "动物世界 薛之谦", "K歌之王 陈奕迅", "Sk8er Boi Avril Lavigne"],
+        "color": "#6F7D32",
+        "color2": "#A3A04A",
+        "bg": "#16180A",
+        "search": ["丑八怪 薛之谦", "差不多姑娘 邓紫棋", "我不配 周杰伦", "一丝不挂 陈奕迅"],
     },
     "neutral": {
         "id": "neutral",
@@ -120,10 +120,10 @@ EMOTIONS = {
         "hint": "五官放松，嘴唇自然闭合，目光稳定",
         "genre": "平走日常",
         "copy": "中性是稳的：成都、遇见、同桌的你、东风破，不哭不闹也不嗨。",
-        "color": "#8B9BB4",
-        "color2": "#D5C4A1",
-        "bg": "#14161C",
-        "search": ["成都 赵雷", "年少有为 李荣浩", "蒲公英的约定 周杰伦", "斑马斑马 宋冬野"],
+        "color": "#4EC6F5",
+        "color2": "#1F8FC4",
+        "bg": "#0A1C24",
+        "search": ["蜗牛 周杰伦", "晴天 周杰伦", "大鱼 周深", "岁月如歌 陈奕迅"],
     },
 }
 
@@ -182,7 +182,21 @@ FACE_MODES = {
 }
 ONLINE_TIMEOUT = 4.0
 RECOMMEND_COUNT = 24
-ONLINE_APIS = ("itunes", "netease", "migu", "kugou", "qq", "kuwo")
+ONLINE_APIS = (
+    "itunes",
+    "itunes_chart",
+    "apple_hot",
+    "apple_asia",
+    "netease",
+    "netease_hot",
+    "migu",
+    "kugou",
+    "qq",
+    "qq_hot",
+    "kuwo",
+    "deezer",
+    "audius",
+)
 HISTORY_LIMIT = 0  # 0 = keep every footprint; truncation disabled
 
 THEMES = {

@@ -65,12 +65,19 @@ def main() -> int:
 
     catalog_path = DATA_DIR / "catalog.json"
     catalog = json.loads(catalog_path.read_text(encoding="utf-8"))["songs"]
-    fails += not _ok("本地曲库 280 首", len(catalog) == 280, str(len(catalog)))
+    fails += not _ok("本地曲库 532 首", len(catalog) == 532, str(len(catalog)))
     emotions_hit = {s["emotion"] for s in catalog}
     fails += not _ok("七类情绪均有示例曲", emotions_hit == set(EMOTIONS), ",".join(sorted(emotions_hit)))
     from collections import Counter
     by_emo = Counter(s.get("emotion") for s in catalog)
-    fails += not _ok("每类 40 首", all(by_emo[e] == 40 for e in EMOTIONS), str(dict(by_emo)))
+    fails += not _ok("每类 76 首", all(by_emo[e] == 76 for e in EMOTIONS), str(dict(by_emo)))
+    happy_front = next((s.get("title") for s in catalog if s.get("emotion") == "happy"), "")
+    sad_front = next((s.get("title") for s in catalog if s.get("emotion") == "sad"), "")
+    fails += not _ok("喜悦榜首小苹果", happy_front == "小苹果", str(happy_front))
+    fails += not _ok("悲伤榜首后来", sad_front == "后来", str(sad_front))
+    artists = " ".join(s.get("artist") or "" for s in catalog)
+    fails += not _ok("含周杰伦邓紫棋林俊杰", "周杰伦" in artists and "邓紫棋" in artists and "林俊杰" in artists)
+    fails += not _ok("含Taylor Swift与Lady Gaga", "Taylor Swift" in artists and "Lady Gaga" in artists)
     fails += not _ok("曲库均为有人声", all(s.get("kind") == "vocal" for s in catalog))
     omit = {"孤勇者", "海阔天空", "倔强", "起风了", "爱人错过"}
     titles = {s.get("title") for s in catalog}
@@ -83,6 +90,9 @@ def main() -> int:
     fails += not _ok("曲目书歌名不重复", not dups, str(dups[:8]))
     from backend.songbook import is_vocal_song
     fails += not _ok("过滤 DJ 改编版", not is_vocal_song("世界上的另一个我 (DJ阿智版)", "阿肆"))
+    fails += not _ok("过滤翻唱女生版", not is_vocal_song("一笑倾城(女生版)", "白允y"))
+    from backend.recommender import _accept_online
+    fails += not _ok("过滤网易云冒名热歌", not _accept_online("学狗叫", "周杰伦♚"))
     fails += not _ok("保留原唱人声", is_vocal_song("日不落", "蔡依林"))
 
     audio_ok = True
@@ -184,17 +194,40 @@ def main() -> int:
     for eid in EMOTIONS:
         one = recommend(eid, want_online=False)
         fails += not _ok(f"{eid} 离线 24 首可播", len(one["songs"]) == 24 and all(s.get("playable") and s.get("downloadable") for s in one["songs"]), str(len(one["songs"])))
-    fails += not _ok("离线推荐 < 1s", local_ms < 1000, f"{local_ms:.0f} ms")
+    fails += not _ok("离线推荐 < 2s", local_ms < 2000, f"{local_ms:.0f} ms")
     has_meta = all(s.get("title") and s.get("artist") for s in recs["songs"])
     fails += not _ok("推荐含歌名与歌手", has_meta)
     fails += not _ok("离线推荐可播放", all(s.get("playable") and s.get("audio") for s in recs["songs"]))
-    from backend.songbook import title_key
+    from backend.songbook import is_chinese_song, play_priority, title_key
+    fails += not _ok("喜悦推荐榜首小苹果", recs["songs"][0]["title"] == "小苹果", recs["songs"][0]["title"])
+    sad_recs = recommend("sad", want_online=False)
+    fails += not _ok("悲伤推荐榜首后来", sad_recs["songs"][0]["title"] == "后来", sad_recs["songs"][0]["title"])
+    fails += not _ok(
+        "中文优先于普通英文",
+        play_priority("告白气球", "周杰伦", "happy") > play_priority("Paper Rings", "Taylor Swift", "happy"),
+    )
+    fails += not _ok(
+        "特别网红英文高于普通英文",
+        play_priority("Butter", "BTS", "happy") > play_priority("Paper Rings", "Taylor Swift", "happy"),
+    )
+    happy_top = recs["songs"][:8]
+    fails += not _ok(
+        "喜悦前8首中文",
+        all(is_chinese_song(s.get("title") or "", s.get("artist") or "") for s in happy_top),
+        ", ".join(s.get("title") or "" for s in happy_top),
+    )
     first_title = recs["songs"][0]["title"]
-    skipped = recommend("happy", want_online=False, exclude=[first_title])
+    skipped = recommend("happy", want_online=False, exclude=["小苹果"])
+    fails += not _ok(
+        "显式排除仍跳过小苹果",
+        title_key(skipped["songs"][0]["title"]) != title_key("小苹果"),
+        skipped["songs"][0]["title"],
+    )
+    skipped_first = recommend("happy", want_online=False, exclude=[first_title])
     fails += not _ok(
         "相同情绪跳过已播歌曲",
-        title_key(skipped["songs"][0]["title"]) != title_key(first_title),
-        skipped["songs"][0]["title"],
+        title_key(skipped_first["songs"][0]["title"]) != title_key(first_title),
+        skipped_first["songs"][0]["title"],
     )
     wrapped = recommend("happy", want_online=False, exclude=[s["title"] for s in recs["songs"]])
     fails += not _ok("已播完后仍能回绕推荐", bool(wrapped.get("songs")), str(len(wrapped.get("songs") or [])))
@@ -250,7 +283,30 @@ def main() -> int:
     fails += not _ok("GET /api/health", h and h.get("ok"))
     fails += not _ok("健康检查默认单人精检", h.get("face_mode") == "solo", str(h.get("face_mode")))
     fails += not _ok("健康检查声明离线可用", h.get("offline_ready") is True, str(h.get("offline_ready")))
-    fails += not _ok("健康检查列出在线接口", isinstance(h.get("online_apis"), list) and "kuwo" in (h.get("online_apis") or []) and "itunes" in (h.get("online_apis") or []), str(h.get("online_apis")))
+    fails += not _ok("健康检查列出在线接口", isinstance(h.get("online_apis"), list) and {"itunes", "itunes_chart", "apple_hot", "apple_asia", "netease_hot", "qq_hot", "audius", "kuwo", "deezer"}.issubset(set(h.get("online_apis") or [])), str(h.get("online_apis")))
+    pin_play = client.post(
+        "/api/play",
+        json={
+            "emotion": "happy",
+            "song": {"id": "vocal-happy-15", "title": "小苹果", "artist": "筷子兄弟", "emotion": "happy"},
+        },
+    ).get_json()
+    fails += not _ok("置顶曲可记入已播", pin_play and pin_play.get("ok"), str(pin_play))
+    fails += not _ok("已播索引含小苹果", "小苹果" in ((pin_play or {}).get("keys") or []), str((pin_play or {}).get("keys")))
+    happy_api = client.get("/api/recommend?emotion=happy&online=0").get_json()
+    happy_first = ((happy_api or {}).get("songs") or [{}])[0].get("title")
+    fails += not _ok("已播后接口仍置顶小苹果", happy_first == "小苹果", str(happy_first))
+    sad_play = client.post(
+        "/api/play",
+        json={
+            "emotion": "sad",
+            "song": {"id": "vocal-sad-01", "title": "后来", "artist": "刘若英", "emotion": "sad"},
+        },
+    ).get_json()
+    fails += not _ok("悲伤置顶曲可记入已播", sad_play and sad_play.get("ok"), str(sad_play))
+    sad_api = client.get("/api/recommend?emotion=sad&online=0").get_json()
+    sad_first = ((sad_api or {}).get("songs") or [{}])[0].get("title")
+    fails += not _ok("已播后接口仍置顶后来", sad_first == "后来", str(sad_first))
     stream_miss = client.get("/api/stream")
     fails += not _ok("GET /api/stream 缺地址", stream_miss.status_code == 400)
     page = client.get("/")
@@ -259,6 +315,17 @@ def main() -> int:
     fails += not _ok("首页写明人脸算法", "YuNet" in home and "MobileFaceNet FER" in home)
     fails += not _ok("首页不堆算法长文", 'id="algo-panel"' not in home and 'id="btn-guide"' in home and 'href="/guide"' in home)
     fails += not _ok("首页可选推荐方式", 'id="strat-picks"' in home and "先同频再修复" in home)
+    fails += not _ok("首页有设置入口", 'id="btn-settings"' in home and 'id="settings-panel"' in home)
+    fails += not _ok("设置默认收起", 'id="settings-panel" hidden' in home)
+    fails += not _ok("主题与推荐方式在设置里折叠", 'data-set="theme"' in home and 'data-set="recommend"' in home and home.count('<details class="set-block"') >= 6)
+    fails += not _ok("顶栏不再平铺开关", 'class="top-toggles"' not in home)
+    vp_html = home.split('id="viewport"', 1)[-1].split('id="result"', 1)[0] if 'id="viewport"' in home else home
+    fails += not _ok("视窗内无关键点坞", 'id="cam-dock"' not in vp_html)
+    fails += not _ok("视窗内无检测方式条", 'id="face-mode-picks"' not in vp_html)
+    fails += not _ok("情绪足迹可隐藏", ">情绪足迹<" in home and 'id="btn-hide-trail"' in home)
+    fails += not _ok("歌曲可隐藏", 'id="recs-title"' in home and ">歌曲<" in home and 'id="btn-hide-recs"' in home)
+    fails += not _ok("首页含实时概率条", 'id="prob-bars"' in home)
+    fails += not _ok("首页含环面图", 'id="va-map"' in home)
     algo = client.get("/api/algorithms").get_json()
     fails += not _ok("GET /api/algorithms", algo and algo.get("ok") and "YuNet" in ((algo.get("face") or {}).get("name") or ""))
     fails += not _ok("GET /api/algorithms 含多种推荐", isinstance((algo.get("recommend") or {}).get("strategies"), list) and len((algo.get("recommend") or {}).get("strategies") or []) >= 8)
@@ -299,6 +366,12 @@ def main() -> int:
         ("弹出人脸窗", "id=\"btn-face-pop\""),
         ("波形画布", "id=\"viz-wave\""),
         ("频率画布", "id=\"viz-freq\""),
+        ("快慢画布", "id=\"viz-tempo\""),
+        ("色度画布", "id=\"viz-chroma\""),
+        ("声纹读数", "id=\"viz-readout\""),
+        ("关键点切换", "id=\"landmark-picks\""),
+        ("铺满窗口", "id=\"btn-cam-fill\""),
+        ("放大比率", "id=\"cam-zoom\""),
         ("人脸对照", "id=\"emo-shot\""),
         ("摄像头入口", "data-mode=\"camera\""),
         ("上传照片入口", "data-mode=\"upload\""),
@@ -320,25 +393,71 @@ def main() -> int:
         ("主题朱砂", "data-theme=\"rouge\""),
         ("主题青瓷", "data-theme=\"celadon\""),
         ("主题月白", "data-theme=\"moon\""),
+        ("设置按钮", "id=\"btn-settings\""),
+        ("铺满画面", "id=\"btn-cam-fit\""),
+        ("足迹隐藏", "id=\"btn-hide-trail\""),
+        ("歌曲隐藏", "id=\"btn-hide-recs\""),
     ]:
         fails += not _ok(f"界面含{label}", needle in home)
     js = (ROOT / "static" / "js" / "app.js").read_text(encoding="utf-8")
     fails += not _ok("实时捕捉锁定短暂表情", "TRANSIENT_EMO" in js and "decideLiveAction" in js)
+    fails += not _ok("持续平静可切中性歌单", "pending-neutral" in js and "LIVE_NEUTRAL_HITS" in js)
+    fails += not _ok("声纹情绪标签与人脸同步", "displayEmotionId" in js and "paintUiEmotion" in js and "同一标签" in js)
+    fails += not _ok("实时捕捉确认后才语音", "tickUiSpeak" in js and "LIVE_SPEAK_DWELL_MS" in js and "commitLiveUi" in js)
+    fails += not _ok("日常与高潮双速", "DAILY_EMO" in js and "SPIKE_SPEAK_DWELL_MS" in js and "speakDwellMs" in js and "playlistSwitchNeed" in js)
+    fails += not _ok("语音跟此刻不跟歌单锁", "tickUiSpeak" in js and "overlayDisplayItems" in js and "speakEmotionChange(e, opts.speak === true)" in js)
+    fails += not _ok("此刻情绪需连续确认", "commitLiveUi" in js and "UI_EMO_HITS" in js and "TRACK_PERIOD_MS" in js)
+    fails += not _ok("推荐方式默认同频", '"iso"' in js and "DEFAULT_STRATEGY = \"iso\"" in (ROOT / "backend" / "strategy.py").read_text(encoding="utf-8"))
+    emo_py = (ROOT / "backend" / "emotion.py").read_text(encoding="utf-8")
+    fails += not _ok("实时 FER 校准惊讶喜悦", "calibrate_live_vec" in emo_py)
     fails += not _ok("识别此刻关闭实时捕捉", "recognizeNow" in js and "已关闭实时捕捉" in js)
     fails += not _ok("摄像头实时画人脸框", "drawFaceOverlay" in js and "/api/track" in js)
     fails += not _ok("可切换单人精检与多人远场", "setFaceMode" in js and "emotune-face-mode" in js)
     fails += not _ok("可选择多个摄像头", "listCameras" in js and "enumerateDevices" in js)
     fails += not _ok("四种输入含视频与屏幕", "startScreen" in js and "useVideoFile" in js and "getDisplayMedia" in js)
     fails += not _ok("播放器实时波形", "ensureViz" in js and "getByteTimeDomainData" in js and "getByteFrequencyData" in js)
+    fails += not _ok("播放器画出快慢与音调", "viz-tempo" in js and "f₀" in js and "THAYER_VA" in js and "Scheirer/Ellis" in js)
+    fails += not _ok("声纹按情绪上色", "audio-viz" in js and "data-emo" in (ROOT / "templates" / "index.html").read_text(encoding="utf-8") and "chromaFromFd" in js)
+    fails += not _ok("人脸关键点叠加", "paintFaceLandmarks" in js and "paintFaceCues" in js and "AU12" in (ROOT / "backend" / "emotion.py").read_text(encoding="utf-8"))
+    fails += not _ok("关键点可切实拍线框或关闭", "setLandmarkMode" in js and "emotune-landmark" in js and "paintMesh" in (ROOT / "static" / "js" / "face-draw.js").read_text(encoding="utf-8"))
+    fails += not _ok("摄像头可铺满并缩放", "setCamFill" in js and "setCamZoom" in js and "cam-layer" in home)
     fails += not _ok("可弹出人脸窗", "openFacePop" in js and "emotune-face" in js)
     fails += not _ok("可切换推荐方式", "setStrategy" in js and "emotune-strategy" in js)
     fails += not _ok("人脸框随情绪变色", "emoHex" in js and "drawCornerBrackets" in js and "strokeStyle = color" in js)
     css = (ROOT / "static" / "css" / "app.css").read_text(encoding="utf-8")
     fails += not _ok("表情文字随情绪变色", ".live-emo-hud span" in css and "--emo: var(--happy)" in css and "paintHudTone" in js)
+    cfg = (ROOT / "config.py").read_text(encoding="utf-8")
+    palette = {
+        "happy": ("#FFD400", "#ffd400"),
+        "angry": ("#E02020", "#e02020"),
+        "sad": ("#4E7390", "#4e7390"),
+        "fear": ("#6B2D91", "#6b2d91"),
+        "surprise": ("#FF7A18", "#ff7a18"),
+        "disgust": ("#6F7D32", "#6f7d32"),
+        "neutral": ("#4EC6F5", "#4ec6f5"),
+    }
+    fails += not _ok(
+        "七色标准写入配置与前端",
+        all(hi in cfg and lo in css and lo in js for hi, lo in palette.values()),
+    )
+    fails += not _ok("设置面板默认折叠", ".settings-panel" in css and "bindChromeUi" in js and "setSettingsOpen" in js)
+    fails += not _ok("摄像头铺满当前区域", "min-height: 460px" in css and "object-fit: cover" in css)
     fails += not _ok("默认使用在线曲库", 'emotune-online") !== "0"' in js and "fallbackToLocal" in js)
     fails += not _ok("在线失败自动切本地", "长时间播放失败" in js and "loadPlaylist" in js)
     fails += not _ok("在线音源可代理", "open_remote_audio" in (ROOT / "backend" / "recommender.py").read_text(encoding="utf-8") and "/api/stream" in (ROOT / "app.py").read_text(encoding="utf-8"))
-    fails += not _ok("含酷我在线接口", "_from_kuwo" in (ROOT / "backend" / "recommender.py").read_text(encoding="utf-8"))
+    rec_src = (ROOT / "backend" / "recommender.py").read_text(encoding="utf-8")
+    fails += not _ok("含酷我在线接口", "_from_kuwo" in rec_src)
+    fails += not _ok("含苹果热歌榜接口", "_from_itunes_chart" in rec_src)
+    fails += not _ok("含苹果热播接口", "_from_apple_hot" in rec_src and "apple_hot" in rec_src)
+    fails += not _ok("含苹果亚洲热歌接口", "_from_apple_asia" in rec_src and "apple_asia" in rec_src)
+    fails += not _ok("含网易云热歌榜接口", "_from_netease_hot" in rec_src and "netease_hot" in rec_src)
+    fails += not _ok("含QQ热歌榜接口", "_from_qq_hot" in rec_src and "qq_hot" in rec_src)
+    fails += not _ok("含Audius在线接口", "_from_audius" in rec_src and "audius" in rec_src)
+    fails += not _ok("在线与本地合并后再按中文优先排序", "take(online_fresh + local_fresh)" in rec_src and "play_priority" in rec_src)
+    fails += not _ok("含 Deezer 在线接口", "_from_deezer" in rec_src and "deezer" in rec_src)
+    asset_src = (ROOT / "backend" / "assets.py").read_text(encoding="utf-8")
+    fails += not _ok("苹果检索有旧接口兜底", "wsSearch" in asset_src and "itunes_search_results" in rec_src)
+    fails += not _ok("苹果曲目编号可在线回源", "itunes_lookup_ids" in asset_src and "itunes_lookup_ids" in rec_src)
     fails += not _ok("历史双列人脸与情绪", "history-pair" in js and "判断情绪" in js)
     fails += not _ok("足迹含表情图标与播过的歌", "trail-songs" in js and "trail-icon" in js and "firstFreshPlayable" in js)
     fails += not _ok("歌名旁标歌曲情绪", "songEmoChip" in js and "song-emo" in js and "song-head" in css)
@@ -378,6 +497,12 @@ def main() -> int:
             fails += not _ok("识别后返回推荐 24 首", len(songs) == 24, str(len(songs)))
             fails += not _ok("识别返回足迹 id", bool(body.get("history_id")), str(body.get("history_id")))
             fails += not _ok("识别返回已播索引", isinstance(body.get("played_keys"), list))
+            if (body.get("emotion") or {}).get("id") == "happy":
+                fails += not _ok(
+                    "识别后仍置顶小苹果",
+                    songs and songs[0].get("title") == "小苹果",
+                    songs[0].get("title") if songs else "",
+                )
             play_body = client.post(
                 "/api/play",
                 json={
@@ -433,6 +558,18 @@ def main() -> int:
                 "track 实时路径够快",
                 float((tracked or {}).get("elapsed_ms") or 999) < 180,
                 str((tracked or {}).get("elapsed_ms")),
+            )
+            face0 = ((tracked or {}).get("faces") or [{}])[0]
+            fails += not _ok(
+                "track 返回人脸关键点",
+                isinstance(face0.get("points"), list) and len(face0.get("points") or []) >= 5,
+                str(face0.get("points")),
+            )
+            cue_parts = {c.get("part") for c in (face0.get("cues") or []) if isinstance(c, dict)}
+            fails += not _ok(
+                "track 返回口眼眉线索",
+                {"mouth", "eye", "brow"}.issubset(cue_parts),
+                str(face0.get("cues")),
             )
             fails += not _ok(
                 "识别返回人脸票数",

@@ -84,6 +84,23 @@ SKIP_PERFORMERS = (
     "twinkle twinkle little rock star",
 )
 
+COVER_MARKERS = (
+    "女生版",
+    "男生版",
+    "女声版",
+    "男声版",
+    "现场版",
+    "现场",
+    "演唱会",
+    "纯享",
+    "片段",
+    "串烧",
+    "medley",
+    "综艺",
+    "(live)",
+    "（live）",
+)
+
 # 繁体检索结果折成简体再比对歌名；展示时也走同一张表。
 _TRAD_TO_SIMP = str.maketrans(
     "愛後為國樂發時長門開東風雲點實現與無這個們來對會體醜強獨戰鐘煙湧陰貓樹傑銘謙飛兒鄧陳趙歲戀聽記過錯氣龍捲義術單簡當從業書華語經總應該說讓給還進運關問題歡熱陽離獸團傳蘭齊劉買綱願乾燦爛態戲劇觀覺優傷殤俠雙盧樸馮靜倫誇闆裡麼線將畫憶懷邊條孫隻隻臺蘋麼麼聲帶專輯場錄選數賜碼銀鏡際內寫讀請區灣標準寶貝頁頭題顏館廣廳響處歷據產權號級類組員並確滿漢彙視藝職網質價電務間葉滾搖見絲詩迴蕭驚顫慄溫學認島黃嘆髮孃煉園遊盤騎亂羅曖榮詞話親變萬遠換擇證驗聯習鳳車馬魚錢賣鬆麵廠鐵億儀慶禮節責曆絡織閉係裏詠曉鴻穎聰艷偉麗鵬濤潔純紅機軍殺謝鋒殘竅極誘計動軌跡約橋興嗎殺戰雞隻蘋"
@@ -641,6 +658,142 @@ def title_key(text: str) -> str:
     return t.strip()
 
 
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+_NON_CN_ARTIST_MARKS = (
+    "米津",
+    "yoasobi",
+    "ado",
+    "bts",
+    "lisa",
+    "blackpink",
+    "twice",
+    "newjeans",
+    "lady gaga",
+    "taylor swift",
+    "olivia rodrigo",
+    "linkin",
+    "pharrell",
+    "maroon",
+    "bruno mars",
+    "adele",
+    "ed sheeran",
+    "coldplay",
+    "harry styles",
+    "dua lipa",
+    "the weeknd",
+    "owl city",
+    "katrina",
+    "michael jackson",
+    "evanescence",
+    "avril",
+    "alanis",
+    "justin timberlake",
+    "jason mraz",
+    "mark ronson",
+    "rockwell",
+)
+_CN_LATIN_ARTISTS = ("s.h.e", "she", "beyond")
+_PIN_FRONT = {
+    "happy": title_key("小苹果"),
+    "sad": title_key("后来"),
+}
+_VIRAL_EN_KEYS = {
+    title_key(name)
+    for name in (
+        "Happy",
+        "Sugar",
+        "24K Magic",
+        "Shake It Off",
+        "Love Story",
+        "Blank Space",
+        "Cruel Summer",
+        "Anti-Hero",
+        "You Belong With Me",
+        "Bad Blood",
+        "Look What You Made Me Do",
+        "Poker Face",
+        "Bad Romance",
+        "Just Dance",
+        "Shallow",
+        "Born This Way",
+        "Die With A Smile",
+        "Butter",
+        "Dynamite",
+        "Permission to Dance",
+        "Numb",
+        "In The End",
+        "Someone Like You",
+        "Hello",
+        "Shape of You",
+        "Perfect",
+        "Uptown Funk",
+        "Blinding Lights",
+        "Levitating",
+        "As It Was",
+        "Watermelon Sugar",
+        "Can't Stop the Feeling!",
+        "Walking On Sunshine",
+    )
+}
+_VIRAL_ASIA_KEYS = {
+    title_key(name)
+    for name in (
+        "打上花火",
+        "Lemon",
+        "夜に駆ける",
+        "アイドル",
+        "うっせぇわ",
+        "新时代",
+        "KICK BACK",
+        "唱",
+    )
+}
+
+
+def is_chinese_song(title: str = "", artist: str = "") -> bool:
+    """华语歌：歌名或歌手含汉字，且不是日韩艺人；S.H.E / Beyond 等拉丁艺名也算。"""
+    who = fold_zh(artist or "")
+    if any(mark in who for mark in _NON_CN_ARTIST_MARKS):
+        return False
+    if _CJK_RE.search(title or "") or _CJK_RE.search(artist or ""):
+        return True
+    compact = who.replace(".", "").replace(" ", "")
+    return compact in _CN_LATIN_ARTISTS or who.startswith("s.h.e")
+
+
+def front_pin_keys() -> set[str]:
+    """喜悦小苹果、悲伤后来：历史已播也不从置顶位拿掉。"""
+    return {key for key in _PIN_FRONT.values() if key}
+
+
+def play_priority(title: str = "", artist: str = "", emotion: str = "") -> int:
+    """越大越先播：置顶中文热歌 > 中文 > 特别网红英文/亚洲热歌 > 其余。"""
+    key = title_key(title or "")
+    if emotion and key == _PIN_FRONT.get(emotion):
+        return 3
+    if is_chinese_song(title, artist):
+        return 2
+    if key in _VIRAL_EN_KEYS or key in _VIRAL_ASIA_KEYS:
+        return 1
+    return 0
+
+
+def _prefer_chinese_book(book: list[dict]) -> list[dict]:
+    order = ("happy", "angry", "sad", "fear", "surprise", "disgust", "neutral")
+    groups: dict[str, list[dict]] = {eid: [] for eid in order}
+    for spec in book:
+        groups.setdefault(spec["emotion"], []).append(spec)
+    out: list[dict] = []
+    for eid in order:
+        songs = groups.get(eid) or []
+        pin = _PIN_FRONT.get(eid)
+        pinned = [spec for spec in songs if pin and title_key(spec["title"]) == pin]
+        rest = [spec for spec in songs if not (pin and title_key(spec["title"]) == pin)]
+        rest.sort(key=lambda spec: -play_priority(spec["title"], spec["artist"], eid))
+        out.extend(pinned + rest)
+    return out
+
+
 def title_seen(key: str, seen: set[str]) -> bool:
     if not key or key in seen:
         return True
@@ -672,9 +825,23 @@ def emotion_of_title(title: str) -> str | None:
     return _TITLE_EMO.get(key)
 
 
-# 每类选「一听就对上标签」的华语校园热歌，让情绪切换反差尽量大。少量英文。
+# 每类选「一听就对上标签」的华语校园热歌，让情绪切换反差尽量大。
+# 播放顺序：中文优先；仅特别网红英文/亚洲热歌作为例外靠前；喜悦小苹果、悲伤后来置顶。
 VOCAL_SONGBOOK = [
-    # 喜 · 阳光、蹦跳、开口就笑（最热的排前面）
+    # 喜 · 阳光、蹦跳、开口就笑（网红热歌排前面）
+    dict(id="vocal-happy-15", emotion="happy", title="小苹果", artist="筷子兄弟", query="小苹果 筷子兄弟"),
+    dict(id="vocal-happy-57", emotion="happy", title="Butter", artist="BTS", query="Butter BTS"),
+    dict(id="vocal-happy-58", emotion="happy", title="打上花火", artist="米津玄师", query="打上花火 米津玄師"),
+    dict(id="vocal-happy-59", emotion="happy", title="Just Dance", artist="Lady Gaga", query="Just Dance Lady Gaga"),
+    dict(id="vocal-happy-60", emotion="happy", title="Love Story", artist="Taylor Swift", query="Love Story Taylor Swift"),
+    dict(id="vocal-happy-61", emotion="happy", title="22", artist="Taylor Swift", query="22 Taylor Swift"),
+    dict(id="vocal-happy-62", emotion="happy", title="You Belong With Me", artist="Taylor Swift", query="You Belong With Me Taylor Swift"),
+    dict(id="vocal-happy-63", emotion="happy", title="粉色海洋", artist="周杰伦", query="粉色海洋 周杰伦"),
+    dict(id="vocal-happy-64", emotion="happy", title="我的秘密", artist="G.E.M. 邓紫棋", query="我的秘密 邓紫棋"),
+    dict(id="vocal-happy-65", emotion="happy", title="当你", artist="林俊杰", query="当你 林俊杰"),
+    dict(id="vocal-happy-66", emotion="happy", title="Born This Way", artist="Lady Gaga", query="Born This Way Lady Gaga"),
+    dict(id="vocal-happy-67", emotion="happy", title="Paper Rings", artist="Taylor Swift", query="Paper Rings Taylor Swift"),
+    dict(id="vocal-happy-68", emotion="happy", title="她的睫毛", artist="周杰伦", query="她的睫毛 周杰伦"),
     dict(id="vocal-happy-01", emotion="happy", title="热爱105°C的你", artist="阿肆", query="热爱105度的你 阿肆"),
     dict(id="vocal-happy-09", emotion="happy", title="告白气球", artist="周杰伦", query="告白气球 周杰伦"),
     dict(id="vocal-happy-08", emotion="happy", title="小幸运", artist="田馥甄", query="小幸运 田馥甄"),
@@ -689,7 +856,6 @@ VOCAL_SONGBOOK = [
     dict(id="vocal-happy-12", emotion="happy", title="我的歌声里", artist="曲婉婷", query="我的歌声里 曲婉婷"),
     dict(id="vocal-happy-13", emotion="happy", title="小酒窝", artist="林俊杰", query="小酒窝 林俊杰"),
     dict(id="vocal-happy-14", emotion="happy", title="说爱你", artist="蔡依林", query="说爱你 蔡依林"),
-    dict(id="vocal-happy-15", emotion="happy", title="小苹果", artist="筷子兄弟", query="小苹果 筷子兄弟"),
     dict(id="vocal-happy-16", emotion="happy", title="喜欢你", artist="G.E.M. 邓紫棋", query="喜欢你 邓紫棋"),
     dict(id="vocal-happy-17", emotion="happy", title="暖暖", artist="梁静茹", query="暖暖 梁静茹"),
     dict(id="vocal-happy-18", emotion="happy", title="彩虹", artist="周杰伦", query="彩虹 周杰伦"),
@@ -715,7 +881,35 @@ VOCAL_SONGBOOK = [
     dict(id="vocal-happy-38", emotion="happy", title="带你去旅行", artist="校长", query="带你去旅行 校长"),
     dict(id="vocal-happy-39", emotion="happy", title="甜蜜蜜", artist="邓丽君", query="甜蜜蜜 邓丽君"),
     dict(id="vocal-happy-40", emotion="happy", title="心墙", artist="郭静", query="心墙 郭静"),
-    # 怒 · 攻击性、宣泄，不用励志燃曲
+    dict(id="vocal-happy-41", emotion="happy", title="一笑倾城", artist="汪苏泷", query="一笑倾城 汪苏泷"),
+    dict(id="vocal-happy-42", emotion="happy", title="小星星", artist="汪苏泷", query="小星星 汪苏泷"),
+    dict(id="vocal-happy-43", emotion="happy", title="24K Magic", artist="Bruno Mars", query="24K Magic Bruno Mars"),
+    dict(id="vocal-happy-44", emotion="happy", title="你笑起来真好看", artist="李昕融", query="你笑起来真好看 李昕融"),
+    dict(id="vocal-happy-45", emotion="happy", title="学猫叫", artist="小潘潘", query="学猫叫 小潘潘"),
+    dict(id="vocal-happy-46", emotion="happy", title="小鸡小鸡", artist="王蓉", query="小鸡小鸡 王蓉"),
+    dict(id="vocal-happy-47", emotion="happy", title="麦芽糖", artist="周杰伦", query="麦芽糖 周杰伦"),
+    dict(id="vocal-happy-48", emotion="happy", title="明明就", artist="周杰伦", query="明明就 周杰伦"),
+    dict(id="vocal-happy-49", emotion="happy", title="大城小爱", artist="王力宏", query="大城小爱 王力宏"),
+    dict(id="vocal-happy-50", emotion="happy", title="美人鱼", artist="林俊杰", query="美人鱼 林俊杰"),
+    dict(id="vocal-happy-51", emotion="happy", title="豆浆油条", artist="林俊杰", query="豆浆油条 林俊杰"),
+    dict(id="vocal-happy-52", emotion="happy", title="爱笑的眼睛", artist="林俊杰", query="爱笑的眼睛 林俊杰"),
+    dict(id="vocal-happy-53", emotion="happy", title="Sugar", artist="Maroon 5", query="Sugar Maroon 5"),
+    dict(id="vocal-happy-54", emotion="happy", title="恋爱达人", artist="罗志祥", query="恋爱达人 罗志祥"),
+    dict(id="vocal-happy-55", emotion="happy", title="因你而在", artist="林俊杰", query="因你而在 林俊杰"),
+    dict(id="vocal-happy-56", emotion="happy", title="关键词", artist="林俊杰", query="关键词 林俊杰"),
+    # 怒 · 攻击性、宣泄，不用励志燃曲（网红热歌排前面）
+    dict(id="vocal-angry-57", emotion="angry", title="Bad Blood", artist="Taylor Swift", query="Bad Blood Taylor Swift"),
+    dict(id="vocal-angry-58", emotion="angry", title="Look What You Made Me Do", artist="Taylor Swift", query="Look What You Made Me Do Taylor Swift"),
+    dict(id="vocal-angry-59", emotion="angry", title="Judas", artist="Lady Gaga", query="Judas Lady Gaga"),
+    dict(id="vocal-angry-60", emotion="angry", title="...Ready For It?", artist="Taylor Swift", query="Ready For It Taylor Swift"),
+    dict(id="vocal-angry-61", emotion="angry", title="摩天动物园", artist="G.E.M. 邓紫棋", query="摩天动物园 邓紫棋"),
+    dict(id="vocal-angry-62", emotion="angry", title="brutal", artist="Olivia Rodrigo", query="brutal Olivia Rodrigo"),
+    dict(id="vocal-angry-63", emotion="angry", title="vampire", artist="Olivia Rodrigo", query="vampire Olivia Rodrigo"),
+    dict(id="vocal-angry-64", emotion="angry", title="新世界", artist="华晨宇", query="新世界 华晨宇"),
+    dict(id="vocal-angry-65", emotion="angry", title="The Man", artist="Taylor Swift", query="The Man Taylor Swift"),
+    dict(id="vocal-angry-66", emotion="angry", title="Vigilante Shit", artist="Taylor Swift", query="Vigilante Shit Taylor Swift"),
+    dict(id="vocal-angry-67", emotion="angry", title="Government Hooker", artist="Lady Gaga", query="Government Hooker Lady Gaga"),
+    dict(id="vocal-angry-68", emotion="angry", title="Heavy Metal Lover", artist="Lady Gaga", query="Heavy Metal Lover Lady Gaga"),
     dict(id="vocal-angry-01", emotion="angry", title="双截棍", artist="周杰伦", query="双截棍 周杰伦"),
     dict(id="vocal-angry-06", emotion="angry", title="霍元甲", artist="周杰伦", query="霍元甲 周杰伦"),
     dict(id="vocal-angry-02", emotion="angry", title="龙拳", artist="周杰伦", query="龙拳 周杰伦"),
@@ -756,8 +950,36 @@ VOCAL_SONGBOOK = [
     dict(id="vocal-angry-38", emotion="angry", title="向天再借五百年", artist="韩磊", query="向天再借五百年 韩磊"),
     dict(id="vocal-angry-39", emotion="angry", title="刀剑如梦", artist="周华健", query="刀剑如梦 周华健"),
     dict(id="vocal-angry-40", emotion="angry", title="Bleed It Out", artist="LINKIN PARK", query="Bleed It Out LINKIN PARK"),
-    # 哀 · 哭腔情歌，KTV 一放就鼻酸
+    dict(id="vocal-angry-41", emotion="angry", title="飞得更高", artist="汪峰", query="飞得更高 汪峰"),
+    dict(id="vocal-angry-42", emotion="angry", title="存在", artist="汪峰", query="存在 汪峰"),
+    dict(id="vocal-angry-43", emotion="angry", title="Breaking the Habit", artist="LINKIN PARK", query="Breaking the Habit LINKIN PARK"),
+    dict(id="vocal-angry-44", emotion="angry", title="Papercut", artist="LINKIN PARK", query="Papercut LINKIN PARK"),
+    dict(id="vocal-angry-45", emotion="angry", title="新的心跳", artist="G.E.M. 邓紫棋", query="新的心跳 邓紫棋"),
+    dict(id="vocal-angry-46", emotion="angry", title="寒鸦少年", artist="华晨宇", query="寒鸦少年 华晨宇"),
+    dict(id="vocal-angry-47", emotion="angry", title="What I've Done", artist="LINKIN PARK", query="What I've Done LINKIN PARK"),
+    dict(id="vocal-angry-48", emotion="angry", title="异类", artist="华晨宇", query="异类 华晨宇"),
+    dict(id="vocal-angry-49", emotion="angry", title="Somewhere I Belong", artist="LINKIN PARK", query="Somewhere I Belong LINKIN PARK"),
+    dict(id="vocal-angry-50", emotion="angry", title="New Divide", artist="LINKIN PARK", query="New Divide LINKIN PARK"),
+    dict(id="vocal-angry-51", emotion="angry", title="From The Inside", artist="LINKIN PARK", query="From The Inside LINKIN PARK"),
+    dict(id="vocal-angry-52", emotion="angry", title="真的爱你", artist="Beyond", query="真的爱你 Beyond"),
+    dict(id="vocal-angry-53", emotion="angry", title="光辉岁月", artist="Beyond", query="光辉岁月 Beyond"),
+    dict(id="vocal-angry-54", emotion="angry", title="Lost in the Echo", artist="LINKIN PARK", query="Lost in the Echo LINKIN PARK"),
+    dict(id="vocal-angry-55", emotion="angry", title="Burn It Down", artist="LINKIN PARK", query="Burn It Down LINKIN PARK"),
+    dict(id="vocal-angry-56", emotion="angry", title="Castle of Glass", artist="LINKIN PARK", query="Castle of Glass LINKIN PARK"),
+    # 哀 · 哭腔情歌，KTV 一放就鼻酸（网红热歌排前面）
     dict(id="vocal-sad-01", emotion="sad", title="后来", artist="刘若英", query="后来 刘若英"),
+    dict(id="vocal-sad-57", emotion="sad", title="可惜没如果", artist="林俊杰", query="可惜没如果 林俊杰"),
+    dict(id="vocal-sad-58", emotion="sad", title="我还想她", artist="林俊杰", query="我还想她 林俊杰"),
+    dict(id="vocal-sad-59", emotion="sad", title="All Too Well", artist="Taylor Swift", query="All Too Well Taylor Swift"),
+    dict(id="vocal-sad-60", emotion="sad", title="Shallow", artist="Lady Gaga", query="Shallow Lady Gaga"),
+    dict(id="vocal-sad-61", emotion="sad", title="Million Reasons", artist="Lady Gaga", query="Million Reasons Lady Gaga"),
+    dict(id="vocal-sad-62", emotion="sad", title="Always Remember Us This Way", artist="Lady Gaga", query="Always Remember Us This Way Lady Gaga"),
+    dict(id="vocal-sad-63", emotion="sad", title="一路向北", artist="周杰伦", query="一路向北 周杰伦"),
+    dict(id="vocal-sad-64", emotion="sad", title="枫", artist="周杰伦", query="枫 周杰伦"),
+    dict(id="vocal-sad-65", emotion="sad", title="很久以后", artist="G.E.M. 邓紫棋", query="很久以后 邓紫棋"),
+    dict(id="vocal-sad-66", emotion="sad", title="Lemon", artist="米津玄师", query="Lemon 米津玄師"),
+    dict(id="vocal-sad-67", emotion="sad", title="菊花台", artist="周杰伦", query="菊花台 周杰伦"),
+    dict(id="vocal-sad-68", emotion="sad", title="Back to December", artist="Taylor Swift", query="Back to December Taylor Swift"),
     dict(id="vocal-sad-10", emotion="sad", title="那些年", artist="胡夏", query="那些年 胡夏"),
     dict(id="vocal-sad-02", emotion="sad", title="十年", artist="陈奕迅", query="十年 陈奕迅"),
     dict(id="vocal-sad-09", emotion="sad", title="安静", artist="周杰伦", query="安静 周杰伦"),
@@ -797,7 +1019,35 @@ VOCAL_SONGBOOK = [
     dict(id="vocal-sad-38", emotion="sad", title="如果云知道", artist="许茹芸", query="如果云知道 许茹芸"),
     dict(id="vocal-sad-39", emotion="sad", title="需要人陪", artist="王力宏", query="需要人陪 王力宏"),
     dict(id="vocal-sad-40", emotion="sad", title="Fix You", artist="Coldplay", query="Fix You Coldplay"),
-    # 惧 · 暗夜、鬼气、惊悚叙事
+    dict(id="vocal-sad-41", emotion="sad", title="易燃易爆炸", artist="陈粒", query="易燃易爆炸 陈粒"),
+    dict(id="vocal-sad-42", emotion="sad", title="走马", artist="陈粒", query="走马 陈粒"),
+    dict(id="vocal-sad-43", emotion="sad", title="Easy On Me", artist="Adele", query="Easy On Me Adele"),
+    dict(id="vocal-sad-44", emotion="sad", title="单车", artist="陈奕迅", query="单车 陈奕迅"),
+    dict(id="vocal-sad-45", emotion="sad", title="会呼吸的痛", artist="梁静茹", query="会呼吸的痛 梁静茹"),
+    dict(id="vocal-sad-46", emotion="sad", title="你就不要想起我", artist="田馥甄", query="你就不要想起我 田馥甄"),
+    dict(id="vocal-sad-47", emotion="sad", title="寂寞寂寞就好", artist="田馥甄", query="寂寞寂寞就好 田馥甄"),
+    dict(id="vocal-sad-48", emotion="sad", title="第几个100天", artist="林俊杰", query="第几个100天 林俊杰"),
+    dict(id="vocal-sad-49", emotion="sad", title="让我留在你身边", artist="陈奕迅", query="让我留在你身边 陈奕迅"),
+    dict(id="vocal-sad-50", emotion="sad", title="如愿", artist="王菲", query="如愿 王菲"),
+    dict(id="vocal-sad-51", emotion="sad", title="倒带", artist="蔡依林", query="倒带 蔡依林"),
+    dict(id="vocal-sad-52", emotion="sad", title="倒数", artist="G.E.M. 邓紫棋", query="倒数 邓紫棋"),
+    dict(id="vocal-sad-53", emotion="sad", title="多远都要在一起", artist="G.E.M. 邓紫棋", query="多远都要在一起 邓紫棋"),
+    dict(id="vocal-sad-54", emotion="sad", title="未给姐姐递出的信", artist="赵雷", query="未给姐姐递出的信 赵雷"),
+    dict(id="vocal-sad-55", emotion="sad", title="无法长大", artist="赵雷", query="无法长大 赵雷"),
+    dict(id="vocal-sad-56", emotion="sad", title="Payphone", artist="Maroon 5", query="Payphone Maroon 5"),
+    # 惧 · 暗夜、鬼气、惊悚叙事（网红热歌排前面）
+    dict(id="vocal-fear-57", emotion="fear", title="Bad Romance", artist="Lady Gaga", query="Bad Romance Lady Gaga"),
+    dict(id="vocal-fear-58", emotion="fear", title="Bloody Mary", artist="Lady Gaga", query="Bloody Mary Lady Gaga"),
+    dict(id="vocal-fear-59", emotion="fear", title="夜に駆ける", artist="YOASOBI", query="夜に駆ける YOASOBI"),
+    dict(id="vocal-fear-60", emotion="fear", title="黑武士", artist="林俊杰", query="黑武士 林俊杰"),
+    dict(id="vocal-fear-61", emotion="fear", title="Alejandro", artist="Lady Gaga", query="Alejandro Lady Gaga"),
+    dict(id="vocal-fear-62", emotion="fear", title="Wildest Dreams", artist="Taylor Swift", query="Wildest Dreams Taylor Swift"),
+    dict(id="vocal-fear-63", emotion="fear", title="Paparazzi", artist="Lady Gaga", query="Paparazzi Lady Gaga"),
+    dict(id="vocal-fear-64", emotion="fear", title="新时代", artist="Ado", query="新時代 Ado"),
+    dict(id="vocal-fear-65", emotion="fear", title="Monster", artist="Lady Gaga", query="Monster Lady Gaga"),
+    dict(id="vocal-fear-66", emotion="fear", title="KICK BACK", artist="米津玄师", query="KICK BACK 米津玄師"),
+    dict(id="vocal-fear-67", emotion="fear", title="Aura", artist="Lady Gaga", query="Aura Lady Gaga"),
+    dict(id="vocal-fear-68", emotion="fear", title="John Wayne", artist="Lady Gaga", query="John Wayne Lady Gaga"),
     dict(id="vocal-fear-01", emotion="fear", title="夜曲", artist="周杰伦", query="夜曲 周杰伦"),
     dict(id="vocal-fear-09", emotion="fear", title="黑色毛衣", artist="周杰伦", query="黑色毛衣 周杰伦"),
     dict(id="vocal-fear-10", emotion="fear", title="忍者", artist="周杰伦", query="忍者 周杰伦"),
@@ -838,7 +1088,35 @@ VOCAL_SONGBOOK = [
     dict(id="vocal-fear-38", emotion="fear", title="拒绝再玩", artist="张国荣", query="拒绝再玩 张国荣"),
     dict(id="vocal-fear-39", emotion="fear", title="Somebody's Watching Me", artist="Rockwell", query="Somebody's Watching Me Rockwell"),
     dict(id="vocal-fear-40", emotion="fear", title="逃亡", artist="孙燕姿", query="逃亡 孙燕姿"),
-    # 惊 · 突然爆开、哇一下，和「甜甜的喜」分开
+    dict(id="vocal-fear-41", emotion="fear", title="Bad", artist="Michael Jackson", query="Bad Michael Jackson"),
+    dict(id="vocal-fear-42", emotion="fear", title="My Immortal", artist="Evanescence", query="My Immortal Evanescence"),
+    dict(id="vocal-fear-43", emotion="fear", title="Leave Me Alone", artist="Michael Jackson", query="Leave Me Alone Michael Jackson"),
+    dict(id="vocal-fear-44", emotion="fear", title="Dirty Diana", artist="Michael Jackson", query="Dirty Diana Michael Jackson"),
+    dict(id="vocal-fear-45", emotion="fear", title="月牙湾", artist="飞儿乐团", query="月牙湾 飞儿乐团"),
+    dict(id="vocal-fear-46", emotion="fear", title="夜机", artist="陈慧娴", query="夜机 陈慧娴"),
+    dict(id="vocal-fear-47", emotion="fear", title="夜太黑", artist="林忆莲", query="夜太黑 林忆莲"),
+    dict(id="vocal-fear-48", emotion="fear", title="害怕", artist="林俊杰", query="害怕 林俊杰"),
+    dict(id="vocal-fear-49", emotion="fear", title="Beat It", artist="Michael Jackson", query="Beat It Michael Jackson"),
+    dict(id="vocal-fear-50", emotion="fear", title="Dangerous", artist="Michael Jackson", query="Dangerous Michael Jackson"),
+    dict(id="vocal-fear-51", emotion="fear", title="Everybody's Fool", artist="Evanescence", query="Everybody's Fool Evanescence"),
+    dict(id="vocal-fear-52", emotion="fear", title="人质", artist="张惠妹", query="人质 张惠妹"),
+    dict(id="vocal-fear-53", emotion="fear", title="Tourniquet", artist="Evanescence", query="Tourniquet Evanescence"),
+    dict(id="vocal-fear-54", emotion="fear", title="Whisper", artist="Evanescence", query="Whisper Evanescence"),
+    dict(id="vocal-fear-55", emotion="fear", title="They Don't Care About Us", artist="Michael Jackson", query="They Don't Care About Us Michael Jackson"),
+    dict(id="vocal-fear-56", emotion="fear", title="Call Me When You're Sober", artist="Evanescence", query="Call Me When You're Sober Evanescence"),
+    # 惊 · 突然爆开、哇一下，和「甜甜的喜」分开（网红热歌排前面）
+    dict(id="vocal-surprise-57", emotion="surprise", title="Poker Face", artist="Lady Gaga", query="Poker Face Lady Gaga"),
+    dict(id="vocal-surprise-58", emotion="surprise", title="Applause", artist="Lady Gaga", query="Applause Lady Gaga"),
+    dict(id="vocal-surprise-59", emotion="surprise", title="Cruel Summer", artist="Taylor Swift", query="Cruel Summer Taylor Swift"),
+    dict(id="vocal-surprise-60", emotion="surprise", title="Blank Space", artist="Taylor Swift", query="Blank Space Taylor Swift"),
+    dict(id="vocal-surprise-61", emotion="surprise", title="アイドル", artist="YOASOBI", query="アイドル YOASOBI"),
+    dict(id="vocal-surprise-62", emotion="surprise", title="Telephone", artist="Lady Gaga", query="Telephone Lady Gaga"),
+    dict(id="vocal-surprise-63", emotion="surprise", title="ME!", artist="Taylor Swift", query="ME Taylor Swift"),
+    dict(id="vocal-surprise-64", emotion="surprise", title="Rain On Me", artist="Lady Gaga", query="Rain On Me Lady Gaga"),
+    dict(id="vocal-surprise-65", emotion="surprise", title="Permission to Dance", artist="BTS", query="Permission to Dance BTS"),
+    dict(id="vocal-surprise-66", emotion="surprise", title="唱", artist="Ado", query="唱 Ado"),
+    dict(id="vocal-surprise-67", emotion="surprise", title="编号89757", artist="林俊杰", query="编号89757 林俊杰"),
+    dict(id="vocal-surprise-68", emotion="surprise", title="Stupid Love", artist="Lady Gaga", query="Stupid Love Lady Gaga"),
     dict(id="vocal-surprise-02", emotion="surprise", title="野狼disco", artist="宝石Gem", query="野狼disco 宝石Gem"),
     dict(id="vocal-surprise-07", emotion="surprise", title="卡路里", artist="火箭少女101", query="卡路里 火箭少女101"),
     dict(id="vocal-surprise-01", emotion="surprise", title="本草纲目", artist="周杰伦", query="本草纲目 周杰伦"),
@@ -879,7 +1157,35 @@ VOCAL_SONGBOOK = [
     dict(id="vocal-surprise-38", emotion="surprise", title="波斯猫", artist="S.H.E", query="波斯猫 SHE"),
     dict(id="vocal-surprise-39", emotion="surprise", title="终结孤单", artist="五月天", query="终结孤单 五月天"),
     dict(id="vocal-surprise-40", emotion="surprise", title="Can't Stop the Feeling!", artist="Justin Timberlake", query="Can't Stop the Feeling Justin Timberlake"),
-    # 厌 · 嫌弃、自嘲、刺耳，不用漂亮情歌
+    dict(id="vocal-surprise-41", emotion="surprise", title="超能力", artist="G.E.M. 邓紫棋", query="超能力 邓紫棋"),
+    dict(id="vocal-surprise-42", emotion="surprise", title="新地球", artist="林俊杰", query="新地球 林俊杰"),
+    dict(id="vocal-surprise-43", emotion="surprise", title="突然的自我", artist="伍佰", query="突然的自我 伍佰"),
+    dict(id="vocal-surprise-44", emotion="surprise", title="Levitating", artist="Dua Lipa", query="Levitating Dua Lipa"),
+    dict(id="vocal-surprise-45", emotion="surprise", title="Blinding Lights", artist="The Weeknd", query="Blinding Lights The Weeknd"),
+    dict(id="vocal-surprise-46", emotion="surprise", title="干杯", artist="五月天", query="干杯 五月天"),
+    dict(id="vocal-surprise-47", emotion="surprise", title="招牌动作", artist="蔡依林", query="招牌动作 蔡依林"),
+    dict(id="vocal-surprise-48", emotion="surprise", title="野蛮游戏", artist="蔡依林", query="野蛮游戏 蔡依林"),
+    dict(id="vocal-surprise-49", emotion="surprise", title="最伟大的作品", artist="周杰伦", query="最伟大的作品 周杰伦"),
+    dict(id="vocal-surprise-50", emotion="surprise", title="跨时代", artist="周杰伦", query="跨时代 周杰伦"),
+    dict(id="vocal-surprise-51", emotion="surprise", title="超人不会飞", artist="周杰伦", query="超人不会飞 周杰伦"),
+    dict(id="vocal-surprise-52", emotion="surprise", title="派对动物", artist="五月天", query="派对动物 五月天"),
+    dict(id="vocal-surprise-53", emotion="surprise", title="As It Was", artist="Harry Styles", query="As It Was Harry Styles"),
+    dict(id="vocal-surprise-54", emotion="surprise", title="Watermelon Sugar", artist="Harry Styles", query="Watermelon Sugar Harry Styles"),
+    dict(id="vocal-surprise-55", emotion="surprise", title="爱的飞行日记", artist="周杰伦", query="爱的飞行日记 周杰伦"),
+    dict(id="vocal-surprise-56", emotion="surprise", title="Adore You", artist="Harry Styles", query="Adore You Harry Styles"),
+    # 厌 · 嫌弃、自嘲、刺耳，不用漂亮情歌（网红热歌排前面）
+    dict(id="vocal-disgust-57", emotion="disgust", title="We Are Never Ever Getting Back Together", artist="Taylor Swift", query="We Are Never Ever Getting Back Together Taylor Swift"),
+    dict(id="vocal-disgust-58", emotion="disgust", title="Anti-Hero", artist="Taylor Swift", query="Anti-Hero Taylor Swift"),
+    dict(id="vocal-disgust-59", emotion="disgust", title="I Knew You Were Trouble", artist="Taylor Swift", query="I Knew You Were Trouble Taylor Swift"),
+    dict(id="vocal-disgust-60", emotion="disgust", title="差不多姑娘", artist="G.E.M. 邓紫棋", query="差不多姑娘 邓紫棋"),
+    dict(id="vocal-disgust-61", emotion="disgust", title="爱情废柴", artist="周杰伦", query="爱情废柴 周杰伦"),
+    dict(id="vocal-disgust-62", emotion="disgust", title="Perfect Illusion", artist="Lady Gaga", query="Perfect Illusion Lady Gaga"),
+    dict(id="vocal-disgust-63", emotion="disgust", title="你不是真正的快乐", artist="五月天", query="你不是真正的快乐 五月天"),
+    dict(id="vocal-disgust-64", emotion="disgust", title="You Need To Calm Down", artist="Taylor Swift", query="You Need To Calm Down Taylor Swift"),
+    dict(id="vocal-disgust-65", emotion="disgust", title="うっせぇわ", artist="Ado", query="うっせぇわ Ado"),
+    dict(id="vocal-disgust-66", emotion="disgust", title="借口", artist="周杰伦", query="借口 周杰伦"),
+    dict(id="vocal-disgust-67", emotion="disgust", title="traitor", artist="Olivia Rodrigo", query="traitor Olivia Rodrigo"),
+    dict(id="vocal-disgust-68", emotion="disgust", title="get him back!", artist="Olivia Rodrigo", query="get him back Olivia Rodrigo"),
     dict(id="vocal-disgust-01", emotion="disgust", title="丑八怪", artist="薛之谦", query="丑八怪 薛之谦"),
     dict(id="vocal-disgust-02", emotion="disgust", title="演员", artist="薛之谦", query="演员 薛之谦"),
     dict(id="vocal-disgust-09", emotion="disgust", title="淘汰", artist="陈奕迅", query="淘汰 陈奕迅"),
@@ -920,7 +1226,35 @@ VOCAL_SONGBOOK = [
     dict(id="vocal-disgust-38", emotion="disgust", title="献世", artist="陈小春", query="献世 陈小春"),
     dict(id="vocal-disgust-39", emotion="disgust", title="十面埋伏", artist="陈奕迅", query="十面埋伏 陈奕迅"),
     dict(id="vocal-disgust-40", emotion="disgust", title="你给我听好", artist="陈奕迅", query="你给我听好 陈奕迅"),
-    # 中性 · 平走、日常，不哭不闹不嗨
+    dict(id="vocal-disgust-41", emotion="disgust", title="认真的雪", artist="薛之谦", query="认真的雪 薛之谦"),
+    dict(id="vocal-disgust-42", emotion="disgust", title="方圆几里", artist="薛之谦", query="方圆几里 薛之谦"),
+    dict(id="vocal-disgust-43", emotion="disgust", title="句号", artist="G.E.M. 邓紫棋", query="句号 邓紫棋"),
+    dict(id="vocal-disgust-44", emotion="disgust", title="他不爱我", artist="莫文蔚", query="他不爱我 莫文蔚"),
+    dict(id="vocal-disgust-45", emotion="disgust", title="What The Hell", artist="Avril Lavigne", query="What The Hell Avril Lavigne"),
+    dict(id="vocal-disgust-46", emotion="disgust", title="My Happy Ending", artist="Avril Lavigne", query="My Happy Ending Avril Lavigne"),
+    dict(id="vocal-disgust-47", emotion="disgust", title="Ironic", artist="Alanis Morissette", query="Ironic Alanis Morissette"),
+    dict(id="vocal-disgust-48", emotion="disgust", title="Smile", artist="Avril Lavigne", query="Smile Avril Lavigne"),
+    dict(id="vocal-disgust-49", emotion="disgust", title="摩天大楼", artist="薛之谦", query="摩天大楼 薛之谦"),
+    dict(id="vocal-disgust-50", emotion="disgust", title="骆驼", artist="薛之谦", query="骆驼 薛之谦"),
+    dict(id="vocal-disgust-51", emotion="disgust", title="Don't Tell Me", artist="Avril Lavigne", query="Don't Tell Me Avril Lavigne"),
+    dict(id="vocal-disgust-52", emotion="disgust", title="病态", artist="薛之谦", query="病态 薛之谦"),
+    dict(id="vocal-disgust-53", emotion="disgust", title="Uninvited", artist="Alanis Morissette", query="Uninvited Alanis Morissette"),
+    dict(id="vocal-disgust-54", emotion="disgust", title="不是我不明白", artist="崔健", query="不是我不明白 崔健"),
+    dict(id="vocal-disgust-55", emotion="disgust", title="天外来物", artist="薛之谦", query="天外来物 薛之谦"),
+    dict(id="vocal-disgust-56", emotion="disgust", title="野心", artist="薛之谦", query="野心 薛之谦"),
+    # 中性 · 平走、日常，不哭不闹不嗨（网红热歌排前面）
+    dict(id="vocal-neutral-57", emotion="neutral", title="蜗牛", artist="周杰伦", query="蜗牛 周杰伦"),
+    dict(id="vocal-neutral-58", emotion="neutral", title="手写的从前", artist="周杰伦", query="手写的从前 周杰伦"),
+    dict(id="vocal-neutral-59", emotion="neutral", title="Always Online", artist="林俊杰", query="Always Online 林俊杰"),
+    dict(id="vocal-neutral-60", emotion="neutral", title="Lover", artist="Taylor Swift", query="Lover Taylor Swift"),
+    dict(id="vocal-neutral-61", emotion="neutral", title="Style", artist="Taylor Swift", query="Style Taylor Swift"),
+    dict(id="vocal-neutral-62", emotion="neutral", title="Enchanted", artist="Taylor Swift", query="Enchanted Taylor Swift"),
+    dict(id="vocal-neutral-63", emotion="neutral", title="大鱼", artist="周深", query="大鱼 周深"),
+    dict(id="vocal-neutral-64", emotion="neutral", title="第二天堂", artist="林俊杰", query="第二天堂 林俊杰"),
+    dict(id="vocal-neutral-65", emotion="neutral", title="听爸爸的话", artist="周杰伦", query="听爸爸的话 周杰伦"),
+    dict(id="vocal-neutral-66", emotion="neutral", title="屋顶", artist="周杰伦", query="屋顶 周杰伦"),
+    dict(id="vocal-neutral-67", emotion="neutral", title="交换余生", artist="林俊杰", query="交换余生 林俊杰"),
+    dict(id="vocal-neutral-68", emotion="neutral", title="Die With A Smile", artist="Lady Gaga", query="Die With A Smile Lady Gaga"),
     dict(id="vocal-neutral-06", emotion="neutral", title="晴天", artist="周杰伦", query="晴天 周杰伦"),
     dict(id="vocal-neutral-09", emotion="neutral", title="七里香", artist="周杰伦", query="七里香 周杰伦"),
     dict(id="vocal-neutral-07", emotion="neutral", title="稻香", artist="周杰伦", query="稻香 周杰伦"),
@@ -961,7 +1295,80 @@ VOCAL_SONGBOOK = [
     dict(id="vocal-neutral-38", emotion="neutral", title="光年之外", artist="G.E.M. 邓紫棋", query="光年之外 邓紫棋"),
     dict(id="vocal-neutral-39", emotion="neutral", title="童年", artist="罗大佑", query="童年 罗大佑"),
     dict(id="vocal-neutral-40", emotion="neutral", title="Photograph", artist="Ed Sheeran", query="Photograph Ed Sheeran"),
+    dict(id="vocal-neutral-41", emotion="neutral", title="江南", artist="林俊杰", query="江南 林俊杰"),
+    dict(id="vocal-neutral-42", emotion="neutral", title="不为谁而作的歌", artist="林俊杰", query="不为谁而作的歌 林俊杰"),
+    dict(id="vocal-neutral-43", emotion="neutral", title="将故事写成我们", artist="林俊杰", query="将故事写成我们 林俊杰"),
+    dict(id="vocal-neutral-44", emotion="neutral", title="这世界那么多人", artist="莫文蔚", query="这世界那么多人 莫文蔚"),
+    dict(id="vocal-neutral-45", emotion="neutral", title="忽然之间", artist="莫文蔚", query="忽然之间 莫文蔚"),
+    dict(id="vocal-neutral-46", emotion="neutral", title="平凡之路", artist="朴树", query="平凡之路 朴树"),
+    dict(id="vocal-neutral-47", emotion="neutral", title="那些花儿", artist="朴树", query="那些花儿 朴树"),
+    dict(id="vocal-neutral-48", emotion="neutral", title="岁月神偷", artist="金玟岐", query="岁月神偷 金玟岐"),
+    dict(id="vocal-neutral-49", emotion="neutral", title="Shape of You", artist="Ed Sheeran", query="Shape of You Ed Sheeran"),
+    dict(id="vocal-neutral-50", emotion="neutral", title="我记得", artist="赵雷", query="我记得 赵雷"),
+    dict(id="vocal-neutral-51", emotion="neutral", title="鼓楼", artist="赵雷", query="鼓楼 赵雷"),
+    dict(id="vocal-neutral-52", emotion="neutral", title="Thinking Out Loud", artist="Ed Sheeran", query="Thinking Out Loud Ed Sheeran"),
+    dict(id="vocal-neutral-53", emotion="neutral", title="阿刁", artist="赵雷", query="阿刁 赵雷"),
+    dict(id="vocal-neutral-54", emotion="neutral", title="我们的时光", artist="赵雷", query="我们的时光 赵雷"),
+    dict(id="vocal-neutral-55", emotion="neutral", title="虚拟", artist="陈粒", query="虚拟 陈粒"),
+    dict(id="vocal-neutral-56", emotion="neutral", title="七楼", artist="陈粒", query="七楼 陈粒"),
+    dict(id="vocal-happy-69", emotion="happy", title="爷爷泡的茶", artist="周杰伦", query="爷爷泡的茶 周杰伦"),
+    dict(id="vocal-happy-70", emotion="happy", title="乌克丽丽", artist="周杰伦", query="乌克丽丽 周杰伦"),
+    dict(id="vocal-happy-71", emotion="happy", title="傻笑", artist="周杰伦", query="傻笑 周杰伦"),
+    dict(id="vocal-happy-72", emotion="happy", title="翅膀", artist="林俊杰", query="翅膀 林俊杰"),
+    dict(id="vocal-happy-73", emotion="happy", title="期待爱", artist="林俊杰", query="期待爱 林俊杰"),
+    dict(id="vocal-happy-74", emotion="happy", title="绿光", artist="孙燕姿", query="绿光 孙燕姿"),
+    dict(id="vocal-happy-75", emotion="happy", title="宁夏", artist="梁静茹", query="宁夏 梁静茹"),
+    dict(id="vocal-happy-76", emotion="happy", title="不想长大", artist="S.H.E", query="不想长大 SHE"),
+    dict(id="vocal-angry-69", emotion="angry", title="进阶", artist="林俊杰", query="进阶 林俊杰"),
+    dict(id="vocal-angry-70", emotion="angry", title="圣所", artist="林俊杰", query="圣所 林俊杰"),
+    dict(id="vocal-angry-71", emotion="angry", title="春天里", artist="汪峰", query="春天里 汪峰"),
+    dict(id="vocal-angry-72", emotion="angry", title="灰色轨迹", artist="Beyond", query="灰色轨迹 Beyond"),
+    dict(id="vocal-angry-73", emotion="angry", title="大地", artist="Beyond", query="大地 Beyond"),
+    dict(id="vocal-angry-74", emotion="angry", title="龙的传人", artist="王力宏", query="龙的传人 王力宏"),
+    dict(id="vocal-angry-75", emotion="angry", title="改变自己", artist="王力宏", query="改变自己 王力宏"),
+    dict(id="vocal-angry-76", emotion="angry", title="裂心", artist="王力宏", query="裂心 王力宏"),
+    dict(id="vocal-sad-69", emotion="sad", title="说了再见", artist="周杰伦", query="说了再见 周杰伦"),
+    dict(id="vocal-sad-70", emotion="sad", title="白色风车", artist="周杰伦", query="白色风车 周杰伦"),
+    dict(id="vocal-sad-71", emotion="sad", title="珊瑚海", artist="周杰伦", query="珊瑚海 周杰伦"),
+    dict(id="vocal-sad-72", emotion="sad", title="一点点", artist="周杰伦", query="一点点 周杰伦"),
+    dict(id="vocal-sad-73", emotion="sad", title="手语", artist="周杰伦", query="手语 周杰伦"),
+    dict(id="vocal-sad-74", emotion="sad", title="后会无期", artist="G.E.M. 邓紫棋", query="后会无期 邓紫棋"),
+    dict(id="vocal-sad-75", emotion="sad", title="于心有愧", artist="陈奕迅", query="于心有愧 陈奕迅"),
+    dict(id="vocal-sad-76", emotion="sad", title="后来的我们", artist="五月天", query="后来的我们 五月天"),
+    dict(id="vocal-fear-69", emotion="fear", title="断了的弦", artist="周杰伦", query="断了的弦 周杰伦"),
+    dict(id="vocal-fear-70", emotion="fear", title="爱在西元前", artist="周杰伦", query="爱在西元前 周杰伦"),
+    dict(id="vocal-fear-71", emotion="fear", title="天涯过客", artist="周杰伦", query="天涯过客 周杰伦"),
+    dict(id="vocal-fear-72", emotion="fear", title="上海一九四三", artist="周杰伦", query="上海一九四三 周杰伦"),
+    dict(id="vocal-fear-73", emotion="fear", title="倩女幽魂", artist="张国荣", query="倩女幽魂 张国荣"),
+    dict(id="vocal-fear-74", emotion="fear", title="化身孤岛的鲸", artist="周深", query="化身孤岛的鲸 周深"),
+    dict(id="vocal-fear-75", emotion="fear", title="陀飞轮", artist="陈奕迅", query="陀飞轮 陈奕迅"),
+    dict(id="vocal-fear-76", emotion="fear", title="如烟", artist="五月天", query="如烟 五月天"),
+    dict(id="vocal-surprise-69", emotion="surprise", title="公主病", artist="周杰伦", query="公主病 周杰伦"),
+    dict(id="vocal-surprise-70", emotion="surprise", title="达拉崩吧", artist="周深", query="达拉崩吧 周深"),
+    dict(id="vocal-surprise-71", emotion="surprise", title="月亮之上", artist="凤凰传奇", query="月亮之上 凤凰传奇"),
+    dict(id="vocal-surprise-72", emotion="surprise", title="美人计", artist="蔡依林", query="美人计 蔡依林"),
+    dict(id="vocal-surprise-73", emotion="surprise", title="就是爱", artist="蔡依林", query="就是爱 蔡依林"),
+    dict(id="vocal-surprise-74", emotion="surprise", title="心跳", artist="王力宏", query="心跳 王力宏"),
+    dict(id="vocal-surprise-75", emotion="surprise", title="好想爱这个世界啊", artist="华晨宇", query="好想爱这个世界啊 华晨宇"),
+    dict(id="vocal-surprise-76", emotion="surprise", title="爱无赦", artist="蔡依林", query="爱无赦 蔡依林"),
+    dict(id="vocal-disgust-69", emotion="disgust", title="我不配", artist="周杰伦", query="我不配 周杰伦"),
+    dict(id="vocal-disgust-70", emotion="disgust", title="对不起", artist="周杰伦", query="对不起 周杰伦"),
+    dict(id="vocal-disgust-71", emotion="disgust", title="一丝不挂", artist="陈奕迅", query="一丝不挂 陈奕迅"),
+    dict(id="vocal-disgust-72", emotion="disgust", title="沙龙", artist="陈奕迅", query="沙龙 陈奕迅"),
+    dict(id="vocal-disgust-73", emotion="disgust", title="戒烟", artist="李荣浩", query="戒烟 李荣浩"),
+    dict(id="vocal-disgust-74", emotion="disgust", title="我知道你很难过", artist="蔡依林", query="我知道你很难过 蔡依林"),
+    dict(id="vocal-disgust-75", emotion="disgust", title="成全", artist="林宥嘉", query="成全 林宥嘉"),
+    dict(id="vocal-disgust-76", emotion="disgust", title="怎么了", artist="S.H.E", query="怎么了 SHE"),
+    dict(id="vocal-neutral-69", emotion="neutral", title="娘子", artist="周杰伦", query="娘子 周杰伦"),
+    dict(id="vocal-neutral-70", emotion="neutral", title="大笨钟", artist="周杰伦", query="大笨钟 周杰伦"),
+    dict(id="vocal-neutral-71", emotion="neutral", title="达尔文", artist="林俊杰", query="达尔文 林俊杰"),
+    dict(id="vocal-neutral-72", emotion="neutral", title="伟大的渺小", artist="林俊杰", query="伟大的渺小 林俊杰"),
+    dict(id="vocal-neutral-73", emotion="neutral", title="岁月如歌", artist="陈奕迅", query="岁月如歌 陈奕迅"),
+    dict(id="vocal-neutral-74", emotion="neutral", title="无条件", artist="陈奕迅", query="无条件 陈奕迅"),
+    dict(id="vocal-neutral-75", emotion="neutral", title="天天", artist="陶喆", query="天天 陶喆"),
+    dict(id="vocal-neutral-76", emotion="neutral", title="小手拉大手", artist="梁静茹", query="小手拉大手 梁静茹"),
 ]
+VOCAL_SONGBOOK = _prefer_chinese_book(VOCAL_SONGBOOK)
 
 
 def is_instrumental(title: str = "", artist: str = "", genre: str = "") -> bool:
@@ -979,10 +1386,21 @@ def is_instrumental(title: str = "", artist: str = "", genre: str = "") -> bool:
 
 
 def is_stock_track(title: str = "", artist: str = "") -> bool:
-    blob = f"{title} {artist}".lower()
-    if any(mark in blob for mark in STOCK_TITLE_MARKERS):
+    blob = fold_zh(f"{title} {artist}")
+    if any(fold_zh(mark) in blob for mark in STOCK_TITLE_MARKERS):
         return True
-    if any(who in blob for who in SKIP_PERFORMERS):
+    if any(fold_zh(who) in blob for who in SKIP_PERFORMERS):
+        return True
+    return False
+
+
+def is_cover_version(title: str = "", artist: str = "") -> bool:
+    blob = fold_zh(f"{title} {artist}")
+    if any(fold_zh(mark) in blob for mark in COVER_MARKERS):
+        return True
+    if re.search(r"\blive\b", blob) or re.search(r"\bcover\b", blob):
+        return True
+    if (title or "").count("+") >= 2:
         return True
     return False
 
@@ -991,5 +1409,7 @@ def is_vocal_song(title: str = "", artist: str = "", genre: str = "") -> bool:
     if is_instrumental(title, artist, genre):
         return False
     if is_stock_track(title, artist):
+        return False
+    if is_cover_version(title, artist):
         return False
     return True

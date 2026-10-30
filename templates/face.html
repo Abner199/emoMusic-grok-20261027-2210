@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=52" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=71" />
 </head>
 <body class="face-page" data-emotion="idle">
   <header class="face-top">
@@ -51,16 +51,37 @@
   </div>
 
   <section class="face-shell">
-    <div class="viewport face-viewport" id="viewport">
-      <video id="cam" class="is-mirror" playsinline webkit-playsinline autoplay muted></video>
-      <canvas id="shot" hidden></canvas>
-      <canvas id="face-overlay" class="face-overlay" aria-hidden="true"></canvas>
+    <div class="viewport face-viewport" id="viewport" data-fit="cover">
+      <div class="cam-layer" id="cam-layer">
+        <video id="cam" class="is-mirror" playsinline webkit-playsinline autoplay muted></video>
+        <canvas id="shot" hidden></canvas>
+        <canvas id="face-overlay" class="face-overlay" aria-hidden="true"></canvas>
+      </div>
       <div class="live-emo-hud" id="live-emo-hud" hidden data-emo="idle">
         <span class="live-emo-dot" id="live-emo-dot" hidden></span>
         <strong id="live-emo-zh"></strong>
         <span id="live-emo-name">寻找人脸</span>
         <em id="live-emo-pct"></em>
         <em id="live-emo-count"></em>
+      </div>
+      <div class="cam-dock" id="cam-dock">
+        <div class="cam-dock-row">
+          <span class="cam-dock-label">关键点</span>
+          <div class="dock-picks" id="landmark-picks" role="radiogroup" aria-label="关键点显示">
+            <button type="button" class="dock-pick is-on" data-landmark="overlay" role="radio" aria-checked="true" title="实拍标注">实拍</button>
+            <button type="button" class="dock-pick" data-landmark="mesh" role="radio" aria-checked="false" title="线框骨架">线框</button>
+            <button type="button" class="dock-pick" data-landmark="off" role="radio" aria-checked="false" title="不显示关键点">关闭</button>
+          </div>
+        </div>
+        <div class="cam-dock-row">
+          <button type="button" class="dock-pick" id="btn-cam-fill" title="摄像头铺满整个窗口">铺满窗口</button>
+          <button type="button" class="dock-pick is-on" id="btn-cam-fit" title="画面铺满视窗">铺满画面</button>
+          <label class="cam-zoom" title="放大缩小比率">
+            <span>比率</span>
+            <input type="range" id="cam-zoom" min="50" max="250" step="5" value="100" aria-label="摄像头放大缩小比率" />
+            <em id="cam-zoom-val">100%</em>
+          </label>
+        </div>
       </div>
       <div class="cam-empty" id="cam-empty">
         <p id="cam-empty-text">点「开启摄像头」后，这里会标出画面里每一张脸的情绪。</p>
@@ -69,7 +90,8 @@
     </div>
     <div class="vote-bar" id="vote-bar" hidden></div>
   </section>
-  <p class="hint" id="face-hint">YuNet 检测 · MobileFaceNet 逐脸识别 · 单人精检只取主脸 · 多人远场按多数票推荐</p>
-  <script src="{{ url_for('static', filename='js/face.js') }}?v=51"></script>
+  <p class="hint" id="face-hint">YuNet 五点 · FACS 口眼眉线索 · 实拍 / 线框可切换 · 单人精检只取主脸 · 多人远场按多数票推荐</p>
+  <script src="{{ url_for('static', filename='js/face-draw.js') }}?v=71"></script>
+  <script src="{{ url_for('static', filename='js/face.js') }}?v=71"></script>
 </body>
 </html>

@@ -4,13 +4,13 @@
 
   const EMO_ORDER = ["happy", "angry", "sad", "fear", "surprise", "disgust", "neutral"];
   const EMO_META = {
-    happy: { zh: "喜", name: "喜悦", color: "#f0c14b" },
-    angry: { zh: "怒", name: "愤怒", color: "#e23d3d" },
-    sad: { zh: "哀", name: "悲伤", color: "#5b8cff" },
-    fear: { zh: "惧", name: "恐惧", color: "#8b6ccf" },
-    surprise: { zh: "惊", name: "惊讶", color: "#ff6b9d" },
-    disgust: { zh: "厌", name: "厌恶", color: "#3d8b6e" },
-    neutral: { zh: "中", name: "平静", color: "#8b9bb4" },
+    happy: { zh: "喜", name: "喜悦", color: "#ffd400" },
+    angry: { zh: "怒", name: "愤怒", color: "#e02020" },
+    sad: { zh: "哀", name: "悲伤", color: "#4e7390" },
+    fear: { zh: "惧", name: "恐惧", color: "#6b2d91" },
+    surprise: { zh: "惊", name: "惊讶", color: "#ff7a18" },
+    disgust: { zh: "厌", name: "厌恶", color: "#6f7d32" },
+    neutral: { zh: "中", name: "平静", color: "#4ec6f5" },
     idle: { zh: "待", name: "待识别", color: "#c4a574" },
   };
   const EMO_HEX = Object.fromEntries(Object.keys(EMO_META).map((k) => [k, EMO_META[k].color]));
@@ -150,12 +150,20 @@
     audioUnlocked: false,
     autoplayWarned: false,
     lastEmotion: "",
+    uiEmo: "",
+    uiTagSig: "",
+    uiGuess: "",
+    uiGuessHits: 0,
+    uiGuessAt: 0,
     lockEmotion: "",
     lockAt: 0,
     holdRelaxed: false,
     holdTick: 0,
     liveGuess: "",
     liveGuessCount: 0,
+    trackEmo: "",
+    trackEmoAt: 0,
+    liveKickAt: 0,
     failed: new Set(),
     history: [],
     historyId: "",
@@ -163,6 +171,13 @@
     lastPlayedStamp: "",
     replayHistory: false,
     voiceOn: localStorage.getItem("emotune-voice") !== "0",
+    lastSpokenEmo: "",
+    lastSpokenAt: 0,
+    lastSpokenText: "",
+    speaking: false,
+    speakPending: "",
+    speakHits: 0,
+    speakSince: 0,
     onlineOn: localStorage.getItem("emotune-online") !== "0",
     onlineFailCount: 0,
     onlineFailAt: 0,
@@ -174,12 +189,22 @@
     strategy: localStorage.getItem("emotune-strategy") || "iso",
     strategies: [],
     faceMode: localStorage.getItem("emotune-face-mode") || "solo",
+    landmarkMode: localStorage.getItem("emotune-landmark") || "overlay",
+    camZoom: 1,
+    camFill: false,
+    camFit: localStorage.getItem("emotune-cam-fit") === "contain" ? "contain" : "cover",
     camId: localStorage.getItem("emotune-cam") || "",
     mirror: true,
     videoUrl: "",
     audioCtx: null,
     analyser: null,
     vizRaf: 0,
+    vizEnv: [],
+    vizBpm: 0,
+    vizTextAt: 0,
+    vizTextSig: "",
+    vizLastF0: 0,
+    vizLastC: 0,
     theme: localStorage.getItem("emotune-theme") || "night",
     lyricLines: [],
     lyricToken: 0,
@@ -188,6 +213,13 @@
   };
   const lyricCache = new Map();
   const THEMES = ["night", "paper", "ink", "rouge", "celadon", "moon"];
+  const LANDMARK_MODES = ["overlay", "mesh", "off"];
+  if (!LANDMARK_MODES.includes(state.landmarkMode)) state.landmarkMode = "overlay";
+  {
+    const raw = localStorage.getItem("emotune-cam-zoom");
+    const z = raw == null || raw === "" ? NaN : Number(raw);
+    state.camZoom = Number.isFinite(z) ? Math.max(0.5, Math.min(2.5, z)) : 1;
+  }
 
   function applyTheme(id, persist) {
     const theme = THEMES.includes(id) ? id : "night";
@@ -339,10 +371,70 @@
     audio.volume = Number(ui.vol && ui.vol.value != null ? ui.vol.value : 0.86);
   }
 
-  function speakText(text) {
+  const LIVE_SPEAK_DWELL_MS = 2500;
+  const SPIKE_SPEAK_DWELL_MS = 400;
+
+  function speakDwellMs(id) {
+    return TRANSIENT_EMO[id] ? SPIKE_SPEAK_DWELL_MS : LIVE_SPEAK_DWELL_MS;
+  }
+
+  function cancelSpeech() {
+    state.speaking = false;
+    try {
+      window.speechSynthesis && window.speechSynthesis.cancel();
+    } catch {
+      /* ignore */
+    }
+    duckMusic(false);
+  }
+
+  function hushVoice() {
+    cancelSpeech();
+    resetLiveSpeak("");
+  }
+
+  function resetLiveSpeak(id) {
+    const next = id && EMO_META[id] && id !== "idle" ? id : "";
+    const current = state.speakPending || state.lastSpokenEmo || "";
+    if (state.speaking && next !== current) cancelSpeech();
+    state.speakPending = next;
+    state.speakHits = 0;
+    state.speakSince = next ? Date.now() : 0;
+  }
+
+  function tickUiSpeak(emotion) {
+    if ((!state.live && !state.facePopActive) || !state.voiceOn) return;
+    const id = state.uiEmo;
+    if (!id || id === "idle") {
+      if (state.speakPending) resetLiveSpeak("");
+      return;
+    }
+    if (id === state.lastSpokenEmo) {
+      if (state.speakPending && state.speakPending !== id) resetLiveSpeak("");
+      return;
+    }
+    if (state.speakPending !== id) {
+      resetLiveSpeak(id);
+      return;
+    }
+    if (Date.now() - (state.speakSince || 0) >= speakDwellMs(id)) {
+      const meta = EMO_META[id] || {};
+      const same = emotion && emotion.id === id ? emotion : null;
+      speakEmotionChange({
+        id,
+        zh: (same && same.zh) || meta.zh,
+        name: (same && same.name) || meta.name,
+      });
+      state.speakPending = "";
+      state.speakHits = 0;
+    }
+  }
+
+  function speakText(text, force) {
     if (!state.voiceOn || !text) return false;
     if (!("speechSynthesis" in window)) return false;
     const synth = window.speechSynthesis;
+    if (!force && state.speaking && state.lastSpokenText === text) return false;
     try {
       synth.cancel();
     } catch {
@@ -355,18 +447,28 @@
     utter.volume = 1;
     if (!state.zhVoice) refreshZhVoice();
     if (state.zhVoice) utter.voice = state.zhVoice;
-    utter.onend = () => duckMusic(false);
-    utter.onerror = () => duckMusic(false);
+    const done = () => {
+      state.speaking = false;
+      duckMusic(false);
+    };
+    utter.onend = done;
+    utter.onerror = done;
+    state.speaking = true;
+    state.lastSpokenText = text;
     duckMusic(true);
     synth.speak(utter);
     return true;
   }
 
-  function speakEmotionChange(emotion) {
+  function speakEmotionChange(emotion, force) {
     if (!emotion || !emotion.id || emotion.id === "idle") return;
+    const now = Date.now();
+    if (!force && emotion.id === state.lastSpokenEmo) return;
     const zh = emotion.zh || (EMO_META[emotion.id] || {}).zh || "";
     const name = emotion.name || (EMO_META[emotion.id] || {}).name || "";
-    speakText(`情绪标签变为${zh}，${name}`);
+    if (!speakText(`情绪标签变为${zh}，${name}`, force)) return;
+    state.lastSpokenEmo = emotion.id;
+    state.lastSpokenAt = now;
   }
 
   function unlockSpeech() {
@@ -471,6 +573,10 @@
     if (state.mode === "video") return state.live ? "video-live" : "video";
     if (state.mode === "screen") return state.live ? "screen-live" : "screen";
     return state.live ? "camera-live" : "camera";
+  }
+
+  function isLiveSource(source) {
+    return /(?:camera|video|screen)-live$/.test(String(source || ""));
   }
 
   function frameReady() {
@@ -907,34 +1013,73 @@
   }
 
   const TRANSIENT_EMO = { surprise: true, fear: true, angry: true, disgust: true };
+  const DAILY_EMO = { happy: true, sad: true, neutral: true };
   const EMO_HOLD_MS = {
-    surprise: 48000,
-    fear: 48000,
-    angry: 36000,
-    disgust: 36000,
-    happy: 18000,
-    sad: 18000,
+    surprise: 16000,
+    fear: 16000,
+    angry: 12000,
+    disgust: 12000,
+    happy: 8000,
+    sad: 8000,
     neutral: 0,
   };
   const LIVE_SWITCH_HITS = 2;
-  const LIVE_NEUTRAL_HITS = 6;
+  const LIVE_NEUTRAL_HITS = 3;
   const LIVE_MIN_PROB = 0.52;
+  const LIVE_FIRST_PROB = { surprise: 0.7, happy: 0.6, fear: 0.64, angry: 0.58, disgust: 0.6, sad: 0.52 };
+  const LIVE_TICK_MS = 1400;
+  const TRACK_PERIOD_MS = 200;
+  const TRACK_RETRY_MS = 140;
+  const TRACK_KICK_OTHER_MS = 1000;
+  const TRACK_KICK_SPIKE_MS = 480;
+  const TRACK_KICK_NEUTRAL_MS = 1200;
+  const TRACK_KICK_GAP_MS = 1100;
+  const UI_EMO_HITS = 3;
+  const UI_EMO_DWELL_MS = 480;
+  const UI_SPIKE_HITS = 2;
+  const UI_SPIKE_DWELL_MS = 280;
+  const UI_DAILY_NEUTRAL_DWELL_MS = 640;
+
+  function liveProbBar(locked, emoId) {
+    if (TRANSIENT_EMO[emoId]) return LIVE_FIRST_PROB[emoId] || 0.68;
+    if (!locked) return LIVE_FIRST_PROB[emoId] || LIVE_MIN_PROB;
+    return LIVE_MIN_PROB;
+  }
+
+  function uiSwitchNeed(fromId, toId, prob) {
+    if (TRANSIENT_EMO[toId]) {
+      return { hits: UI_SPIKE_HITS, dwell: UI_SPIKE_DWELL_MS, minProb: 0.55 };
+    }
+    if (toId === "neutral" && fromId && fromId !== "neutral" && DAILY_EMO[fromId]) {
+      return { hits: UI_EMO_HITS, dwell: UI_DAILY_NEUTRAL_DWELL_MS, minProb: 0 };
+    }
+    return { hits: UI_EMO_HITS, dwell: UI_EMO_DWELL_MS, minProb: toId === "neutral" ? 0 : 0.42 };
+  }
+
+  function playlistSwitchNeed(locked, emoId, low) {
+    if (!locked && low) return 3;
+    if (TRANSIENT_EMO[emoId] && !low && (!locked || locked === "neutral")) return 1;
+    return LIVE_SWITCH_HITS;
+  }
 
   function holdLeftMs(id) {
-    if (!id || !state.lockAt) return 0;
-    if (TRANSIENT_EMO[id]) return 1;
-    const span = EMO_HOLD_MS[id];
+    if (!id || id === "neutral") return 0;
+    const span = EMO_HOLD_MS[id] || 0;
     if (!span) return 0;
+    if (!state.lockAt) return TRANSIENT_EMO[id] ? 1 : 0;
     return Math.max(0, span - (Date.now() - state.lockAt));
   }
 
   function decideLiveAction(locked, emoId, low) {
     const isSame = !!(emoId && emoId === locked);
     const isStrongOther = !!(emoId && emoId !== locked && emoId !== "neutral" && !low);
-    if (!locked) return { action: "apply", reason: "first" };
+    if (!locked) {
+      if (low && emoId && emoId !== "neutral") return { action: "pending-other", reason: "weak-first" };
+      return { action: "apply", reason: "first" };
+    }
     if (isSame) return { action: "same", reason: locked };
     if (isStrongOther) return { action: "pending-other", reason: emoId };
-    if (TRANSIENT_EMO[locked] || holdLeftMs(locked) > 0) return { action: "hold", reason: "relax" };
+    if (holdLeftMs(locked) > 0) return { action: "hold", reason: "relax" };
     return { action: "pending-neutral", reason: "sustain-expired" };
   }
 
@@ -952,6 +1097,7 @@
     if (state.holdTick) return;
     state.holdTick = setInterval(() => {
       if (!state.live) return;
+      tickUiSpeak();
       const pendingId = state.liveGuess;
       if (pendingId && pendingId !== "neutral" && pendingId !== state.lockEmotion) {
         updateHoldUi(false, (EMO_META[pendingId] || {}).name || "");
@@ -972,8 +1118,10 @@
     const id = state.lockEmotion;
     const live = state.live;
     state.holdRelaxed = pendingName ? false : !!relaxed;
+    const climax = !!(live && TRANSIENT_EMO[id]);
     if (ui.hero) {
       ui.hero.classList.toggle("is-hold", !!(live && id && id !== "neutral"));
+      ui.hero.classList.toggle("is-climax", climax);
       ui.hero.classList.toggle("is-relaxed", !!(live && state.holdRelaxed && id && id !== "neutral"));
     }
     const note = $("#hold-note");
@@ -982,7 +1130,7 @@
     if (!live || !id) {
       hold.hidden = true;
       hold.textContent = "";
-      hold.classList.remove("is-relaxed");
+      hold.classList.remove("is-relaxed", "is-climax");
       return;
     }
     const meta = EMO_META[id] || {};
@@ -990,26 +1138,29 @@
     const left = Math.ceil(holdLeftMs(id) / 1000);
     hold.hidden = false;
     hold.classList.toggle("is-relaxed", !!(state.holdRelaxed && !pendingName));
+    hold.classList.toggle("is-climax", climax && !pendingName);
     if (pendingName) {
       hold.textContent = `好像在变成「${pendingName}」，再保持一下就会切歌`;
     } else if (id === "neutral") {
       hold.textContent = "当前按平静连播。摆出喜、怒、哀、惧、惊、厌等更明显的表情，确认后才会切歌。";
     } else if (state.holdRelaxed) {
-      hold.textContent = TRANSIENT_EMO[id]
-        ? `脸已松开，歌曲仍锁定「${name}」· 做出另一种明显表情才会换歌`
-        : left > 0
+      hold.textContent =
+        left > 0
           ? `脸已松开，歌曲仍锁定「${name}」· 约 ${left} 秒内不会因平静换歌`
-          : `脸已松开，歌曲仍按「${name}」播放 · 持续平静才会切到中性歌单`;
+          : `脸已松开，歌曲仍按「${name}」播放 · 持续平静才会换歌到中性歌单`;
       $("#emo-kicker").textContent = "歌曲锁定";
-      $("#emo-conf").textContent = `表情已松开 · 继续播放${name}歌单`;
-    } else if (TRANSIENT_EMO[id]) {
-      hold.textContent = `已锁定「${name}」· 惊讶、恐惧很难一直保持，松开脸也会继续播`;
+      $("#emo-conf").textContent = `画面此刻平静 · 继续播放${name}歌单`;
+    } else if (TRANSIENT_EMO[id] && left > 0) {
+      hold.textContent = `已锁定「${name}」反差歌 · 约 ${left} 秒内松开脸也不会立刻换歌`;
+    } else if (left > 0) {
+      hold.textContent = `按「${name}」连播 · 约 ${left} 秒内短暂松开也不会换歌`;
     } else {
-      hold.textContent = `按「${name}」连播 · 换一种明显表情才会切歌`;
+      hold.textContent = `按「${name}」连播 · 换一种明显表情或持续平静才会切歌`;
     }
   }
 
   function stopLive() {
+    hushVoice();
     state.live = false;
     const tog = $("#live-toggle");
     if (tog) tog.checked = false;
@@ -1029,10 +1180,10 @@
 
   function sizeFaceOverlay() {
     const canvas = ui.overlay;
-    const vp = $("#viewport");
-    if (!canvas || !vp) return null;
-    const cssW = vp.clientWidth;
-    const cssH = vp.clientHeight;
+    const host = $("#cam-layer") || $("#viewport");
+    if (!canvas || !host) return null;
+    const cssW = host.clientWidth;
+    const cssH = host.clientHeight;
     if (cssW < 8 || cssH < 8) return null;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = Math.round(cssW * dpr);
@@ -1052,8 +1203,12 @@
     let [x, y, bw, bh] = box.map(Number);
     const [iw, ih] = imageSize.map(Number);
     if (!iw || !ih || !bw || !bh) return null;
+    if (window.EmoTuneDraw) return EmoTuneDraw.mapBox(box, imageSize, sized, mirror, state.camFit || "cover");
     if (mirror) x = iw - x - bw;
-    const scale = Math.max(sized.cssW / iw, sized.cssH / ih);
+    const scale =
+      state.camFit === "contain"
+        ? Math.min(sized.cssW / iw, sized.cssH / ih)
+        : Math.max(sized.cssW / iw, sized.cssH / ih);
     const dw = iw * scale;
     const dh = ih * scale;
     const ox = (sized.cssW - dw) / 2;
@@ -1170,17 +1325,131 @@
     }
   }
 
+  function paintEmoNow(data) {
+    const el = $("#emo-now");
+    if (!el) return;
+    if (!isLiveMode() || (ui.empty && !ui.empty.hidden)) {
+      el.hidden = true;
+      return;
+    }
+    const emo = (data && data.ok && data.emotion) || null;
+    const locked = state.lockEmotion;
+    el.hidden = false;
+    if (!emo && !state.uiEmo) {
+      el.textContent = "画面此刻 · 寻找人脸";
+      return;
+    }
+    const id = state.uiEmo || (emo && emo.id) || "";
+    const meta = EMO_META[id] || {};
+    const nm = meta.name || (emo && emo.name) || "";
+    const pct = Math.round(((emo && id === emo.id && emo.prob) || 0) * 100);
+    const lockName = (EMO_META[locked] || {}).name || "";
+    if (locked && id && id !== locked) {
+      el.textContent = `画面此刻 · ${nm}${pct ? " " + pct + "%" : ""} · 歌单仍按${lockName}`;
+    } else {
+      el.textContent = `画面此刻 · ${nm}${pct ? " " + pct + "%" : ""}`;
+    }
+  }
+
+  function commitLiveUi(emo) {
+    const id = emo && emo.id && EMO_META[emo.id] && emo.id !== "idle" ? emo.id : "";
+    if (!id) return state.uiEmo || "";
+    const extra = { name: emo.name, scores: emo.scores };
+    if (!state.uiEmo) {
+      paintUiEmotion(id, extra);
+      state.uiGuess = id;
+      state.uiGuessHits = 0;
+      state.uiGuessAt = Date.now();
+      resetLiveSpeak(id);
+      if (state.live && TRANSIENT_EMO[id]) kickLiveRecognize();
+      return id;
+    }
+    if (id === state.uiEmo) {
+      paintUiEmotion(id, extra);
+      state.uiGuess = id;
+      state.uiGuessHits = 0;
+      tickUiSpeak(emo);
+      return id;
+    }
+    const prob = Number(emo.prob) || 0;
+    const need = uiSwitchNeed(state.uiEmo, id, prob);
+    if (prob < need.minProb && id !== "neutral") return state.uiEmo;
+    if (state.uiGuess !== id) {
+      state.uiGuess = id;
+      state.uiGuessHits = 1;
+      state.uiGuessAt = Date.now();
+      return state.uiEmo;
+    }
+    state.uiGuessHits += 1;
+    if (state.uiGuessHits >= need.hits && Date.now() - (state.uiGuessAt || 0) >= need.dwell) {
+      paintUiEmotion(id, extra);
+      state.uiGuessHits = 0;
+      resetLiveSpeak(id);
+      tickUiSpeak(emo);
+      if (state.live && TRANSIENT_EMO[id]) kickLiveRecognize();
+      return id;
+    }
+    return state.uiEmo;
+  }
+
+  async function kickLiveRecognize() {
+    if (!state.live || !isLiveMode() || state.recognizing || !frameReady()) return;
+    const now = Date.now();
+    if (now - (state.liveKickAt || 0) < TRACK_KICK_GAP_MS) return;
+    state.liveKickAt = now;
+    const blob = await captureBlob(0.92, 1280);
+    if (blob && state.live) recognize(blob, liveSource());
+  }
+
+  function noteTrackEmotion(data) {
+    const id = (data && data.ok && data.emotion && data.emotion.id) || "";
+    const now = Date.now();
+    if (id !== state.trackEmo) {
+      state.trackEmo = id;
+      state.trackEmoAt = now;
+    }
+    if (!state.live) return;
+    const locked = state.lockEmotion;
+    const stable = now - (state.trackEmoAt || now);
+    if (!id) return;
+    if (id !== locked && TRANSIENT_EMO[id] && stable >= TRACK_KICK_SPIKE_MS) kickLiveRecognize();
+    else if (id !== locked && id !== "neutral" && stable >= TRACK_KICK_OTHER_MS) kickLiveRecognize();
+    else if (
+      id === "neutral" &&
+      locked &&
+      locked !== "neutral" &&
+      holdLeftMs(locked) <= 0 &&
+      stable >= TRACK_KICK_NEUTRAL_MS
+    ) {
+      kickLiveRecognize();
+    }
+  }
+
   function updateLiveHud(data) {
+    noteTrackEmotion(data);
     const hud = $("#live-emo-hud");
     if (!hud) return;
     if (ui.empty && !ui.empty.hidden) {
       hud.hidden = true;
+      paintEmoNow(data);
       return;
     }
     hud.hidden = false;
     syncLiveHudDot();
     const emo = (data && data.ok && data.emotion) || null;
     if (!emo) {
+      const keep = state.uiEmo && EMO_META[state.uiEmo] ? state.uiEmo : "";
+      if (keep) {
+        hud.classList.remove("is-miss");
+        hud.dataset.emo = keep;
+        paintHudTone(hud, keep, "", false);
+        const keepMeta = EMO_META[keep] || {};
+        $("#live-emo-zh").textContent = keepMeta.zh || "";
+        $("#live-emo-name").textContent = keepMeta.name || "";
+        $("#live-emo-pct").textContent = "";
+        paintEmoNow(data);
+        return;
+      }
       const changed = hud.dataset.emo !== "idle" || !hud.classList.contains("is-miss");
       hud.dataset.emo = "idle";
       hud.classList.add("is-miss");
@@ -1193,28 +1462,35 @@
       state.lastOverlay = { id: "idle", color: EMO_HEX.idle };
       state.lastVote = null;
       if (changed) flashLiveHud(hud);
+      paintEmoNow(data);
       return;
     }
-    const nextId = emo.id || "idle";
-    const color = emoHex(nextId, emo.color);
-    const changed = hud.dataset.emo !== nextId || hud.classList.contains("is-miss");
+    const shownId = commitLiveUi(emo) || emo.id || "idle";
+    const color = emoHex(shownId, (EMO_META[shownId] || {}).color || emo.color);
+    const changed = hud.dataset.emo !== shownId || hud.classList.contains("is-miss");
     hud.classList.remove("is-miss");
-    hud.dataset.emo = nextId;
-    paintHudTone(hud, nextId, emo.color, false);
+    hud.dataset.emo = shownId;
+    paintHudTone(hud, shownId, color, false);
     if (changed) flashLiveHud(hud);
-    const meta = EMO_META[nextId] || {};
-    $("#live-emo-zh").textContent = meta.zh || emo.zh || "";
-    $("#live-emo-name").textContent = meta.name || emo.name || "";
+    const meta = EMO_META[shownId] || {};
+    $("#live-emo-zh").textContent = meta.zh || "";
+    $("#live-emo-name").textContent = meta.name || "";
     const pct = Math.round((emo.prob || 0) * 100);
-    $("#live-emo-pct").textContent = pct ? `${pct}%` : "";
+    $("#live-emo-pct").textContent = shownId === emo.id && pct ? `${pct}%` : "";
     const vote = (data && data.vote) || {};
     const n = vote.total || data.face_count || 0;
     const countEl = $("#live-emo-count");
     if (countEl) {
       countEl.textContent = n > 1 ? `${n} 张 · 多数 ${vote.majority || n}` : n === 1 ? "1 张脸" : "";
     }
-    state.lastOverlay = { id: nextId, color };
+    state.lastOverlay = { id: shownId, color };
     state.lastVote = vote;
+    paintEmoNow(data);
+    if (Array.isArray(emo.scores) && emo.scores.length) renderProbAndVa(emo.scores, shownId);
+  }
+
+  function clonePoint(p) {
+    return p ? Object.assign({}, p, { x: p.x, y: p.y }) : p;
   }
 
   function cloneOverlayItem(item) {
@@ -1222,7 +1498,26 @@
       box: item.box ? { x: item.box.x, y: item.box.y, w: item.box.w, h: item.box.h } : item.box,
       primary: item.primary,
       emo: item.emo,
+      points: (item.points || []).map(clonePoint),
+      cues: item.cues || [],
     };
+  }
+
+  function lerpPt(a, b, t) {
+    if (!a) return b;
+    if (!b) return a;
+    return Object.assign({}, b, { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  }
+
+  function lerpPoints(prev, next, t) {
+    const map = {};
+    (prev || []).forEach((p) => {
+      if (p && p.id) map[p.id] = p;
+    });
+    return (next || []).map((p) => {
+      const q = map[p.id];
+      return q ? lerpPt(q, p, t) : clonePoint(p);
+    });
   }
 
   function blendOverlay(prev, target, t) {
@@ -1240,11 +1535,69 @@
       });
       if (best >= 0) {
         used.add(best);
-        return { box: lerpBox(prev[best].box, item.box, t), primary: item.primary, emo: item.emo };
+        const old = prev[best];
+        return {
+          box: lerpBox(old.box, item.box, t),
+          primary: item.primary,
+          emo: item.emo,
+          points: lerpPoints(old.points, item.points, t),
+          cues: item.cues || [],
+        };
       }
       return cloneOverlayItem(item);
     });
   }
+
+  function mapPointToCanvas(pt, imageSize, mirror) {
+    const sized = sizeFaceOverlay();
+    if (!sized || pt == null || !imageSize) return null;
+    let x = Number(Array.isArray(pt) ? pt[0] : pt.x);
+    let y = Number(Array.isArray(pt) ? pt[1] : pt.y);
+    const [iw, ih] = imageSize.map(Number);
+    if (!iw || !ih || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    if (window.EmoTuneDraw) return EmoTuneDraw.mapPoint(pt, imageSize, sized, mirror, state.camFit || "cover");
+    if (mirror) x = iw - x;
+    const scale =
+      state.camFit === "contain"
+        ? Math.min(sized.cssW / iw, sized.cssH / ih)
+        : Math.max(sized.cssW / iw, sized.cssH / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    const ox = (sized.cssW - dw) / 2;
+    const oy = (sized.cssH - dh) / 2;
+    return {
+      x: (ox + x * scale) * sized.dpr,
+      y: (oy + y * scale) * sized.dpr,
+    };
+  }
+
+  function mirrorZh(zh, mirror) {
+    if (!mirror) return zh || "";
+    return String(zh || "")
+      .replace(/左/g, "\0")
+      .replace(/右/g, "左")
+      .replace(/\0/g, "右");
+  }
+
+  const FACE_POINT_FALLBACK = [
+    { id: "le", zh: "左眼", symbol: "p₁", part: "eye" },
+    { id: "re", zh: "右眼", symbol: "p₂", part: "eye" },
+    { id: "nose", zh: "鼻尖", symbol: "p₃", part: "nose" },
+    { id: "ml", zh: "左嘴角", symbol: "p₄", part: "mouth" },
+    { id: "mr", zh: "右嘴角", symbol: "p₅", part: "mouth" },
+  ];
+
+  const FACE_LINKS = [
+    ["lb", "rb"],
+    ["le", "re"],
+    ["le", "nose"],
+    ["re", "nose"],
+    ["nose", "ml"],
+    ["nose", "mr"],
+    ["ml", "mr"],
+    ["le", "lb"],
+    ["re", "rb"],
+  ];
 
   function mapTrackItems(data) {
     const imageSize = (data.face && data.face.image_size) || [ui.shot.width, ui.shot.height];
@@ -1258,13 +1611,89 @@
     raw.forEach((f) => {
       const box = mapBoxToCanvas(f.box, imageSize, !!state.mirror);
       if (!box) return;
+      const srcPts =
+        f.points && f.points.length
+          ? f.points
+          : (f.landmarks || []).map((xy, i) =>
+              Object.assign({}, FACE_POINT_FALLBACK[i] || { id: `p${i}`, zh: "点", symbol: `p${i}`, part: "face" }, {
+                x: xy[0],
+                y: xy[1],
+              })
+            );
+      const points = srcPts
+        .map((p) => {
+          const xy = mapPointToCanvas([p.x, p.y], imageSize, !!state.mirror);
+          if (!xy) return null;
+          return Object.assign({}, p, { zh: mirrorZh(p.zh, !!state.mirror), x: xy.x, y: xy.y });
+        })
+        .filter(Boolean);
       mapped.push({
         box,
         primary: !!f.primary,
         emo: f.emotion || data.emotion || {},
+        points,
+        cues: f.cues || [],
       });
     });
     return mapped;
+  }
+
+  function paintFaceLandmarks(ctx, item, color) {
+    if (window.EmoTuneDraw) {
+      if (state.landmarkMode === "mesh") EmoTuneDraw.paintMesh(ctx, item, color);
+      else EmoTuneDraw.paintDots(ctx, item, color);
+      return;
+    }
+    const pts = item.points || [];
+    if (!pts.length) return;
+    pts.forEach((p) => {
+      ctx.beginPath();
+      ctx.fillStyle = color;
+      ctx.arc(p.x, p.y, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function paintFaceCues(ctx, item, color) {
+    if (window.EmoTuneDraw) {
+      EmoTuneDraw.paintAuChips(ctx, item, color, ctx.canvas);
+      return;
+    }
+    const cues = item.cues || [];
+    if (!cues.length) return;
+    ctx.fillStyle = color;
+    ctx.font = '600 12px "Noto Sans SC","Microsoft YaHei",sans-serif';
+    cues.forEach((c, i) => {
+      ctx.fillText(`${c.symbol || ""} ${c.text || ""}`.trim(), 12, 18 + i * 16);
+    });
+  }
+
+  function overlayDisplayItems(mapped) {
+    const shown = state.uiEmo && EMO_META[state.uiEmo] ? state.uiEmo : (state.lastOverlay && state.lastOverlay.id) || "";
+    const shownMeta = EMO_META[shown] || {};
+    const color = (state.lastOverlay && state.lastOverlay.color) || shownMeta.color;
+    return (mapped || []).map((item) => {
+      const emo = item.emo || {};
+      const solo = item.primary || (mapped && mapped.length === 1);
+      if (!solo || !shown || shown === "idle") {
+        if (emo.id && emo.color) return item;
+        return Object.assign({}, item, {
+          emo: Object.assign({}, emo, {
+            id: emo.id || shown || "idle",
+            color: emo.color || color,
+          }),
+        });
+      }
+      return Object.assign({}, item, {
+        emo: Object.assign({}, emo, {
+          id: shown,
+          zh: shownMeta.zh || emo.zh,
+          name: shownMeta.name || emo.name,
+          color: color || emo.color,
+          prob: emo.id === shown ? emo.prob : 0,
+        }),
+      });
+    });
   }
 
   function paintFaceOverlay() {
@@ -1272,60 +1701,23 @@
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     sizeFaceOverlay();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const mapped = state.overlaySmooth || [];
+    if (state.landmarkMode === "off") return;
+    const mapped = overlayDisplayItems(state.overlaySmooth || []);
     if (!mapped.length) return;
     const majority = state.lastOverlay || {};
-    const majorityId = majority.id || "idle";
+    if (window.EmoTuneDraw) {
+      EmoTuneDraw.paintFaces(ctx, mapped, { mode: state.landmarkMode, canvas });
+      return;
+    }
     mapped.forEach((item) => {
-      const box = item.box;
-      const emo = item.emo || {};
-      const emoId = emo.id || majorityId;
-      const color = emoHex(emoId, emo.color);
-      const radius = Math.max(8, box.w * 0.08);
-      ctx.save();
-      roundRectPath(ctx, box.x, box.y, box.w, box.h, radius);
-      ctx.fillStyle = hexToRgba(color, item.primary ? 0.14 : 0.08);
-      ctx.fill();
-      ctx.lineWidth = item.primary ? Math.max(3.2, box.w * 0.018) : 2.2;
+      const color = emoHex((item.emo && item.emo.id) || majority.id, item.emo && item.emo.color);
       ctx.strokeStyle = color;
-      ctx.shadowColor = item.primary ? color : "transparent";
-      ctx.shadowBlur = item.primary ? 16 : 0;
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-      if (item.primary) {
-        ctx.lineWidth = Math.max(4.5, box.w * 0.028);
-        drawCornerBrackets(ctx, box.x, box.y, box.w, box.h, color);
-      }
-      const meta = EMO_META[emoId] || {};
-      const zh = meta.zh || emo.zh || "";
-      const name = meta.name || emo.name || "";
-      const pct = Math.round((emo.prob || 0) * 100);
-      const label = [zh, name, pct ? `${pct}%` : ""].filter(Boolean).join("  ");
-      if (label) {
-        const fontPx = Math.max(13, Math.min(22, box.w * 0.14));
-        ctx.font = `700 ${fontPx}px "Noto Sans SC","Microsoft YaHei",sans-serif`;
-        ctx.textBaseline = "middle";
-        const padX = 10;
-        const tw = ctx.measureText(label).width;
-        const pillW = tw + padX * 2;
-        const pillH = fontPx + 12;
-        let px = box.x;
-        let py = box.y - pillH - 8;
-        if (py < 8) py = box.y + 8;
-        if (px + pillW > canvas.width - 8) px = Math.max(8, canvas.width - pillW - 8);
-        roundRectPath(ctx, px, py, pillW, pillH, pillH / 2);
-        ctx.fillStyle = "rgba(8,7,6,0.78)";
-        ctx.fill();
-        ctx.fillStyle = hexToRgba(color, 0.2);
-        ctx.fill();
-        ctx.lineWidth = 1.6;
-        ctx.strokeStyle = color;
-        ctx.stroke();
-        ctx.fillStyle = color;
-        ctx.fillText(label, px + padX, py + pillH / 2);
-      }
-      ctx.restore();
+      ctx.strokeRect(item.box.x, item.box.y, item.box.w, item.box.h);
+      paintFaceLandmarks(ctx, item, color);
+      if (item.primary) paintFaceCues(ctx, item, color);
     });
   }
 
@@ -1336,7 +1728,7 @@
       if (!state.trackOn) return;
       const target = state.overlayTarget || [];
       if (target.length && (state.overlaySmooth || []).length) {
-        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, 0.4);
+        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, 0.22);
       } else if (target.length) {
         state.overlaySmooth = target.map(cloneOverlayItem);
       }
@@ -1371,10 +1763,8 @@
     state.overlayTarget = mapped;
     if (!state.overlaySmooth.length) {
       state.overlaySmooth = mapped.map(cloneOverlayItem);
-    } else {
-      state.overlaySmooth = blendOverlay(state.overlaySmooth, mapped, 0.72);
+      paintFaceOverlay();
     }
-    paintFaceOverlay();
     ensureOverlayPump();
   }
 
@@ -1403,14 +1793,15 @@
       if (!liveOk) {
         clearFaceOverlay();
         if (state.trackOn && isLiveMode() && frameReady()) {
-          state.trackTimer = setTimeout(tick, 120);
+          state.trackTimer = setTimeout(tick, TRACK_PERIOD_MS);
         }
         return;
       }
       if (!state.trackBusy) {
         state.trackBusy = true;
         try {
-          const blob = await captureBlob(0.72, 640);
+          const crowd = state.faceMode === "crowd";
+          const blob = await captureBlob(crowd ? 0.8 : 0.86, crowd ? 800 : 720);
           if (blob && state.trackOn && isLiveMode()) {
             const fd = new FormData();
             fd.append("image", blob, "track.jpg");
@@ -1421,6 +1812,11 @@
             });
             const data = await res.json();
             if (state.trackOn && isLiveMode()) drawFaceOverlay(data);
+            const elapsed = Number((data && data.elapsed_ms) || 40);
+            if (state.trackOn && isLiveMode() && frameReady()) {
+              state.trackTimer = setTimeout(tick, Math.max(90, TRACK_PERIOD_MS - elapsed));
+            }
+            return;
           }
         } catch {
           /* 追踪失败时下一拍再试 */
@@ -1429,10 +1825,10 @@
         }
       }
       if (state.trackOn && isLiveMode() && frameReady()) {
-        state.trackTimer = setTimeout(tick, 50);
+        state.trackTimer = setTimeout(tick, TRACK_RETRY_MS);
       }
     };
-    state.trackTimer = setTimeout(tick, 40);
+    state.trackTimer = setTimeout(tick, 80);
   }
 
   function showPanel(mode) {
@@ -1457,6 +1853,7 @@
       return;
     }
     stopLive();
+    if (!isLiveMode(next) && state.camFill) setCamFill(false, true);
     if (isLiveMode(prev) || isLiveMode(next)) stopCameraStream();
     showPanel(next);
     setMirror(next === "camera");
@@ -1531,42 +1928,58 @@
 
   function showIdle() {
     document.body.dataset.emotion = "idle";
+    state.uiEmo = "";
+    state.uiTagSig = "";
+    state.uiGuess = "";
+    state.uiGuessHits = 0;
+    state.uiGuessAt = 0;
     if (ui.hero) ui.hero.dataset.emo = "idle";
+    const viz = $("#audio-viz");
+    if (viz) viz.dataset.emo = "idle";
     if (ui.icon) ui.icon.innerHTML = faceSvg("idle", 180);
     showFaceCrop({});
     $("#emo-kicker").textContent = "YuNet · MobileFaceNet FER";
     $("#emo-zh").textContent = "待识别";
     $("#emo-name").textContent = "面向镜头，点识别此刻";
     $("#emo-conf").textContent = "";
-    $("#emo-copy").textContent = "识别后会对照人脸与情绪，并按你选的推荐方式自动连播。惊讶、恐惧等表情松开后，歌曲仍会按这次情绪继续播。";
+    $("#emo-copy").textContent =
+      "识别后人脸、此刻情绪、歌曲、音乐可视化和语音提示共用同一套七类标签。推荐默认同频。日常平静、喜悦、悲伤会稳住再换歌；惊讶、恐惧、愤怒、厌恶认到就锁反差歌。识别此刻或上传立刻说。";
+    const nowEl = $("#emo-now");
+    if (nowEl) {
+      nowEl.hidden = true;
+      nowEl.textContent = "";
+    }
     paintStrategyNow();
     const genre = $("#emo-genre");
     genre.hidden = true;
     genre.textContent = "";
     renderEmoTags([], "");
+    renderProbAndVa([], "");
   }
 
-  function showEmotion(payload) {
+  function showEmotion(payload, opts) {
+    opts = opts || {};
     const e = payload.emotion;
-    const changed = document.body.dataset.emotion !== e.id;
-    document.body.dataset.emotion = e.id;
-    if (ui.hero) ui.hero.dataset.emo = e.id;
-    showFaceCrop(payload);
-    if (ui.icon) {
-      ui.icon.classList.remove("is-pop");
-      ui.icon.innerHTML = faceSvg(e.id, 180);
-      if (changed) {
-        void ui.icon.offsetWidth;
-        ui.icon.classList.add("is-pop");
+    const prev = state.uiEmo;
+    const liveTick = isLiveSource(payload && payload.source);
+    if (!liveTick || opts.commitUi) {
+      paintUiEmotion(e.id, { name: e.name, scores: e.scores });
+      if (e && e.id) {
+        state.uiGuess = e.id;
+        state.uiGuessHits = 0;
+        state.uiGuessAt = Date.now();
+        if (liveTick) {
+          if (e.id !== prev) resetLiveSpeak(e.id);
+          else tickUiSpeak(e);
+        }
       }
     }
+    showFaceCrop(payload);
     $("#emo-kicker").textContent = "YuNet · MobileFaceNet FER";
     const rec = payload.recommendations || {};
     if (rec.strategy && rec.strategy.id) state.strategy = rec.strategy.id;
     paintStrategyNow(rec.strategy);
     const meta = EMO_META[e.id] || {};
-    $("#emo-zh").textContent = meta.zh || e.zh || "";
-    $("#emo-name").textContent = meta.name || e.name || "";
     const conf = Math.round(e.prob * 100);
     const vote = payload.vote || {};
     const many = (vote.total || payload.face_count || 0) > 1;
@@ -1585,9 +1998,10 @@
     genre.textContent = e.genre || "";
     const ms = payload.elapsed_ms || payload.total_ms;
     $("#timing").textContent = ms ? `识别 ${Math.round(ms)} 毫秒` : "";
-    renderEmoTags(e.scores, e.id);
-    if (changed) speakEmotionChange(e);
-    if ((payload && payload.source) !== "camera-live") {
+    if (!liveTick && (opts.speak === true || (opts.speak !== false && prev !== e.id))) {
+      speakEmotionChange(e, opts.speak === true);
+    }
+    if (!liveTick) {
       const narrow = window.matchMedia("(max-width: 980px)").matches;
       if (narrow && ui.hero) {
         requestAnimationFrame(() => {
@@ -1645,7 +2059,7 @@
     const album = song.album ? " · " + esc(prettyText(song.album)) : "";
     const playable = song.playable && song.audio;
     const badge = esc(prettyText(song.source_label || SOURCE_ZH[song.source] || song.source || ""));
-    const faceId = state.lockEmotion || state.lastEmotion || "";
+    const faceId = displayEmotionId() || state.lockEmotion || state.lastEmotion || "";
     const emoId = songEmotionId(song);
     return `<article class="song" data-idx="${idx}" data-emo="${esc(emoId)}">
       <img src="${cover}" alt="${title} 封面" onerror="this.style.opacity=.2" />
@@ -1675,12 +2089,14 @@
       meta ||
       (state.songs.length
         ? `本地曲库 ${state.songs.length} 首 · 自动连续播放`
-        : "识别后自动连播；惊讶、恐惧松开后也不会马上换歌");
+        : "默认同频 · 识别后自动连播；日常平静喜悦悲伤稳住再换歌，惊讶恐惧愤怒厌恶锁反差歌，松开后也不会马上换歌");
     if (!state.songs.length) {
       ui.songs.innerHTML = `<p class="empty-songs">还没有歌曲。完成识别后，这里会列出并自动播放匹配曲目。</p>`;
+      paintBoardCounts(null, 0);
       return;
     }
     ui.songs.innerHTML = state.songs.map(songCard).join("");
+    paintBoardCounts(null, state.songs.length);
   }
 
   function markCurrent() {
@@ -1701,6 +2117,71 @@
 
   function currentEmotionId() {
     return state.lockEmotion || state.lastEmotion || "neutral";
+  }
+
+  function displayEmotionId() {
+    if (state.uiEmo && EMO_META[state.uiEmo] && state.uiEmo !== "idle") return state.uiEmo;
+    if (isLiveMode() && state.trackEmo && EMO_META[state.trackEmo] && state.trackEmo !== "idle") {
+      return state.trackEmo;
+    }
+    const locked = state.lockEmotion || state.lastEmotion || "";
+    return locked && EMO_META[locked] ? locked : "";
+  }
+
+  function paintPlayerEmo(id) {
+    const emoEl = $("#player-emo");
+    if (!emoEl) return;
+    const emoId = id || displayEmotionId();
+    if (!emoId || !EMO_META[emoId] || emoId === "idle") return;
+    const meta = EMO_META[emoId];
+    emoEl.hidden = false;
+    emoEl.dataset.emo = emoId;
+    emoEl.className = "song-emo";
+    emoEl.title = `情绪：${meta.name}`;
+    emoEl.setAttribute("aria-label", `情绪：${meta.name}`);
+    emoEl.innerHTML = `<b>${esc(meta.zh)}</b><i>${esc(meta.name)}</i>`;
+  }
+
+  function paintUiEmotion(id, extra) {
+    extra = extra || {};
+    const emoId = id && EMO_META[id] && id !== "idle" ? id : "";
+    if (!emoId) return;
+    const meta = EMO_META[emoId];
+    const prev = state.uiEmo;
+    state.uiEmo = emoId;
+    document.body.dataset.emotion = emoId;
+    if (ui.hero) ui.hero.dataset.emo = emoId;
+    const zhEl = $("#emo-zh");
+    const nameEl = $("#emo-name");
+    if (zhEl) zhEl.textContent = meta.zh;
+    if (nameEl) nameEl.textContent = extra.name || meta.name;
+    if (ui.icon && prev !== emoId) {
+      ui.icon.classList.remove("is-pop");
+      ui.icon.innerHTML = faceSvg(emoId, 180);
+      void ui.icon.offsetWidth;
+      ui.icon.classList.add("is-pop");
+    } else if (ui.icon && prev === emoId && !String(ui.icon.innerHTML || "").trim()) {
+      ui.icon.innerHTML = faceSvg(emoId, 180);
+    }
+    const panel = $("#audio-viz");
+    if (panel && panel.dataset.emo !== emoId) panel.dataset.emo = emoId;
+    paintPlayerEmo(emoId);
+    const scores = extra.scores;
+    if (Array.isArray(scores) && scores.length) {
+      const sig = `${emoId}|${scores.map((s) => `${s.id}:${Math.round((Number(s.prob) || 0) * 10)}`).join(",")}`;
+      if (sig !== state.uiTagSig) {
+        state.uiTagSig = sig;
+        renderEmoTags(scores, emoId);
+        renderProbAndVa(scores, emoId);
+      }
+    } else if (prev !== emoId) {
+      $$("#emo-tags .emo-tag").forEach((el) => {
+        const on = el.dataset.emo === emoId;
+        el.classList.toggle("is-on", on);
+        el.classList.toggle("is-pulse", on);
+        el.setAttribute("aria-current", on ? "true" : "false");
+      });
+    }
   }
 
   function recsCaption(rec) {
@@ -1758,13 +2239,21 @@
     }
   }
 
+  function playlistOnlineStuck() {
+    const songs = state.songs || [];
+    const online = songs.filter(isOnlineSong);
+    if (!online.length) return true;
+    const failedOnline = online.filter((s) => state.failed.has(songKey(s)));
+    return failedOnline.length >= Math.min(3, online.length) || failedOnline.length === online.length;
+  }
+
   function noteOnlinePlayFail(song) {
     if (!state.onlineOn || !isOnlineSong(song) || state.fallbackBusy) return;
     const now = Date.now();
     if (!state.onlineFailAt) state.onlineFailAt = now;
     state.onlineFailCount += 1;
-    const long = now - state.onlineFailAt >= 12000;
-    if (state.onlineFailCount >= 3 || (state.onlineFailCount >= 2 && long)) {
+    const long = now - state.onlineFailAt >= 10000;
+    if (state.onlineFailCount >= 3 || (state.onlineFailCount >= 2 && long) || playlistOnlineStuck()) {
       fallbackToLocal("在线歌曲长时间播放失败，已自动切换到本地曲库。");
     }
   }
@@ -1778,7 +2267,7 @@
       state.failed.add(songKey(song));
       noteOnlinePlayFail(song);
       if (state.onlineOn) playNext();
-    }, 10000);
+    }, 8000);
   }
 
   function firstPlayable(start = 0, dir = 1) {
@@ -1799,6 +2288,415 @@
     ui.player.classList.toggle("is-viz-off", !state.vizOn);
   }
 
+  function postCamChrome() {
+    if (!faceChannel) return;
+    try {
+      faceChannel.postMessage({
+        type: "cam-chrome",
+        landmark: state.landmarkMode,
+        zoom: state.camZoom,
+        fill: !!state.camFill,
+        fit: state.camFit,
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function applyCamView() {
+    const vp = $("#viewport");
+    const layer = $("#cam-layer");
+    document.body.classList.toggle("is-cam-fill", !!state.camFill);
+    if (vp) {
+      vp.classList.toggle("is-fill", !!state.camFill);
+      vp.classList.toggle("is-contain", state.camFit === "contain");
+      vp.dataset.fit = state.camFit || "cover";
+    }
+    if (layer) layer.style.setProperty("--cam-zoom", String(state.camZoom || 1));
+    const zoomVal = $("#cam-zoom-val");
+    if (zoomVal) zoomVal.textContent = `${Math.round((state.camZoom || 1) * 100)}%`;
+    const zoomInput = $("#cam-zoom");
+    if (zoomInput && Number(zoomInput.value) !== Math.round((state.camZoom || 1) * 100)) {
+      zoomInput.value = String(Math.round((state.camZoom || 1) * 100));
+    }
+    $$("#landmark-picks [data-landmark]").forEach((btn) => {
+      const on = btn.dataset.landmark === state.landmarkMode;
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    const fillBtn = $("#btn-cam-fill");
+    if (fillBtn) {
+      fillBtn.classList.toggle("is-on", !!state.camFill);
+      fillBtn.textContent = state.camFill ? "退出铺满" : "铺满窗口";
+    }
+    const exitBtn = $("#btn-cam-exit");
+    if (exitBtn) exitBtn.hidden = !state.camFill;
+    const fitBtn = $("#btn-cam-fit");
+    if (fitBtn) {
+      const cover = state.camFit !== "contain";
+      fitBtn.classList.toggle("is-on", cover);
+      fitBtn.textContent = cover ? "铺满画面" : "完整画面";
+      fitBtn.dataset.fit = state.camFit;
+    }
+    sizeFaceOverlay();
+    paintFaceOverlay();
+    requestAnimationFrame(() => {
+      sizeFaceOverlay();
+      paintFaceOverlay();
+    });
+  }
+
+  function setLandmarkMode(id, persist) {
+    const next = LANDMARK_MODES.includes(id) ? id : "overlay";
+    state.landmarkMode = next;
+    if (persist !== false) localStorage.setItem("emotune-landmark", next);
+    applyCamView();
+    if (persist) postCamChrome();
+  }
+
+  function setCamZoom(value, persist) {
+    const n = Number(value);
+    state.camZoom = Number.isFinite(n) ? Math.max(0.5, Math.min(2.5, n)) : 1;
+    if (persist !== false) localStorage.setItem("emotune-cam-zoom", String(state.camZoom));
+    applyCamView();
+    if (persist) postCamChrome();
+  }
+
+  function setCamFill(on, persist) {
+    state.camFill = !!on;
+    if (state.camFill) {
+      window.scrollTo(0, 0);
+      setSettingsOpen(false);
+    }
+    applyCamView();
+    if (persist) postCamChrome();
+  }
+
+  function setCamFit(id, persist) {
+    state.camFit = id === "contain" ? "contain" : "cover";
+    if (persist !== false) localStorage.setItem("emotune-cam-fit", state.camFit);
+    applyCamView();
+    if (persist) postCamChrome();
+  }
+
+  function bindCamDock() {
+    $$("#landmark-picks [data-landmark]").forEach((btn) => {
+      btn.addEventListener("click", () => setLandmarkMode(btn.dataset.landmark, true));
+    });
+    const fillBtn = $("#btn-cam-fill");
+    if (fillBtn) fillBtn.addEventListener("click", () => setCamFill(!state.camFill, true));
+    const exitBtn = $("#btn-cam-exit");
+    if (exitBtn) exitBtn.addEventListener("click", () => setCamFill(false, true));
+    const fitBtn = $("#btn-cam-fit");
+    if (fitBtn) {
+      fitBtn.addEventListener("click", () => setCamFit(state.camFit === "contain" ? "cover" : "contain", true));
+    }
+    const zoomInput = $("#cam-zoom");
+    if (zoomInput) {
+      zoomInput.addEventListener("input", () => setCamZoom(Number(zoomInput.value) / 100, true));
+    }
+    window.addEventListener("resize", () => {
+      sizeFaceOverlay();
+      paintFaceOverlay();
+    });
+  }
+
+  function setSettingsOpen(on) {
+    const panel = $("#settings-panel");
+    const btn = $("#btn-settings");
+    if (!panel) return;
+    panel.hidden = !on;
+    if (btn) btn.setAttribute("aria-expanded", on ? "true" : "false");
+  }
+
+  function paintBoardCounts(trailN, songN) {
+    const t = $("#jump-trail-count");
+    const s = $("#jump-recs-count");
+    if (t && trailN != null) t.textContent = String(trailN);
+    if (s && songN != null) s.textContent = String(songN);
+  }
+
+  function applyBoardHide() {
+    const hideTrail = localStorage.getItem("emotune-hide-trail") === "1";
+    const hideRecs = localStorage.getItem("emotune-hide-recs") === "1";
+    const trail = $("#trail-panel");
+    const recs = $("#recs");
+    if (trail) trail.classList.toggle("is-collapsed", hideTrail);
+    if (recs) recs.classList.toggle("is-collapsed", hideRecs);
+    const bt = $("#btn-hide-trail");
+    const br = $("#btn-hide-recs");
+    if (bt) {
+      bt.textContent = hideTrail ? "展开" : "隐藏";
+      bt.setAttribute("aria-expanded", hideTrail ? "false" : "true");
+    }
+    if (br) {
+      br.textContent = hideRecs ? "展开" : "隐藏";
+      br.setAttribute("aria-expanded", hideRecs ? "false" : "true");
+    }
+    $("#jump-trail")?.classList.toggle("is-off", hideTrail);
+    $("#jump-recs")?.classList.toggle("is-off", hideRecs);
+  }
+
+  function setBoardHide(which, on) {
+    const key = which === "trail" ? "emotune-hide-trail" : "emotune-hide-recs";
+    localStorage.setItem(key, on ? "1" : "0");
+    applyBoardHide();
+  }
+
+  function bindChromeUi() {
+    const panel = $("#settings-panel");
+    const btn = $("#btn-settings");
+    const close = $("#btn-close-settings");
+    if (btn) {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        setSettingsOpen(panel ? panel.hidden : true);
+      });
+    }
+    if (close) close.addEventListener("click", () => setSettingsOpen(false));
+    document.addEventListener("click", (e) => {
+      if (!panel || panel.hidden) return;
+      if (panel.contains(e.target) || (btn && btn.contains(e.target))) return;
+      setSettingsOpen(false);
+    });
+    const hideTrail = $("#btn-hide-trail");
+    const hideRecs = $("#btn-hide-recs");
+    if (hideTrail) {
+      hideTrail.addEventListener("click", () => {
+        const now = localStorage.getItem("emotune-hide-trail") === "1";
+        setBoardHide("trail", !now);
+      });
+    }
+    if (hideRecs) {
+      hideRecs.addEventListener("click", () => {
+        const now = localStorage.getItem("emotune-hide-recs") === "1";
+        setBoardHide("recs", !now);
+      });
+    }
+    const jumpTrail = $("#jump-trail");
+    const jumpRecs = $("#jump-recs");
+    if (jumpTrail) {
+      jumpTrail.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (localStorage.getItem("emotune-hide-trail") === "1") setBoardHide("trail", false);
+        $("#trail-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+    if (jumpRecs) {
+      jumpRecs.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (localStorage.getItem("emotune-hide-recs") === "1") setBoardHide("recs", false);
+        $("#recs")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+    applyBoardHide();
+  }
+
+  const VIZ_ALGO = "STFT · Scheirer/Ellis · Krumhansl · Thayer";
+  const THAYER_VA = {
+    happy: [0.78, 0.7],
+    angry: [-0.62, 0.84],
+    sad: [-0.72, -0.58],
+    fear: [-0.52, 0.58],
+    surprise: [0.32, 0.88],
+    disgust: [-0.58, 0.12],
+    neutral: [0.04, 0.02],
+  };
+
+  function renderProbAndVa(scores, currentId) {
+    const box = $("#prob-bars");
+    const svg = $("#va-map");
+    const map = Object.fromEntries((scores || []).map((s) => [s.id, Number(s.prob) || 0]));
+    if (box) {
+      box.innerHTML = EMO_ORDER.map((id) => {
+        const meta = EMO_META[id];
+        const p = map[id] || 0;
+        const pct = (p * 100).toFixed(1);
+        const on = id === currentId ? " is-on" : "";
+        return `<div class="prob-row${on}" data-emo="${id}" style="--emo:${meta.color}">
+          <b>${meta.name}</b>
+          <span class="prob-track"><i class="prob-fill" style="width:${Math.max(0, Math.min(100, p * 100))}%"></i></span>
+          <em>${pct}%</em>
+        </div>`;
+      }).join("");
+    }
+    if (!svg) return;
+    const cx = 110;
+    const cy = 110;
+    const r = 88;
+    const toXY = (va) => [cx + (va[0] || 0) * r, cy - (va[1] || 0) * r];
+    let wv = 0;
+    let wa = 0;
+    let w = 0;
+    EMO_ORDER.forEach((id) => {
+      const p = map[id] || 0;
+      const va = THAYER_VA[id];
+      if (!va || p <= 0) return;
+      wv += va[0] * p;
+      wa += va[1] * p;
+      w += p;
+    });
+    const nowVa = w > 0.04 ? [wv / w, wa / w] : THAYER_VA[currentId] || [0, 0];
+    const now = toXY(nowVa);
+    const dots = EMO_ORDER.map((id) => {
+      const va = THAYER_VA[id];
+      const meta = EMO_META[id];
+      const [x, y] = toXY(va);
+      return `<circle class="va-dot" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6.2" fill="${meta.color}"/>
+        <text class="va-label" x="${(x + 8).toFixed(1)}" y="${(y - 7).toFixed(1)}">${meta.zh}</text>`;
+    }).join("");
+    svg.innerHTML = `
+      <rect x="8" y="8" width="204" height="204" rx="16" fill="none" class="va-axis"/>
+      <line class="va-axis" x1="18" y1="${cy}" x2="202" y2="${cy}"/>
+      <line class="va-axis" x1="${cx}" y1="18" x2="${cx}" y2="202"/>
+      <text class="va-label" x="186" y="104">效价 V+</text>
+      <text class="va-label" x="116" y="22">唤醒 A+</text>
+      <text class="va-label" x="14" y="104">V−</text>
+      <text class="va-label" x="116" y="210">A−</text>
+      ${dots}
+      <circle class="va-now" cx="${now[0].toFixed(1)}" cy="${now[1].toFixed(1)}" r="7.4"/>
+    `;
+  }
+
+  function clampNum(v, lo, hi) {
+    return Math.max(lo, Math.min(hi, v));
+  }
+
+  function normRange(v, lo, hi) {
+    if (hi <= lo) return 0.5;
+    return clampNum((v - lo) / (hi - lo), 0, 1);
+  }
+
+  function speedWord(bpm) {
+    if (bpm < 76) return "缓慢";
+    if (bpm < 100) return "从容";
+    if (bpm < 120) return "中速";
+    if (bpm < 140) return "轻快";
+    return "急促";
+  }
+
+  function pitchWord(f0) {
+    if (f0 < 160) return "低沉";
+    if (f0 < 260) return "中音";
+    if (f0 < 380) return "偏高";
+    return "高亢";
+  }
+
+  function ampWord(energy) {
+    if (energy < 0.22) return "轻柔";
+    if (energy < 0.45) return "适中";
+    if (energy < 0.7) return "有力";
+    return "强烈";
+  }
+
+  function brightWord(centroidHz) {
+    if (centroidHz < 800) return "暗淡";
+    if (centroidHz < 1800) return "柔和";
+    if (centroidHz < 2800) return "明亮";
+    return "尖亮";
+  }
+
+  function nearestThayer(V, A) {
+    let best = "neutral";
+    let bestD = 99;
+    Object.keys(THAYER_VA).forEach((id) => {
+      const pair = THAYER_VA[id];
+      const d = (V - pair[0]) * (V - pair[0]) + (A - pair[1]) * (A - pair[1]);
+      if (d < bestD) {
+        bestD = d;
+        best = id;
+      }
+    });
+    return best;
+  }
+
+  const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+  function hzToNote(hz) {
+    if (!hz || hz < 32) return "—";
+    const midi = Math.round(69 + 12 * Math.log2(hz / 440));
+    return `${NOTE_NAMES[(midi % 12 + 12) % 12]}${Math.floor(midi / 12) - 1}`;
+  }
+
+  function energyDb(rms) {
+    return 20 * Math.log10(Math.max(rms, 1e-5));
+  }
+
+  function chromaFromFd(fd, binHz) {
+    const chroma = new Array(12).fill(0);
+    for (let i = 1; i < fd.length; i += 1) {
+      const hz = i * binHz;
+      if (hz < 70 || hz > 5000) continue;
+      const midi = 69 + 12 * Math.log2(hz / 440);
+      const pc = ((Math.round(midi) % 12) + 12) % 12;
+      chroma[pc] += fd[i] * fd[i];
+    }
+    const max = Math.max(...chroma, 1);
+    return chroma.map((v) => v / max);
+  }
+
+  function vaMoodWord(V, A) {
+    const v = V >= 0.18 ? "积极" : V <= -0.18 ? "消极" : "平稳";
+    const a = A >= 0.28 ? "激昂" : A <= -0.22 ? "低落" : "平静";
+    return `${v}·${a}`;
+  }
+
+  function energyWordDb(db) {
+    if (db < -28) return "轻柔";
+    if (db < -18) return "适中";
+    if (db < -12) return "澎湃";
+    return "强烈";
+  }
+
+  function bandWord(hz) {
+    if (hz < 180) return "低音区";
+    if (hz < 520) return "中音区";
+    return "高音区";
+  }
+
+  function fluxDensity(env, now) {
+    if (!env || env.length < 8) return 0;
+    const windowMs = 2000;
+    const recent = env.filter((s) => now - s.t <= windowMs);
+    if (recent.length < 6) return 0;
+    let mean = 0;
+    recent.forEach((s) => {
+      mean += s.v;
+    });
+    mean /= recent.length;
+    let peaks = 0;
+    for (let i = 1; i < recent.length - 1; i += 1) {
+      if (recent[i].v > mean * 1.18 && recent[i].v >= recent[i - 1].v && recent[i].v >= recent[i + 1].v) peaks += 1;
+    }
+    return peaks / (windowMs / 1000);
+  }
+
+  function estimateBpmFromPeaks(samples) {
+    if (!samples || samples.length < 24) return 0;
+    let sum = 0;
+    let peak = 0;
+    samples.forEach((s) => {
+      sum += s.v;
+      if (s.v > peak) peak = s.v;
+    });
+    const mean = sum / samples.length;
+    const thr = mean + 0.14 * (peak - mean);
+    const peaks = [];
+    for (let i = 2; i < samples.length - 2; i += 1) {
+      const s = samples[i];
+      if (s.v >= thr && s.v >= samples[i - 1].v && s.v >= samples[i + 1].v) {
+        if (!peaks.length || s.t - peaks[peaks.length - 1] > 180) peaks.push(s.t);
+      }
+    }
+    if (peaks.length < 3) return 0;
+    const iv = [];
+    for (let i = 1; i < peaks.length; i += 1) iv.push(peaks[i] - peaks[i - 1]);
+    iv.sort((a, b) => a - b);
+    const med = iv[Math.floor(iv.length / 2)];
+    if (med < 340 || med > 1110) return 0;
+    return 60000 / med;
+  }
+
   function sizeVizCanvas(canvas) {
     if (!canvas) return null;
     const cssW = canvas.clientWidth || 320;
@@ -1814,7 +2712,103 @@
   }
 
   function vizColor() {
+    const el = $("#audio-viz");
+    if (el) {
+      const v = getComputedStyle(el).getPropertyValue("--viz").trim();
+      if (v) return v;
+    }
     return getComputedStyle(document.body).getPropertyValue("--accent").trim() || "#c4a574";
+  }
+
+  function drawCanvasWords(ctx, size, lines, color) {
+    if (!lines || !lines.length) return;
+    const fontPx = Math.max(10, Math.round(11 * size.dpr));
+    ctx.save();
+    ctx.font = `600 ${fontPx}px "Noto Sans SC","Microsoft YaHei",sans-serif`;
+    ctx.textBaseline = "bottom";
+    ctx.fillStyle = color;
+    const pad = 6 * size.dpr;
+    lines.forEach((line, i) => {
+      const y = size.h - pad - (lines.length - 1 - i) * (fontPx + 2);
+      ctx.fillText(line, pad, y, size.w - pad * 2);
+    });
+    ctx.restore();
+  }
+
+  function currentSongMusic() {
+    const song = state.songs[state.index] || {};
+    return song.music && typeof song.music === "object" ? song.music : {};
+  }
+
+  function paintVizReadout(feat) {
+    const el = $("#viz-readout");
+    const panel = $("#audio-viz");
+    if (!el) return;
+    const analyzing = !!feat.analyzing;
+    const emoId = feat.emoId || (analyzing ? "idle" : "neutral");
+    if (panel && panel.dataset.emo !== emoId) panel.dataset.emo = emoId;
+    const meta = EMO_META[emoId] || EMO_META.neutral;
+    const keyName = feat.keyName || "C";
+    const cards = [
+      {
+        k: "速度",
+        v: analyzing ? "—" : String(Math.round(feat.bpm)),
+        u: "BPM",
+        s: analyzing ? "分析中..." : feat.speedWord,
+      },
+      {
+        k: "调性",
+        v: analyzing ? "—" : `${keyName} ${feat.modeZh || ""}`.trim(),
+        u: "Key",
+        s: analyzing ? "" : feat.modeZh === "小调" ? "阴郁" : "明朗",
+      },
+      {
+        k: "音高",
+        v: analyzing ? "—" : `${feat.note} ${Math.round(feat.f0)}Hz`,
+        u: "f₀",
+        s: analyzing ? "" : bandWord(feat.f0),
+      },
+      {
+        k: "能量",
+        v: analyzing ? "—" : `${feat.db.toFixed(1)} dB`,
+        u: "E",
+        s: analyzing ? "" : energyWordDb(feat.db),
+      },
+      {
+        k: "音色",
+        v: analyzing ? "—" : `${(feat.centroidHz / 1000).toFixed(2)} kHz`,
+        u: "C",
+        s: analyzing ? "" : feat.brightWord,
+      },
+      {
+        k: "节奏密度",
+        v: analyzing ? "—" : `${feat.density.toFixed(1)} /s`,
+        u: "O",
+        s: analyzing ? "平稳" : feat.density >= 2.2 ? "律动" : feat.density >= 1 ? "清晰" : "平稳",
+      },
+      {
+        k: "愉悦·唤醒",
+        v: analyzing ? "—" : `${feat.V >= 0 ? "+" : ""}${feat.V.toFixed(2)} · ${feat.A >= 0 ? "+" : ""}${feat.A.toFixed(2)}`,
+        u: "V · A",
+        s: analyzing ? "积极·平静" : vaMoodWord(feat.V, feat.A),
+      },
+      {
+        k: "情绪",
+        v: analyzing ? `${meta.zh} · ${meta.name}` : `${meta.zh} · ${meta.name}`,
+        u: "同步",
+        s: analyzing ? "分析中..." : feat.emoSub || "与人脸、此刻、语音同一标签",
+        hot: true,
+      },
+    ];
+    const sig = `${emoId}|${cards.map((c) => c.v + c.s).join("|")}`;
+    if (sig === state.vizTextSig) return;
+    state.vizTextSig = sig;
+    el.innerHTML = cards
+      .map(
+        (c) =>
+          `<article class="viz-metric${c.hot ? " is-hot" : ""}"><em>${esc(c.k)}</em><b>${esc(c.v)}</b><i>${esc(c.u)}</i><span>${esc(c.s)}</span></article>`
+      )
+      .join("");
   }
 
   function ensureViz() {
@@ -1826,7 +2820,7 @@
       const src = state.audioCtx.createMediaElementSource(audio);
       state.analyser = state.audioCtx.createAnalyser();
       state.analyser.fftSize = 2048;
-      state.analyser.smoothingTimeConstant = 0.8;
+      state.analyser.smoothingTimeConstant = 0.72;
       src.connect(state.analyser);
       state.analyser.connect(state.audioCtx.destination);
       return state.analyser;
@@ -1840,43 +2834,248 @@
     const analyser = state.analyser;
     const wave = $("#viz-wave");
     const freq = $("#viz-freq");
+    const tempo = $("#viz-tempo");
+    const chromaEl = $("#viz-chroma");
     if (!analyser || !wave || !freq || !state.vizOn || (ui.player && ui.player.hidden)) return;
-    const color = vizColor();
-    const waveSize = sizeVizCanvas(wave);
-    const freqSize = sizeVizCanvas(freq);
     const td = new Uint8Array(analyser.fftSize);
     analyser.getByteTimeDomainData(td);
+    const fd = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(fd);
+    const sr = (state.audioCtx && state.audioCtx.sampleRate) || 44100;
+    const binHz = sr / analyser.fftSize;
+    let rms = 0;
+    for (let i = 0; i < td.length; i += 1) {
+      const v = (td[i] - 128) / 128;
+      rms += v * v;
+    }
+    rms = Math.sqrt(rms / td.length);
+    const energy = clampNum(rms * 2.4, 0, 1);
+    let magSum = 0;
+    let fSum = 0;
+    for (let i = 1; i < fd.length; i += 1) {
+      const m = fd[i];
+      magSum += m;
+      fSum += m * i * binHz;
+    }
+    const fLo = Math.max(1, Math.floor(80 / binHz));
+    const fHi = Math.min(fd.length - 1, Math.floor(500 / binHz));
+    let peakI = fLo;
+    let peakV = 0;
+    for (let i = fLo; i <= fHi; i += 1) {
+      if (fd[i] > peakV) {
+        peakV = fd[i];
+        peakI = i;
+      }
+    }
+    const silent = energy < 0.03 || magSum < 80 || peakV < 10;
+    let centroidHz = silent ? state.vizLastC || 0 : magSum > 0 ? fSum / magSum : 0;
+    let f0 = silent ? state.vizLastF0 || 0 : peakI * binHz;
+    if (!silent) {
+      if (state.vizLastF0) f0 = 0.38 * f0 + 0.62 * state.vizLastF0;
+      if (state.vizLastC) centroidHz = 0.38 * centroidHz + 0.62 * state.vizLastC;
+      state.vizLastF0 = f0;
+      state.vizLastC = centroidHz;
+    }
+    const now = performance.now();
+    state.vizEnv.push({ t: now, v: energy });
+    if (state.vizEnv.length > 160) state.vizEnv.shift();
+    const liveBpm = estimateBpmFromPeaks(state.vizEnv);
+    const music = currentSongMusic();
+    const priorBpm = Number(music.tempo) || 0;
+    let bpm = liveBpm || priorBpm || 96;
+    if (liveBpm && priorBpm) bpm = 0.58 * liveBpm + 0.42 * priorBpm;
+    if (state.vizBpm) bpm = 0.22 * bpm + 0.78 * state.vizBpm;
+    state.vizBpm = bpm;
+    const mode = music.mode === "minor" ? "minor" : music.mode === "major" ? "major" : "";
+    const modeZh = music.mode_zh || (mode === "minor" ? "小调" : mode === "major" ? "大调" : "调式中");
+    const modeSign = mode === "minor" ? -1 : mode === "major" ? 1 : 0;
+    const liveA = clampNum(0.7 * (normRange(bpm, 54, 168) * 2 - 1) + 0.3 * (energy * 2 - 1), -1, 1);
+    const liveV = clampNum(0.62 * modeSign + 0.38 * (normRange(centroidHz, 200, 3200) * 2 - 1), -1, 1);
+    const priorV = Number(music.valence);
+    const priorA = Number(music.arousal);
+    const V = Number.isFinite(priorV) ? 0.55 * priorV + 0.45 * liveV : liveV;
+    const A = Number.isFinite(priorA) ? 0.35 * priorA + 0.65 * liveA : liveA;
+    const chroma = chromaFromFd(fd, binHz);
+    let keyPc = 0;
+    chroma.forEach((v, i) => {
+      if (v > chroma[keyPc]) keyPc = i;
+    });
+    const recEmo = songEmotionId(state.songs[state.index]) || "";
+    const thayerEmo = silent ? displayEmotionId() || recEmo || "neutral" : nearestThayer(V, A);
+    const emoId = displayEmotionId() || recEmo || (silent ? "idle" : "neutral");
+    const recMeta = EMO_META[emoId] || EMO_META.neutral;
+    let emoSub = "与人脸、此刻、语音同一标签";
+    const feat = {
+      energy,
+      bpm,
+      f0,
+      centroidHz,
+      V,
+      A,
+      ampWord: ampWord(energy),
+      speedWord: speedWord(bpm),
+      pitchWord: pitchWord(f0),
+      brightWord: brightWord(centroidHz),
+      modeZh,
+      emoId,
+      recEmo,
+      thayerEmo,
+      emoSub,
+      emoZh: recMeta.zh || "中",
+      analyzing: silent,
+      note: hzToNote(f0),
+      db: energyDb(rms),
+      density: fluxDensity(state.vizEnv, now),
+      keyName: NOTE_NAMES[keyPc],
+      chroma,
+    };
+    const panel = $("#audio-viz");
+    if (panel) panel.dataset.emo = emoId || "idle";
+    const color = vizColor();
+
+    const waveSize = sizeVizCanvas(wave);
     const wctx = wave.getContext("2d");
     wctx.clearRect(0, 0, waveSize.w, waveSize.h);
-    wctx.strokeStyle = color;
-    wctx.lineWidth = Math.max(1.4, waveSize.dpr);
+    wctx.strokeStyle = hexToRgba(color, 0.22);
+    wctx.lineWidth = 1;
+    wctx.beginPath();
+    wctx.moveTo(0, waveSize.h / 2);
+    wctx.lineTo(waveSize.w, waveSize.h / 2);
+    wctx.stroke();
     wctx.beginPath();
     const step = Math.max(1, Math.floor(td.length / waveSize.w));
+    const mid = waveSize.h / 2;
     for (let x = 0, i = 0; x < waveSize.w; x += 1, i += step) {
       const v = (td[Math.min(i, td.length - 1)] - 128) / 128;
-      const y = waveSize.h / 2 + v * (waveSize.h * 0.42);
+      const y = mid + v * (waveSize.h * 0.42);
       if (x === 0) wctx.moveTo(x, y);
       else wctx.lineTo(x, y);
     }
+    wctx.lineTo(waveSize.w, waveSize.h);
+    wctx.lineTo(0, waveSize.h);
+    wctx.closePath();
+    wctx.fillStyle = hexToRgba(color, 0.16);
+    wctx.fill();
+    wctx.beginPath();
+    for (let x = 0, i = 0; x < waveSize.w; x += 1, i += step) {
+      const v = (td[Math.min(i, td.length - 1)] - 128) / 128;
+      const y = mid + v * (waveSize.h * 0.42);
+      if (x === 0) wctx.moveTo(x, y);
+      else wctx.lineTo(x, y);
+    }
+    wctx.strokeStyle = color;
+    wctx.lineWidth = Math.max(1.6, waveSize.dpr * 1.15);
     wctx.stroke();
-    const fd = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(fd);
+    drawCanvasWords(wctx, waveSize, [`${feat.ampWord}  RMS=${energy.toFixed(2)}`], color);
+
+    if (tempo) {
+      const tSize = sizeVizCanvas(tempo);
+      const tctx = tempo.getContext("2d");
+      tctx.clearRect(0, 0, tSize.w, tSize.h);
+      const env = state.vizEnv;
+      if (env.length > 1) {
+        const spikeW = Math.max(1.4, tSize.dpr);
+        env.forEach((s, i) => {
+          const x = (i / Math.max(1, env.length - 1)) * tSize.w;
+          const h = s.v * tSize.h * 0.86;
+          tctx.fillStyle = hexToRgba(color, 0.35 + s.v * 0.6);
+          tctx.fillRect(x, tSize.h - h, spikeW, h);
+        });
+        let mean = 0;
+        env.forEach((s) => {
+          mean += s.v;
+        });
+        mean /= env.length;
+        tctx.strokeStyle = hexToRgba(color, 0.28);
+        tctx.lineWidth = Math.max(1, tSize.dpr);
+        env.forEach((s, i) => {
+          if (i < 1 || i >= env.length - 1) return;
+          if (s.v > mean * 1.22 && s.v >= env[i - 1].v && s.v >= env[i + 1].v) {
+            const x = (i / Math.max(1, env.length - 1)) * tSize.w;
+            tctx.beginPath();
+            tctx.moveTo(x, 8 * tSize.dpr);
+            tctx.lineTo(x, tSize.h - 4 * tSize.dpr);
+            tctx.stroke();
+          }
+        });
+      }
+    }
+
+    const freqSize = sizeVizCanvas(freq);
     const fctx = freq.getContext("2d");
     fctx.clearRect(0, 0, freqSize.w, freqSize.h);
-    const bars = Math.min(64, Math.max(24, Math.floor(freqSize.w / 8)));
-    const gap = Math.max(1, Math.round(1.2 * freqSize.dpr));
+    const bars = Math.min(72, Math.max(28, Math.floor(freqSize.w / 7)));
+    const gap = Math.max(1, Math.round(1.1 * freqSize.dpr));
     const barW = Math.max(2, (freqSize.w - gap * bars) / bars);
+    let cBar = 0;
     for (let i = 0; i < bars; i += 1) {
       const lo = Math.floor((i / bars) ** 1.6 * fd.length);
       const hi = Math.max(lo + 1, Math.floor(((i + 1) / bars) ** 1.6 * fd.length));
       let sum = 0;
       for (let k = lo; k < hi && k < fd.length; k += 1) sum += fd[k];
       const mag = sum / Math.max(1, hi - lo) / 255;
-      const bh = Math.max(2, mag * freqSize.h * 0.92);
+      const bh = Math.max(2, mag * freqSize.h * 0.86);
       const x = i * (barW + gap);
       const y = freqSize.h - bh;
       fctx.fillStyle = hexToRgba(color, 0.35 + mag * 0.55);
       fctx.fillRect(x, y, barW, bh);
+      const hzMid = ((lo + hi) / 2) * binHz;
+      if (Math.abs(hzMid - centroidHz) < Math.abs(((cBar + 0.5) / bars) ** 1.6 * (fd.length * binHz) - centroidHz)) {
+        cBar = i;
+      }
+    }
+    const nyquist = binHz * fd.length;
+    fctx.fillStyle = hexToRgba(color, 0.55);
+    fctx.font = `600 ${Math.round(9 * freqSize.dpr)}px "Noto Sans SC","Microsoft YaHei",sans-serif`;
+    fctx.textBaseline = "bottom";
+    [100, 1000, 10000].forEach((hz) => {
+      if (hz >= nyquist) return;
+      const x = Math.pow(clampNum(hz / nyquist, 0, 1), 1 / 1.6) * freqSize.w;
+      const label = hz >= 1000 ? `${hz / 1000}k` : String(hz);
+      fctx.fillText(label, x + 2 * freqSize.dpr, freqSize.h - 3 * freqSize.dpr);
+    });
+    if (centroidHz > 0) {
+      const t = Math.pow(clampNum(centroidHz / nyquist, 0, 1), 1 / 1.6);
+      const cx = t * freqSize.w;
+      fctx.strokeStyle = hexToRgba(color, 0.9);
+      fctx.setLineDash([4 * freqSize.dpr, 4 * freqSize.dpr]);
+      fctx.beginPath();
+      fctx.moveTo(cx, 16 * freqSize.dpr);
+      fctx.lineTo(cx, freqSize.h);
+      fctx.stroke();
+      fctx.setLineDash([]);
+      fctx.fillStyle = color;
+      fctx.font = `600 ${Math.round(10 * freqSize.dpr)}px "Noto Sans SC","Microsoft YaHei",sans-serif`;
+      fctx.textBaseline = "alphabetic";
+      fctx.fillText(`C=${centroidHz >= 1000 ? (centroidHz / 1000).toFixed(1) + "kHz" : Math.round(centroidHz) + "Hz"}`, cx + 4, 28 * freqSize.dpr);
+    }
+
+    if (chromaEl) {
+      const cSize = sizeVizCanvas(chromaEl);
+      const cctx = chromaEl.getContext("2d");
+      cctx.clearRect(0, 0, cSize.w, cSize.h);
+      const labels = NOTE_NAMES;
+      const padL = 8 * cSize.dpr;
+      const padB = 16 * cSize.dpr;
+      const slot = (cSize.w - padL * 2) / 12;
+      const maxH = cSize.h - padB - 10 * cSize.dpr;
+      cctx.font = `600 ${Math.round(9 * cSize.dpr)}px "Noto Sans SC","Microsoft YaHei",sans-serif`;
+      cctx.textAlign = "center";
+      cctx.textBaseline = "top";
+      feat.chroma.forEach((v, i) => {
+        const x = padL + i * slot;
+        const h = Math.max(2, v * maxH);
+        const y = cSize.h - padB - h;
+        cctx.fillStyle = hexToRgba(color, i === keyPc ? 0.95 : 0.35 + v * 0.5);
+        cctx.fillRect(x + slot * 0.18, y, slot * 0.64, h);
+        cctx.fillStyle = i === keyPc ? color : hexToRgba(color, 0.7);
+        cctx.fillText(labels[i], x + slot / 2, cSize.h - padB + 2 * cSize.dpr);
+      });
+    }
+
+    if (now - (state.vizTextAt || 0) > 120) {
+      state.vizTextAt = now;
+      paintVizReadout(feat);
     }
     if (!audio.paused && !audio.ended && state.vizOn) {
       state.vizRaf = requestAnimationFrame(drawVizFrame);
@@ -1961,6 +3160,11 @@
 
   function fillPlayer(song) {
     ui.player.hidden = false;
+    state.vizEnv = [];
+    state.vizBpm = Number((song.music || {}).tempo) || 0;
+    state.vizLastF0 = 0;
+    state.vizLastC = 0;
+    state.vizTextSig = "";
     applyPlayerView();
     const cover = song.cover || "";
     const coverEl = $("#player-cover");
@@ -1973,25 +3177,7 @@
     }
     $("#player-title").textContent = prettyText(song.title);
     $("#player-sub").textContent = `${prettyText(song.artist)}${song.album ? " · " + prettyText(song.album) : ""} · 连续播放`;
-    const emoEl = $("#player-emo");
-    if (emoEl) {
-      const id = songEmotionId(song);
-      if (id) {
-        const meta = EMO_META[id] || {};
-        const zh = song.emotion_zh || meta.zh || "";
-        const name = song.emotion_name || meta.name || "";
-        emoEl.hidden = false;
-        emoEl.dataset.emo = id;
-        emoEl.className = "song-emo";
-        emoEl.title = `歌曲情绪：${name}`;
-        emoEl.setAttribute("aria-label", `歌曲情绪：${name}`);
-        emoEl.innerHTML = `<b>${esc(zh)}</b><i>${esc(name)}</i>`;
-      } else {
-        emoEl.hidden = true;
-        emoEl.removeAttribute("data-emo");
-        emoEl.innerHTML = "";
-      }
-    }
+    paintPlayerEmo(displayEmotionId() || songEmotionId(song));
     const dl = $("#btn-download");
     const open = $("#btn-open");
     if (song.downloadable) {
@@ -2016,7 +3202,12 @@
 
   function playAt(idx, hops = 0) {
     const n = state.songs.length;
-    if (!n || hops > n) return;
+    if (!n || hops > n) {
+      if (state.onlineOn && !state.fallbackBusy && playlistOnlineStuck()) {
+        fallbackToLocal("在线歌曲长时间播放失败，已自动切换到本地曲库。");
+      }
+      return;
+    }
     const song = state.songs[idx];
     if (!isPlayable(song)) {
       if (hops === 0 && song && !song.audio && song.external_url) {
@@ -2055,7 +3246,12 @@
 
   function playNext() {
     const next = firstPlayable(state.index + 1);
-    if (next < 0) return;
+    if (next < 0) {
+      if (state.onlineOn && playlistOnlineStuck()) {
+        fallbackToLocal("在线歌曲长时间播放失败，已自动切换到本地曲库。");
+      }
+      return;
+    }
     playAt(next);
   }
 
@@ -2192,7 +3388,7 @@
   }
 
   function handleRecognizeData(data, source, t0) {
-    const live = source === "camera-live";
+    const live = isLiveSource(source) || isLiveSource(data && data.source);
     if (!data || !data.ok) {
       if (live) {
         if (state.lockEmotion) updateHoldUi(true);
@@ -2210,14 +3406,19 @@
 
     const applyNew = () => {
       state.replayHistory = false;
-      showEmotion(data);
+      if (emoId && EMO_META[emoId]) {
+        state.trackEmo = emoId;
+        state.trackEmoAt = Date.now();
+      }
+      showEmotion(data, { speak: !live, commitUi: !live });
+      if (live && state.facePopActive) commitLiveUi(data.emotion);
       renderSongs(rec.songs, mix);
       lockPlaylist(emoId);
       autoPlayList(true);
       startVizLoop();
       if (live && TRANSIENT_EMO[emoId]) {
         const nm = (EMO_META[emoId] || {}).name || "";
-        toast(`已锁定「${nm}」歌单，脸松开也不会马上换歌`);
+        toast(`已锁定「${nm}」反差歌单，脸松开也不会马上换歌；持续平静几秒后会切到平静`);
       }
       if (state.onlineOn && rec.mode === "local-fallback") toast("在线曲库暂时不可用，已改用本地歌曲。");
     };
@@ -2232,14 +3433,16 @@
 
     const locked = state.lockEmotion;
     const prob = Number((data.emotion && data.emotion.prob) || 0);
-    const low = !!(data.emotion && (data.emotion.low_confidence || prob < LIVE_MIN_PROB));
+    const bar = liveProbBar(locked, emoId);
+    const low = !!(data.emotion && (data.emotion.low_confidence || prob < bar));
     const decision = decideLiveAction(locked, emoId, low);
 
     if (decision.action === "apply") {
       applyNew();
     } else if (decision.action === "same") {
-      if (emoId && emoId !== "neutral") state.lockAt = Date.now();
-      showEmotion(data);
+      showEmotion(data, { speak: false, commitUi: false });
+      if (state.facePopActive) commitLiveUi(data.emotion);
+      else tickUiSpeak(data.emotion);
       updateHoldUi(false);
       syncPlayingHighlight();
     } else if (decision.action === "hold") {
@@ -2266,7 +3469,8 @@
       } else {
         state.liveGuessCount += 1;
       }
-      if (state.liveGuessCount >= LIVE_SWITCH_HITS) applyNew();
+      const need = playlistSwitchNeed(locked, emoId, low);
+      if (state.liveGuessCount >= need) applyNew();
       else {
         showFaceCrop(data);
         const pending = (EMO_META[emoId] || {}).name || "";
@@ -2375,12 +3579,15 @@
     state.replayHistory = true;
     state.historyId = it.id || "";
     if (it.emotion) {
-      showEmotion({
-        emotion: it.emotion,
-        elapsed_ms: it.elapsed_ms,
-        face: it.face,
-        source: it.source,
-      });
+      showEmotion(
+        {
+          emotion: it.emotion,
+          elapsed_ms: it.elapsed_ms,
+          face: it.face,
+          source: it.source,
+        },
+        { speak: false }
+      );
     }
     const songs = footprintSongs(it);
     const n = (it.played || []).length;
@@ -2396,9 +3603,11 @@
     if (!items || !items.length) {
       ui.trail.innerHTML = `<p class="trail-empty">识别几次后，这里会留下人脸、情绪图标和听过的歌。</p>`;
       if (meta) meta.textContent = "全部保存 · 人脸、情绪图标和播过的歌都会留下";
+      paintBoardCounts(0, null);
       return;
     }
     if (meta) meta.textContent = `已保存 ${items.length} 次 · 人脸、情绪图标和播过的歌都会留下 · 点选可回放`;
+    paintBoardCounts(items.length, null);
     ui.trail.innerHTML = items
       .map((it) => {
         const e = it.emotion || {};
@@ -2587,6 +3796,8 @@
       } else if (msg.type === "live") {
         if (msg.on) {
           state.live = true;
+          state.lastSpokenEmo = "";
+          hushVoice();
           startHoldTick();
           syncLiveHudDot();
         } else stopLive();
@@ -2596,6 +3807,11 @@
         handleRecognizeData(msg.data, msg.source || "camera", 0);
       } else if (msg.type === "face-mode" && msg.id) {
         setFaceMode(msg.id, false);
+      } else if (msg.type === "cam-chrome") {
+        if (msg.landmark) setLandmarkMode(msg.landmark, false);
+        if (Number.isFinite(Number(msg.zoom))) setCamZoom(Number(msg.zoom), false);
+        if (typeof msg.fill === "boolean") setCamFill(msg.fill, false);
+        if (msg.fit) setCamFit(msg.fit, false);
       }
     });
   }
@@ -2635,6 +3851,8 @@
     $$("#face-mode-picks [data-face-mode]").forEach((btn) => {
       btn.addEventListener("click", () => setFaceMode(btn.dataset.faceMode, true));
     });
+    bindCamDock();
+    applyCamView();
     if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
       navigator.mediaDevices.addEventListener("devicechange", () => {
         listCameras();
@@ -2650,15 +3868,17 @@
           return;
         }
         state.live = true;
+        state.lastSpokenEmo = "";
+        hushVoice();
         startHoldTick();
         updateHoldUi(false);
         syncLiveHudDot();
-        toast("实时捕捉已打开：画面会标出人脸框，认到表情就推荐歌曲。惊讶、恐惧松开后也不会马上换歌。");
+        toast("实时捕捉已打开：平静、喜悦、悲伤会稳住再换歌；惊讶、恐惧、愤怒、厌恶认到就锁反差歌，松开也不会马上换。");
         state.liveTimer = setInterval(async () => {
           if (!isLiveMode() || state.recognizing || !frameReady()) return;
           const blob = await captureBlob(0.92, 1280);
           if (blob) recognize(blob, liveSource());
-        }, 1600);
+        }, LIVE_TICK_MS);
       } else stopLive();
     });
 
@@ -2760,7 +3980,7 @@
         localStorage.setItem("emotune-online", state.onlineOn ? "1" : "0");
         state.onlineFailCount = 0;
         state.onlineFailAt = 0;
-        toast(state.onlineOn ? "已改用在线热歌，识别后优先播在线曲库。" : "已改用本地曲库，断网也能听。");
+        toast(state.onlineOn ? "已改用在线热歌，识别后优先播在线接口。" : "已改用本地曲库，断网也能听。");
         if (state.lastEmotion || state.lockEmotion) await loadPlaylist(currentEmotionId(), true);
       });
     }
@@ -2826,12 +4046,7 @@
         state.voiceOn = voiceToggle.checked;
         localStorage.setItem("emotune-voice", state.voiceOn ? "1" : "0");
         if (!state.voiceOn) {
-          try {
-            window.speechSynthesis && window.speechSynthesis.cancel();
-          } catch {
-            /* ignore */
-          }
-          duckMusic(false);
+          hushVoice();
           toast("语音提示已关闭");
           return;
         }
@@ -2843,11 +4058,16 @@
         }
         unlockSpeech();
         const ok = speakText("语音提示已打开");
-        toast(ok ? "语音提示已打开，情绪标签变化时会播报。" : "语音提示已打开。");
+        toast(ok ? "语音提示已打开。平静喜悦悲伤稳住约 3 秒说；惊讶恐惧愤怒厌恶认到后很快说；识别此刻或上传立刻说。" : "语音提示已打开。");
       });
     }
     if ("speechSynthesis" in window) {
       refreshZhVoice();
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        /* ignore */
+      }
       window.speechSynthesis.addEventListener("voiceschanged", refreshZhVoice);
     }
 
@@ -2858,8 +4078,17 @@
     $("#btn-about").addEventListener("click", () => $("#about-dialog").showModal());
     $("#btn-close-about").addEventListener("click", () => $("#about-dialog").close());
     bindStrategyPicks();
+    bindChromeUi();
 
     window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && state.camFill) {
+        e.preventDefault();
+        setCamFill(false, true);
+        return;
+      }
+      if (e.key === "Escape") {
+        setSettingsOpen(false);
+      }
       if (e.code === "Space" && e.target === document.body) {
         e.preventDefault();
         recognizeNow();
@@ -2905,7 +4134,51 @@
 
   window.__emotune = {
     decideLiveAction,
+    isLiveSource,
+    handleRecognizeData,
+    commitLiveUi,
+    tickUiSpeak,
+    displayEmotionId,
+    speakDwellMs,
+    uiSwitchNeed,
+    playlistSwitchNeed,
+    setLiveForTest: (on) => {
+      state.live = !!on;
+    },
     transient: TRANSIENT_EMO,
+    holdMs: EMO_HOLD_MS,
+    setLockForTest: (id, ageMs) => {
+      state.lockEmotion = id || "";
+      state.lockAt = id ? Date.now() - Math.max(0, Number(ageMs) || 0) : 0;
+    },
+    setSpeakForTest: (id, ageMs, hits) => {
+      state.speakPending = id || state.uiEmo || "";
+      state.speakSince = Date.now() - Math.max(0, Number(ageMs) || 0);
+      state.speakHits = Number(hits) || 0;
+    },
+    setTrackForTest: (id) => {
+      state.trackEmo = id || "";
+      state.trackEmoAt = id ? Date.now() : 0;
+    },
+    setUiGuessForTest: (id, ageMs, hits) => {
+      state.uiGuess = id || "";
+      state.uiGuessAt = Date.now() - Math.max(0, Number(ageMs) || 0);
+      state.uiGuessHits = Number(hits) || 0;
+    },
+    resetUiForTest: () => {
+      cancelSpeech();
+      state.uiEmo = "";
+      state.uiGuess = "";
+      state.uiGuessHits = 0;
+      state.uiGuessAt = 0;
+      state.lastSpokenEmo = "";
+      state.lastSpokenAt = 0;
+      state.speakPending = "";
+      state.speakHits = 0;
+      state.speakSince = 0;
+      state.trackEmo = "";
+      state.trackEmoAt = 0;
+    },
     emoHex,
     getState: () => ({
       lock: state.lockEmotion,
@@ -2915,16 +4188,26 @@
       live: state.live,
       titles: state.songs.map((s) => s.title),
       overlay: state.lastOverlay,
+      uiEmo: state.uiEmo,
+      trackEmo: state.trackEmo,
       vote: state.lastVote,
       facePop: state.facePopActive,
       vizOn: state.vizOn,
       strategy: state.strategy,
+      lastSpoken: state.lastSpokenEmo,
+      speakPending: state.speakPending,
+      speakHits: state.speakHits,
+      voiceOn: state.voiceOn,
       onlineOn: state.onlineOn,
       historyId: state.historyId,
       trailCount: (state.history || []).length,
       replayHistory: state.replayHistory,
       played: state.playedByEmotion,
       faceMode: state.faceMode,
+      landmarkMode: state.landmarkMode,
+      camZoom: state.camZoom,
+      camFill: state.camFill,
+      camFit: state.camFit,
       mode: state.mode,
     }),
     fallbackToLocal,

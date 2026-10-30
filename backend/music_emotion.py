@@ -516,6 +516,8 @@ def public_music(desc: dict) -> dict:
         "mode_zh": desc.get("mode_zh"),
         "valence": desc.get("valence"),
         "arousal": desc.get("arousal"),
+        "energy": desc.get("energy"),
+        "centroid": desc.get("centroid"),
         "emotion": desc.get("emotion"),
         "emotion_zh": desc.get("emotion_zh"),
         "source": desc.get("source"),

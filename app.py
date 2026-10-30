@@ -32,6 +32,7 @@ from config import (
 )
 from backend import history
 from backend.recommender import recommend, song_file
+from backend.songbook import front_pin_keys
 from backend.strategy import DEFAULT_STRATEGY, public_catalog
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -105,6 +106,12 @@ def _read_face_mode() -> str:
     if not raw and request.is_json:
         raw = str((request.get_json(silent=True) or {}).get("mode") or "")
     return normalize_face_mode(raw) if raw else DEFAULT_FACE_MODE
+
+
+def _history_exclude(emotion: str) -> list[str]:
+    """已播跳过不含置顶曲；显式 exclude= 仍由 recommend() 处理。"""
+    pins = front_pin_keys()
+    return [key for key in history.played_keys(emotion) if key not in pins]
 
 
 def _collect_frames() -> list[bytes]:
@@ -239,7 +246,8 @@ def recognize():
         (request.args.get("online") or request.headers.get("X-Emo-Online") or "1").strip() == "1"
     )
     strategy = (request.args.get("strategy") or request.headers.get("X-Emo-Strategy") or DEFAULT_STRATEGY).strip()
-    exclude = history.played_keys(emotion_id)
+    played = history.played_keys(emotion_id)
+    exclude = _history_exclude(emotion_id)
     recs = recommend(
         emotion_id,
         want_online=want_online,
@@ -255,7 +263,7 @@ def recognize():
         "strategy": recs.get("strategy"),
     }
     result["source"] = source
-    result["played_keys"] = exclude
+    result["played_keys"] = played
     total_ms = (time.perf_counter() - t0) * 1000.0
     result["total_ms"] = round(total_ms, 1)
 
@@ -296,9 +304,10 @@ def recommend_api():
     emotion = (request.args.get("emotion") or "neutral").strip()
     want_online = request.args.get("online", "1") == "1"
     strategy = (request.args.get("strategy") or DEFAULT_STRATEGY).strip()
-    exclude = history.played_keys(emotion)
+    played = history.played_keys(emotion)
+    exclude = _history_exclude(emotion)
     data = recommend(emotion, want_online=want_online, exclude=exclude, strategy=strategy)
-    data["played_keys"] = exclude
+    data["played_keys"] = played
     return jsonify({"ok": True, **data})
 
 

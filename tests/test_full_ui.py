@@ -43,6 +43,26 @@ def main() -> int:
         page.wait_for_selector("#emo-tags")
         page.wait_for_function("() => window.__emotune && window.__emotune.getState && window.__emotune.getState().faceMode")
 
+        def open_set(section=None):
+            panel = page.locator("#settings-panel")
+            if not panel.is_visible():
+                page.locator("#btn-settings").click()
+                page.wait_for_timeout(120)
+            if section:
+                block = page.locator(f'#settings-panel details[data-set="{section}"]')
+                if block.count() and block.get_attribute("open") is None:
+                    block.locator("summary").click()
+                    page.wait_for_timeout(80)
+
+        def close_set():
+            if page.locator("#settings-panel").is_visible():
+                page.locator("#btn-close-settings").click()
+                page.wait_for_timeout(80)
+
+        chk("设置入口", page.locator("#btn-settings").count() == 1)
+        chk("设置默认收起", not page.locator("#settings-panel").is_visible())
+        chk("主题格默认不可见", not page.locator(".theme-pick").first.is_visible())
+        chk("推荐方式默认不可见", not page.locator("#strat-picks").is_visible())
         chk(
             "四种输入入口",
             page.locator(".tab[data-mode='camera']").count() == 1
@@ -52,6 +72,8 @@ def main() -> int:
         )
         chk("单人精检与多人远场", page.locator("#face-mode-picks [data-face-mode]").count() == 2)
         chk("默认单人精检", page.evaluate("() => window.__emotune.getState().faceMode") == "solo")
+        chk("默认同频", page.evaluate("() => window.__emotune.getState().strategy") == "iso")
+        chk("推荐方式显示同频", page.locator("#strat-now").inner_text().strip() == "同频")
         chk("摄像头选择", page.locator("#cam-select").count() == 1)
         page.locator(".tab[data-mode='video']").click()
         page.wait_for_timeout(200)
@@ -60,17 +82,21 @@ def main() -> int:
         page.locator(".tab[data-mode='screen']").click()
         page.wait_for_timeout(200)
         chk("屏幕页显示分享按钮", page.locator("#btn-screen").is_visible())
+        page.locator(".tab[data-mode='camera']").click()
+        page.wait_for_timeout(120)
+        open_set("detect")
         page.locator('[data-face-mode="crowd"]').click()
         page.wait_for_timeout(150)
         chk("可切到多人远场", page.evaluate("() => window.__emotune.getState().faceMode") == "crowd")
         page.locator('[data-face-mode="solo"]').click()
         page.wait_for_timeout(150)
         chk("可切回单人精检", page.evaluate("() => window.__emotune.getState().faceMode") == "solo")
+        open_set("capture")
         chk("实时捕捉开关", page.locator("#live-toggle").count() == 1)
         live_box = page.locator(".live-wrap").bounding_box()
         chk(
             "实时捕捉不挤成竖条",
-            bool(live_box and live_box["width"] >= 88 and live_box["height"] <= 56),
+            bool(live_box and live_box["width"] >= 88 and live_box["height"] <= 80),
             str(live_box),
         )
         page.locator("#live-toggle").hover()
@@ -90,24 +116,125 @@ def main() -> int:
         chk("摄像头人脸框", page.locator("#face-overlay").count() == 1)
         chk("画面表情文字", page.locator("#live-emo-hud").count() == 1)
         chk("七类情绪标签", page.locator(".emo-tag").count() == 7)
+        chk("实时概率条", page.locator("#prob-bars").count() == 1)
+        chk("环面图", page.locator("#va-map").count() == 1)
         chk("语音/歌词/封面/联网开关", all(page.locator(sel).count() == 1 for sel in ["#voice-toggle", "#lyrics-toggle", "#cover-toggle", "#online-toggle"]))
         chk("波形开关", page.locator("#viz-toggle").count() == 1)
         chk("弹出人脸窗按钮", page.locator("#btn-face-pop").count() == 1)
         chk("说明页入口", page.locator("#btn-guide").count() == 1)
+        open_set("recommend")
         chk("推荐方式点选", page.locator("#strat-picks .strat-pick").count() >= 8)
         chk("波形与频率画布", page.locator("#viz-wave").count() == 1 and page.locator("#viz-freq").count() == 1)
+        chk(
+            "节奏色度与声纹读数",
+            page.locator("#viz-tempo").count() == 1
+            and page.locator("#viz-chroma").count() == 1
+            and page.locator("#viz-readout").count() == 1,
+        )
+        open_set("picture")
+        chk("关键点三种模式", page.locator("#landmark-picks [data-landmark]").count() == 3)
+        chk("铺满窗口按钮", page.locator("#btn-cam-fill").count() == 1)
+        chk("放大比率滑杆", page.locator("#cam-zoom").count() == 1)
+        chk(
+            "默认放大比率为 100%",
+            page.evaluate("() => Math.round(window.__emotune.getState().camZoom * 100)") == 100,
+        )
+        stage_fill = page.evaluate(
+            """() => {
+              const vp = document.querySelector('#viewport');
+              const body = document.querySelector('.stage-body[data-view="live"]');
+              const vr = vp.getBoundingClientRect();
+              const br = body.getBoundingClientRect();
+              return { vw: vr.width, vh: vr.height, bw: br.width, bh: br.height };
+            }"""
+        )
+        chk(
+            "视窗铺满当前舞台",
+            bool(
+                stage_fill
+                and stage_fill["vw"] >= stage_fill["bw"] * 0.92
+                and stage_fill["vh"] >= 400
+                and stage_fill["vh"] >= stage_fill["bh"] * 0.55
+            ),
+            str(stage_fill),
+        )
+        page.locator('[data-landmark="mesh"]').click()
+        page.wait_for_timeout(80)
+        chk("可切到线框关键点", page.evaluate("() => window.__emotune.getState().landmarkMode") == "mesh")
+        page.locator('[data-landmark="off"]').click()
+        page.wait_for_timeout(80)
+        chk("可关闭关键点", page.evaluate("() => window.__emotune.getState().landmarkMode") == "off")
+        page.locator('[data-landmark="overlay"]').click()
+        page.locator("#btn-cam-fit").click()
+        page.wait_for_timeout(80)
+        chk("可切换铺满画面", page.evaluate("() => window.__emotune.getState().camFit") in {"cover", "contain"})
+        page.locator("#btn-cam-fit").click()
+        page.locator("#btn-cam-fill").click()
+        page.wait_for_timeout(80)
+        chk("可铺满窗口", page.evaluate("() => window.__emotune.getState().camFill") is True)
+        fill_box = page.evaluate(
+            """() => {
+              const vp = document.querySelector('#viewport');
+              const r = vp.getBoundingClientRect();
+              return {
+                cls: document.body.classList.contains('is-cam-fill'),
+                top: r.top, left: r.left, w: r.width, h: r.height,
+                iw: window.innerWidth, ih: window.innerHeight,
+              };
+            }"""
+        )
+        chk(
+            "铺满后摄像头占满窗口",
+            bool(
+                fill_box
+                and fill_box["cls"]
+                and fill_box["top"] <= 2
+                and fill_box["left"] <= 2
+                and fill_box["w"] >= fill_box["iw"] * 0.96
+                and fill_box["h"] >= fill_box["ih"] * 0.92
+            ),
+            str(fill_box),
+        )
+        page.locator("#cam-zoom").evaluate("el => { el.value = '160'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
+        page.wait_for_timeout(80)
+        chk("可调节放大比率", page.evaluate("() => Math.round(window.__emotune.getState().camZoom * 100)") == 160)
+        page.locator("#btn-cam-exit").click()
+        page.wait_for_timeout(80)
+        chk("可退出铺满", page.evaluate("() => window.__emotune.getState().camFill") is False)
+        page.locator("#cam-zoom").evaluate("el => { el.value = '100'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
+        close_set()
         chk("人脸对照位", page.locator("#emo-shot").count() == 1 and page.locator("#emo-icon").count() == 1)
+        chk("足迹标题", page.locator("#trail-title").inner_text().strip() == "情绪足迹")
+        chk("歌曲标题", page.locator("#recs-title").inner_text().strip() == "歌曲")
+        page.locator("#btn-hide-trail").click()
+        page.wait_for_timeout(80)
+        chk("可隐藏情绪足迹", "is-collapsed" in (page.locator("#trail-panel").get_attribute("class") or ""))
+        page.screenshot(path=str(OUT / "trail-hidden.png"), full_page=True)
+        page.locator("#btn-hide-trail").click()
+        page.wait_for_timeout(80)
+        chk("可再展开情绪足迹", "is-collapsed" not in (page.locator("#trail-panel").get_attribute("class") or ""))
+        page.locator("#btn-hide-recs").click()
+        page.wait_for_timeout(80)
+        chk("可隐藏歌曲", "is-collapsed" in (page.locator("#recs").get_attribute("class") or ""))
+        page.locator("#btn-hide-recs").click()
+        page.wait_for_timeout(80)
+        chk("可再展开歌曲", "is-collapsed" not in (page.locator("#recs").get_attribute("class") or ""))
+        open_set("theme")
+        page.screenshot(path=str(OUT / "settings-open.png"), full_page=True)
+        close_set()
         page.screenshot(path=str(OUT / "idle.png"), full_page=True)
 
         page.locator(".tab[data-mode='upload']").click()
         page.wait_for_selector("#demo-list button")
         n_demo = page.locator("#demo-list button").count()
         chk("七类示例表情", n_demo >= 21, str(n_demo))
+        open_set("theme")
         chk("六种主题", page.locator(".theme-pick").count() >= 6)
         for theme in ("paper", "ink", "rouge", "celadon", "moon", "night"):
             page.locator(f'.theme-pick[data-theme="{theme}"]').click()
             page.wait_for_timeout(120)
             chk(f"可切换{theme}主题", page.evaluate("() => document.documentElement.dataset.theme") == theme)
+        close_set()
         page.locator("#demo-list button").first.click()
         page.wait_for_function("() => document.querySelectorAll('#songs .song').length >= 8", timeout=20000)
         page.wait_for_timeout(800)
@@ -136,13 +263,20 @@ def main() -> int:
         chk("播放器出现", page.locator("#player").is_visible())
         player_emo = page.locator("#player-emo")
         chk("播放器歌名旁有情绪标签", player_emo.is_visible() and player_emo.locator("b").inner_text().strip() in {"喜", "怒", "哀", "惧", "惊", "厌", "中"})
-        chk("播放时显示波形频率", page.locator("#audio-viz").is_visible() and page.locator("#viz-wave").is_visible())
+        chk(
+            "播放时显示波形频率",
+            page.locator("#audio-viz").is_visible()
+            and page.locator("#viz-wave").is_visible()
+            and page.locator("#viz-tempo").is_visible()
+            and page.locator("#viz-chroma").is_visible(),
+        )
         chk("封面默认打开", page.locator("#nowplay-cover").is_visible() or page.locator("#player-cover").is_visible())
         lyric_now = page.locator("#lyric-now").inner_text().strip()
         chk("歌词默认打开", bool(lyric_now), lyric_now[:20])
         title = page.locator("#player-title").inner_text()
         chk("播放器歌名为简体或必要英文", "Single" not in title and "專輯" not in title, title)
 
+        open_set("play")
         page.locator("#lyrics-toggle").uncheck()
         page.wait_for_timeout(200)
         chk("可关闭歌词", "is-lyrics-off" in (page.locator("#player").get_attribute("class") or ""))
@@ -151,6 +285,7 @@ def main() -> int:
         page.wait_for_timeout(200)
         chk("可关闭封面", "is-cover-off" in (page.locator("#player").get_attribute("class") or ""))
         page.locator("#cover-toggle").check()
+        close_set()
 
         page.locator("#btn-history").click()
         page.wait_for_selector("#history-list .history-item")
@@ -207,6 +342,7 @@ def main() -> int:
         chk("点足迹可回放当时的歌", bool(replay_title) and replay_title != "未播放", replay_title)
         chk("回放足迹不计入新播放", replay_flag is True)
 
+        open_set("recommend")
         page.locator('.strat-pick[data-strategy="contrast"]').click()
         page.wait_for_function("() => (document.querySelector('#strat-now')||{}).textContent === '对比'", timeout=20000)
         page.wait_for_function("() => document.querySelectorAll('#songs .song').length >= 8", timeout=20000)
@@ -257,6 +393,12 @@ def main() -> int:
         chk("说明页含两种检测方式", "单人精检" in guide_txt and "多人远场" in guide_txt)
         chk("说明页含四种输入", "屏幕分享" in guide_txt and "本地视频" in guide_txt)
         guide_page.close()
+
+        context.request.post(
+            BASE + "/api/prefs",
+            headers={"Content-Type": "application/json"},
+            data='{"face_mode":"solo","strategy":"iso"}',
+        )
 
         browser.close()
 

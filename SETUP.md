@@ -40,7 +40,7 @@ git checkout snapshot-20261028-1525
 1. **识曲必须在本机跑 Flask。** Surge 只放介绍页，没有 Python、没有 ONNX、没有摄像头。
 2. **情绪足迹不进 GitHub。** 仓库里故意没有你的人脸截图和听歌记录。换电脑要「连历史一起原样」，必须把本机数据单独带走，见第 8 节。
 
-克隆仓库 = 代码 + 三个 ONNX + 280 首试听 + 演示图。  
+克隆仓库 = 代码 + 三个 ONNX + 532 首试听 + 演示图。  
 克隆仓库 **再** 解入足迹包 = 和旧电脑一样能认出人、能播、能看到以前的足迹。
 
 ---
@@ -54,7 +54,7 @@ git checkout snapshot-20261028-1525
 | conda | **Miniconda3** 或 Anaconda3（64 位）。环境名固定为 `emotune` |
 | Git | 从 GitHub 克隆时需要 [Git for Windows](https://git-scm.com/download/win) |
 | 浏览器 | Chrome 或 Edge（摄像头、屏幕分享用） |
-| 磁盘 | 约 1 GB（代码 + 三个 ONNX + 280 首试听）+ conda 环境约 0.5–1 GB（CPU）；足迹另计 |
+| 磁盘 | 约 1 GB（代码 + 三个 ONNX + 532 首试听）+ conda 环境约 0.5–1 GB（CPU）；足迹另计 |
 | 网络 | 首次创建环境和缺模型时要联网；平时可完全离线识别和播本地曲 |
 | 摄像头 | 本机摄像头；页面必须用 `http://127.0.0.1:端口` 打开 |
 | GPU | **不需要。** 不要装 CUDA / `onnxruntime-gpu` |
@@ -129,7 +129,7 @@ OpenCV 读 ONNX 已按内存加载，中文路径可用。
 | `backend/` | 识别、推荐、歌词、足迹 |
 | `templates/` `static/css/` `static/js/` | 网页 |
 | `static/models/` | 三个人脸 ONNX，缺了不能识别 |
-| `static/audio/` | 本地 280 首试听 |
+| `static/audio/` | 本地 532 首试听 |
 | `static/covers/` | 封面 |
 | `static/demo/` | 演示表情图（讲座点选用） |
 | `data/history.json` | **情绪足迹索引（历史）** |
@@ -322,7 +322,7 @@ python app.py
 - `static/models/face_detection_yunet_2023mar.onnx`
 - `static/models/facial_expression_recognition_mobilefacenet_2022july.onnx`
 - `static/models/enet_b0_8_best_vgaf.onnx`（HSEmotion，约 16 MB）
-- 本地 280 首试听与封面
+- 本地 532 首试听与封面
 
 本快照一般已经带齐，会直接跳过下载。缺文件且能上网时会自动补。完全断网且缺模型时，识别会失败，把旧电脑的 `static/models/` 拷过来即可。
 
@@ -337,7 +337,7 @@ conda activate emotune
 python tests/selfcheck.py
 ```
 
-关注：`onnxruntime 为 pip CPU 包` PASS；示例图 28 张都能识别；「单人精检稳健测试 ≥90%」；说明页含 HSEmotion 与 TTA；本地曲库 280 首。
+关注：`onnxruntime 为 pip CPU 包` PASS；示例图 28 张都能识别；「单人精检稳健测试 ≥90%」；说明页含 HSEmotion 与 TTA；本地曲库 532 首。
 
 服务已启动时（端口换成你的）：
 
@@ -434,7 +434,7 @@ python tools\pack_local_data.py --unpack data\emotune-local-data.zip
 1. 检测方式默认 **单人精检**（近景一张脸，高精度）。课堂合影再切 **多人远场**。
 2. 四种输入：摄像头、照片（JPG/PNG/WEBP）、本地视频、屏幕分享。
 3. 「实时捕捉」可持续识曲；「识别此刻」截一帧并关掉实时捕捉。问号上的说明要**把鼠标放到问号上**才出现。
-4. 默认在线曲库；关掉「在线曲库」只用本地 280 首。在线长时间失败会自动切本地。讲座现场网络不稳时，先关掉「在线曲库」。
+4. 默认在线热歌；关掉「在线热歌」只用本地 532 首。在线长时间失败会提示并自动切本地。讲座现场网络不稳时，先关掉「在线热歌」。
 5. 歌词能联网时用官方词并对齐 30 秒试听；断网用本地词。
 6. 完整算法说明：http://127.0.0.1:5000/guide
 7. 演示图在 `static/demo/`，文件名已按中文情绪命名（每种三张）。
@@ -558,7 +558,7 @@ python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.
 切到「单人精检」，正对镜头、光线均匀、脸足够大。远景合影请切「多人远场」。
 
 **在线歌一直失败**  
-关掉系统代理后再试，或关闭「在线曲库」用本地歌。讲座现场建议先关在线。
+关掉系统代理后再试，或关闭「在线热歌」用本地歌。讲座现场建议先关在线。
 
 **换电脑后历史是空的**  
 只克隆了仓库。按第 8 节解包或拷贝 `data/history.json` 与 `static/history/`。

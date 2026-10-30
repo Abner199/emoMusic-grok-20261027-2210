@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import logging
+import os
 import threading
 import time
 from typing import Optional
@@ -64,6 +65,231 @@ def _softmax(x: np.ndarray, temperature: float = 1.0) -> np.ndarray:
     z = z - np.max(z)
     e = np.exp(z)
     return e / np.clip(e.sum(), 1e-12, None)
+
+
+# YuNet 五点顺序与 ArcFace 对齐点相同：图像左眼、右眼、鼻尖、左嘴角、右嘴角
+_YUNET_POINT_META = (
+    ("le", "左眼", "p₁", "eye"),
+    ("re", "右眼", "p₂", "eye"),
+    ("nose", "鼻尖", "p₃", "nose"),
+    ("ml", "左嘴角", "p₄", "mouth"),
+    ("mr", "右嘴角", "p₅", "mouth"),
+)
+
+
+def landmark_cues(landmarks5, box=None) -> dict:
+    """YuNet 五点几何 + 眉区估计，输出可画的关键点和 FACS 线索文字。
+
+    眉毛不是 YuNet 实测点，按瞳距 IOD 在眼上方 0.35×IOD 处估计眉区。
+    口型用嘴宽 / IOD 与嘴角上扬（相对眼线）对照 FACS AU12 / AU15 / AU27。
+    """
+    empty = {"landmarks": [], "points": [], "cues": [], "metrics": {}}
+    if landmarks5 is None:
+        return empty
+    try:
+        pts = np.asarray(landmarks5, dtype=np.float64).reshape(-1, 2)
+    except Exception:
+        return empty
+    if pts.shape[0] < 5:
+        return empty
+    pts = pts[:5]
+    le, re, nose, ml, mr = pts
+    iod = float(np.linalg.norm(re - le)) + 1e-6
+    mouth_w = float(np.linalg.norm(mr - ml)) / iod
+    eye_y = 0.5 * (le[1] + re[1])
+    mouth_y = 0.5 * (ml[1] + mr[1])
+    mouth_lift = (eye_y + 0.82 * iod - mouth_y) / iod
+    mouth_drop = (mouth_y - float(nose[1])) / iod
+    eye_dx = float(re[0] - le[0])
+    eye_dy = float(re[1] - le[1])
+    tilt = float(np.degrees(np.arctan2(eye_dy, eye_dx)))
+    nrm = float(np.hypot(eye_dx, eye_dy)) + 1e-6
+    ux, uy = -eye_dy / nrm, eye_dx / nrm
+    if uy > 0:
+        ux, uy = -ux, -uy
+    brow_off = 0.35 * iod
+    side = np.array([eye_dx, eye_dy], dtype=np.float64) / nrm
+    up = np.array([ux, uy], dtype=np.float64)
+    lb = le + up * brow_off - side * (0.08 * iod)
+    rb = re + up * brow_off + side * (0.08 * iod)
+    eye_in_box = None
+    forehead = None
+    if box is not None and len(box) >= 4:
+        _bx, by, _bw, bh = [float(v) for v in box[:4]]
+        if bh > 1:
+            eye_in_box = (eye_y - by) / bh
+        forehead = (eye_y - by) / iod
+
+    points = []
+    for (pid, zh, symbol, part), (x, y) in zip(_YUNET_POINT_META, pts):
+        points.append(
+            {
+                "id": pid,
+                "zh": zh,
+                "symbol": symbol,
+                "part": part,
+                "algo": "YuNet",
+                "inferred": False,
+                "x": round(float(x), 1),
+                "y": round(float(y), 1),
+            }
+        )
+    points.append(
+        {
+            "id": "lb",
+            "zh": "左眉区",
+            "symbol": "b₁",
+            "part": "brow",
+            "algo": "眉区估",
+            "inferred": True,
+            "x": round(float(lb[0]), 1),
+            "y": round(float(lb[1]), 1),
+        }
+    )
+    points.append(
+        {
+            "id": "rb",
+            "zh": "右眉区",
+            "symbol": "b₂",
+            "part": "brow",
+            "algo": "眉区估",
+            "inferred": True,
+            "x": round(float(rb[0]), 1),
+            "y": round(float(rb[1]), 1),
+        }
+    )
+
+    # 真实正脸的 mouth_lift 中心约 -0.23；宽嘴 + 偏上 → AU12，口鼻距大 → 张口
+    if mouth_w >= 0.90 and mouth_lift >= -0.21:
+        mouth_text, mouth_sym, mouth_hint = "唇角拉开上扬", "AU12", "喜悦倾向"
+    elif mouth_drop >= 0.54 and mouth_w <= 0.82:
+        mouth_text, mouth_sym, mouth_hint = "口部下移张开", "AU27≈", "惊讶倾向"
+    elif mouth_lift <= -0.29:
+        mouth_text, mouth_sym, mouth_hint = "唇角偏低", "AU15", "低落倾向"
+    elif mouth_w <= 0.79:
+        mouth_text, mouth_sym, mouth_hint = "嘴角偏紧", "w/IOD", "抿嘴"
+    else:
+        mouth_text, mouth_sym, mouth_hint = "嘴角开合中等", "w/IOD", "口型平稳"
+    if abs(tilt) >= 8:
+        eye_text, eye_hint = "眼线倾斜", "头部侧倾"
+    else:
+        eye_text, eye_hint = "眼线水平", "正对镜头"
+    if forehead is not None and forehead >= 1.20:
+        brow_text, brow_sym, brow_hint = "眉区上提", "AU1/2≈", "挑眉倾向"
+    elif forehead is not None and forehead <= 1.00:
+        brow_text, brow_sym, brow_hint = "眉区偏低", "AU4≈", "皱眉倾向"
+    else:
+        brow_text, brow_sym, brow_hint = "眉区平稳", "b₁b₂", "眉形稳定"
+
+    cues = [
+        {
+            "part": "mouth",
+            "zh": "嘴巴",
+            "text": mouth_text,
+            "hint": mouth_hint,
+            "symbol": mouth_sym,
+            "algo": "FACS",
+            "value": round(mouth_w, 3),
+            "lift": round(float(mouth_lift), 3),
+            "drop": round(float(mouth_drop), 3),
+        },
+        {
+            "part": "eye",
+            "zh": "眼睛",
+            "text": eye_text,
+            "hint": eye_hint,
+            "symbol": "IOD",
+            "algo": "YuNet p₁p₂",
+            "value": round(iod, 1),
+            "tilt": round(tilt, 1),
+        },
+        {
+            "part": "brow",
+            "zh": "眉毛",
+            "text": brow_text,
+            "hint": brow_hint,
+            "symbol": brow_sym,
+            "algo": "眉区估",
+            "value": None if forehead is None else round(float(forehead), 3),
+        },
+    ]
+    return {
+        "landmarks": [[round(float(x), 1), round(float(y), 1)] for x, y in pts],
+        "points": points,
+        "cues": cues,
+        "metrics": {
+            "iod": round(iod, 1),
+            "mouth_w": round(mouth_w, 3),
+            "mouth_lift": round(float(mouth_lift), 3),
+            "mouth_drop": round(float(mouth_drop), 3),
+            "tilt": round(tilt, 1),
+            "forehead": None if forehead is None else round(float(forehead), 3),
+        },
+    }
+
+
+def calibrate_live_vec(p: np.ndarray, metrics: Optional[dict] = None) -> np.ndarray:
+    """把张嘴说话、轻微笑意从惊讶/喜悦拉回平静。
+
+    MobileFaceNet 与 AffectNet 野外模型都容易把休息脸、说话口型判成 surprise / happy。
+    用 YuNet 五点几何做否决：没有张口+挑眉不给惊讶，没有拉开上扬不给喜悦。
+    标签顺序与 MODEL_LABELS 一致：angry, disgust, fear, happy, neutral, sad, surprise。
+    """
+    vec = np.asarray(p, dtype=np.float64).reshape(-1)
+    if vec.size != 7:
+        return vec
+    total = float(vec.sum())
+    if total <= 0:
+        return np.full(7, 1.0 / 7.0)
+    vec = vec / total
+    geo = metrics or {}
+    has_geo = bool(geo)
+    mouth_w = float(geo.get("mouth_w") or 0.0)
+    mouth_drop = float(geo.get("mouth_drop") or 0.0)
+    mouth_lift = float(geo.get("mouth_lift") or 0.0)
+    forehead = geo.get("forehead")
+    i_sur, i_hap, i_neu, i_fear = 6, 3, 4, 2
+    # YuNet 只有嘴角，张口主要看口鼻距；合成惊讶图嘴宽往往仍约 0.80
+    open_jaw = mouth_w >= 1.02 or mouth_drop >= 0.475
+    clear_smile = mouth_w >= 0.88 and mouth_lift >= -0.22
+
+    if vec[i_sur] >= 0.20:
+        margin = float(vec[i_sur] - max(vec[i_neu], vec[i_fear]))
+        if has_geo and not open_jaw:
+            if margin < 0.18:
+                move = vec[i_sur] * 0.70
+            elif margin < 0.36:
+                move = vec[i_sur] * 0.42
+            else:
+                move = 0.0
+            if move:
+                vec[i_sur] -= move
+                vec[i_neu] += move * 0.90
+                vec[i_fear] += move * 0.10
+        elif (not has_geo) and margin < 0.14:
+            move = vec[i_sur] * 0.32
+            vec[i_sur] -= move
+            vec[i_neu] += move
+
+    if vec[i_hap] >= 0.20:
+        margin = float(vec[i_hap] - vec[i_neu])
+        if has_geo and not clear_smile:
+            if margin < 0.14:
+                move = vec[i_hap] * 0.52
+            elif margin < 0.24:
+                move = vec[i_hap] * 0.22
+            else:
+                move = 0.0
+            if move:
+                vec[i_hap] -= move
+                vec[i_neu] += move
+        elif (not has_geo) and margin < 0.12:
+            move = vec[i_hap] * 0.28
+            vec[i_hap] -= move
+            vec[i_neu] += move
+
+    vec = np.clip(vec, 1e-12, None)
+    return vec / vec.sum()
 
 
 def _similarity_from_landmarks(src: np.ndarray, dst: np.ndarray) -> np.ndarray:
@@ -188,6 +414,11 @@ class EmotionRecognizer:
         if not fer_path.exists():
             raise FileNotFoundError(f"缺少表情识别模型: {fer_path}")
 
+        # 给 OpenCV 留 2 线程，其余给 onnxruntime，避免 CPU 抢核卡顿
+        try:
+            cv2.setNumThreads(2)
+        except Exception:
+            pass
         # Windows 下 OpenCV C++ 读盘不支持中文路径，改为内存加载
         yunet_bytes = yunet_path.read_bytes()
         yunet_buf = np.frombuffer(yunet_bytes, dtype=np.uint8).copy()
@@ -222,6 +453,8 @@ class EmotionRecognizer:
         self._lock = threading.RLock()
         self._track_lock = threading.Lock()
         self._last_track_faces: list[dict] = []
+        self._track_ema: Optional[dict] = None
+        self._track_n = 0
         self._load_hsemotion()
         logger.info("情绪识别模型已加载")
 
@@ -234,7 +467,9 @@ class EmotionRecognizer:
             import onnxruntime as ort
 
             opts = ort.SessionOptions()
-            opts.intra_op_num_threads = 2
+            cpu_n = int(os.cpu_count() or 2)
+            opts.intra_op_num_threads = min(4, max(1, cpu_n // 2))
+            opts.inter_op_num_threads = 1
             opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
             self.hse = ort.InferenceSession(
                 str(hse_path),
@@ -552,18 +787,19 @@ class EmotionRecognizer:
 
     def _landmark_prior(self, landmarks5: np.ndarray) -> np.ndarray:
         pts = np.asarray(landmarks5, dtype=np.float64).reshape(5, 2)
-        le, re, _nose, ml, mr = pts
+        le, re, nose, ml, mr = pts
         iod = float(np.linalg.norm(re - le)) + 1e-6
         mouth_w = float(np.linalg.norm(mr - ml)) / iod
         eye_y = 0.5 * (le[1] + re[1])
         mouth_y = 0.5 * (ml[1] + mr[1])
         mouth_lift = (eye_y + 0.82 * iod - mouth_y) / iod
+        mouth_drop = (mouth_y - float(nose[1])) / iod
         prior = np.zeros(7, dtype=np.float64)
-        if mouth_lift > 0.12 and mouth_w > 0.78:
+        if mouth_lift > 0.04 and mouth_w > 0.88:
             prior[3] += 0.08
-        if mouth_lift < -0.08:
+        if mouth_lift < -0.34:
             prior[5] += 0.07
-        if mouth_w > 1.22:
+        if mouth_w > 1.18 and mouth_drop > 0.56:
             prior[6] += 0.07
         return prior
 
@@ -589,6 +825,10 @@ class EmotionRecognizer:
                     p = p / p.sum()
         else:
             p = _softmax(self._mbf_logits(aligned))
+        metrics = {}
+        if face.get("landmarks"):
+            metrics = landmark_cues(face["landmarks"], face.get("box")).get("metrics") or {}
+        p = calibrate_live_vec(p, metrics)
         scores = self._scores_from_vec(p)
         emo = self._emotion_from_id(scores[0]["id"], scores)
         if precision and len(scores) >= 2:
@@ -596,6 +836,52 @@ class EmotionRecognizer:
             if margin < 0.10:
                 emo["low_confidence"] = True
         return emo
+
+    def _ema_track_vec(self, face: dict, p: np.ndarray) -> np.ndarray:
+        """实时框跨帧平滑七类概率，减少摄像头微抖换标签。"""
+        now = time.perf_counter()
+        p = np.asarray(p, dtype=np.float64).reshape(-1)
+        if p.size != 7:
+            p = self._pad7(p)
+        s = float(p.sum())
+        p = p / s if s > 0 else np.full(7, 1.0 / 7.0)
+        prev = self._track_ema
+        if prev is not None:
+            iou = self._box_iou(face.get("box") or [0, 0, 0, 0], prev.get("box") or [0, 0, 0, 0])
+            dt = now - float(prev.get("t") or 0.0)
+            if iou >= 0.32 and dt < 1.2:
+                alpha = 0.22 if dt < 0.35 else 0.38
+                q = np.asarray(prev.get("p"), dtype=np.float64).reshape(-1)
+                if q.size == 7:
+                    p = alpha * p + (1.0 - alpha) * q
+                    p = np.clip(p, 1e-12, None)
+                    p = p / p.sum()
+        self._track_ema = {"box": list(face.get("box") or [0, 0, 0, 0]), "p": p.copy(), "t": now}
+        return p
+
+    def classify_face_live(self, image_bgr: np.ndarray, face: dict, use_hse: bool = True) -> dict:
+        """实时路径：单次 MobileFaceNet + 可选一次 HSEmotion，再做时间平滑。不做 4 向 TTA。"""
+        if face.get("landmarks"):
+            aligned = align_face(image_bgr, np.array(face["landmarks"], dtype=np.float64))
+        else:
+            aligned = crop_face(image_bgr, face["box"])
+        aligned = self._auto_light(aligned)
+        p_mbf = _softmax(self._mbf_logits(aligned), temperature=1.40)
+        p = p_mbf
+        if use_hse and self.hse is not None:
+            crop = self._auto_light(crop_face(image_bgr, face["box"], size=224, margin=0.28))
+            p_hse = self._hse_probs7(crop)
+            if p_hse is not None:
+                p = self._fuse_probs(p_mbf, p_hse)
+        p = self._ema_track_vec(face, p)
+        metrics = {}
+        if face.get("landmarks"):
+            metrics = landmark_cues(face["landmarks"], face.get("box")).get("metrics") or {}
+        p = calibrate_live_vec(p, metrics)
+        if self._track_ema is not None:
+            self._track_ema["p"] = p.copy()
+        scores = self._scores_from_vec(p)
+        return self._emotion_from_id(scores[0]["id"], scores)
 
     def _scores_from_vec(self, vec: np.ndarray) -> list[dict]:
         order = np.argsort(vec)[::-1]
@@ -667,7 +953,7 @@ class EmotionRecognizer:
 
     def _public_face(self, item: dict, primary: bool) -> dict:
         emo = item.get("emotion") or {}
-        return {
+        out = {
             "box": [round(float(v), 1) for v in item["box"]],
             "score": round(float(item.get("score") or 0.0), 3),
             "area": round(float(item.get("area") or 0.0), 1),
@@ -680,6 +966,13 @@ class EmotionRecognizer:
                 "color": emo.get("color"),
             },
         }
+        geo = landmark_cues(item.get("landmarks"), item.get("box"))
+        if geo.get("points"):
+            out["landmarks"] = geo["landmarks"]
+            out["points"] = geo["points"]
+            out["cues"] = geo["cues"]
+            out["metrics"] = geo["metrics"]
+        return out
 
     def predict_bgr(self, image_bgr: np.ndarray, want_crop: bool = True, mode: str | None = None) -> dict:
         with self._lock:
@@ -832,6 +1125,7 @@ class EmotionRecognizer:
                 else "未检测到人脸。请正对镜头、保证光线充足，或换一张更清晰的正面照片。"
             )
             self._last_track_faces = []
+            self._track_ema = None
             empty.update(
                 {
                     "error": hint,
@@ -844,10 +1138,24 @@ class EmotionRecognizer:
         classified = []
         got_fer = self._lock.acquire(blocking=True, timeout=0.02)
         try:
+            now = time.perf_counter()
+            ema = self._track_ema
             for face in faces:
-                emo = self.classify_face(image_bgr, face, precision=False) if got_fer else None
-                if emo is None:
-                    emo = self._reuse_track_emotion(face)
+                reuse = self._reuse_track_emotion(face)
+                stable = False
+                if reuse and ema is not None:
+                    iou_e = self._box_iou(face["box"], ema.get("box") or [0, 0, 0, 0])
+                    if iou_e >= 0.78 and (now - float(ema.get("t") or 0.0)) < 0.13:
+                        stable = True
+                emo = None
+                if got_fer and not stable:
+                    self._track_n += 1
+                    emo = self.classify_face_live(image_bgr, face, use_hse=(self._track_n % 2 == 1))
+                elif reuse:
+                    emo = reuse
+                    if ema is not None:
+                        ema["box"] = list(face["box"])
+                        ema["t"] = now
                 if emo is None:
                     meta = EMOTIONS["neutral"]
                     emo = {

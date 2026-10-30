@@ -3,13 +3,13 @@
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const CHANNEL = "emotune-face";
   const EMO_META = {
-    happy: { zh: "喜", name: "喜悦", color: "#f0c14b" },
-    angry: { zh: "怒", name: "愤怒", color: "#e23d3d" },
-    sad: { zh: "哀", name: "悲伤", color: "#5b8cff" },
-    fear: { zh: "惧", name: "恐惧", color: "#8b6ccf" },
-    surprise: { zh: "惊", name: "惊讶", color: "#ff6b9d" },
-    disgust: { zh: "厌", name: "厌恶", color: "#3d8b6e" },
-    neutral: { zh: "中", name: "平静", color: "#8b9bb4" },
+    happy: { zh: "喜", name: "喜悦", color: "#ffd400" },
+    angry: { zh: "怒", name: "愤怒", color: "#e02020" },
+    sad: { zh: "哀", name: "悲伤", color: "#4e7390" },
+    fear: { zh: "惧", name: "恐惧", color: "#6b2d91" },
+    surprise: { zh: "惊", name: "惊讶", color: "#ff7a18" },
+    disgust: { zh: "厌", name: "厌恶", color: "#6f7d32" },
+    neutral: { zh: "中", name: "平静", color: "#4ec6f5" },
     idle: { zh: "待", name: "待识别", color: "#c4a574" },
   };
   const FACE_MODE_META = {
@@ -30,13 +30,27 @@
     overlayTarget: [],
     overlayRaf: 0,
     overlayMiss: 0,
+    uiEmo: "",
+    uiGuess: "",
+    uiGuessHits: 0,
+    uiGuessAt: 0,
     theme: localStorage.getItem("emotune-theme") || "night",
     onlineOn: localStorage.getItem("emotune-online") !== "0",
     faceMode: params.get("mode") || localStorage.getItem("emotune-face-mode") || "solo",
+    landmarkMode: localStorage.getItem("emotune-landmark") || "overlay",
+    camZoom: 1,
+    camFill: false,
+    camFit: localStorage.getItem("emotune-cam-fit") === "contain" ? "contain" : "cover",
     camId: params.get("cam") || localStorage.getItem("emotune-cam") || "",
     mirror: true,
   };
   if (!FACE_MODE_META[state.faceMode]) state.faceMode = "solo";
+  if (!["overlay", "mesh", "off"].includes(state.landmarkMode)) state.landmarkMode = "overlay";
+  {
+    const raw = localStorage.getItem("emotune-cam-zoom");
+    const z = raw == null || raw === "" ? NaN : Number(raw);
+    state.camZoom = Number.isFinite(z) ? Math.max(0.5, Math.min(2.5, z)) : 1;
+  }
   const channel = "BroadcastChannel" in window ? new BroadcastChannel(CHANNEL) : null;
   const cam = $("#cam");
   const overlay = $("#face-overlay");
@@ -73,10 +87,10 @@
     ctx.closePath();
   }
   function sizeOverlay() {
-    const vp = $("#viewport");
-    if (!overlay || !vp) return null;
-    const cssW = vp.clientWidth;
-    const cssH = vp.clientHeight;
+    const host = $("#cam-layer") || $("#viewport");
+    if (!overlay || !host) return null;
+    const cssW = host.clientWidth;
+    const cssH = host.clientHeight;
     if (cssW < 8 || cssH < 8) return null;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const w = Math.round(cssW * dpr);
@@ -93,8 +107,12 @@
     let [x, y, bw, bh] = box.map(Number);
     const [iw, ih] = imageSize.map(Number);
     if (!iw || !ih || !bw || !bh) return null;
+    if (window.EmoTuneDraw) return EmoTuneDraw.mapBox(box, imageSize, sized, mirror, state.camFit || "cover");
     if (mirror) x = iw - x - bw;
-    const scale = Math.max(sized.cssW / iw, sized.cssH / ih);
+    const scale =
+      state.camFit === "contain"
+        ? Math.min(sized.cssW / iw, sized.cssH / ih)
+        : Math.max(sized.cssW / iw, sized.cssH / ih);
     const dw = iw * scale;
     const dh = ih * scale;
     const ox = (sized.cssW - dw) / 2;
@@ -106,6 +124,52 @@
       h: bh * scale * sized.dpr,
     };
   }
+  function mapPoint(pt, imageSize, sized, mirror) {
+    if (!pt || !imageSize || !sized) return null;
+    let x = Number(Array.isArray(pt) ? pt[0] : pt.x);
+    let y = Number(Array.isArray(pt) ? pt[1] : pt.y);
+    const [iw, ih] = imageSize.map(Number);
+    if (!iw || !ih || !Number.isFinite(x) || !Number.isFinite(y)) return null;
+    if (window.EmoTuneDraw) return EmoTuneDraw.mapPoint(pt, imageSize, sized, mirror, state.camFit || "cover");
+    if (mirror) x = iw - x;
+    const scale =
+      state.camFit === "contain"
+        ? Math.min(sized.cssW / iw, sized.cssH / ih)
+        : Math.max(sized.cssW / iw, sized.cssH / ih);
+    const dw = iw * scale;
+    const dh = ih * scale;
+    const ox = (sized.cssW - dw) / 2;
+    const oy = (sized.cssH - dh) / 2;
+    return {
+      x: (ox + x * scale) * sized.dpr,
+      y: (oy + y * scale) * sized.dpr,
+    };
+  }
+  function mirrorZh(zh, mirror) {
+    if (!mirror) return zh || "";
+    return String(zh || "")
+      .replace(/左/g, "\0")
+      .replace(/右/g, "左")
+      .replace(/\0/g, "右");
+  }
+  const FACE_POINT_FALLBACK = [
+    { id: "le", zh: "左眼", symbol: "p₁", part: "eye" },
+    { id: "re", zh: "右眼", symbol: "p₂", part: "eye" },
+    { id: "nose", zh: "鼻尖", symbol: "p₃", part: "nose" },
+    { id: "ml", zh: "左嘴角", symbol: "p₄", part: "mouth" },
+    { id: "mr", zh: "右嘴角", symbol: "p₅", part: "mouth" },
+  ];
+  const FACE_LINKS = [
+    ["lb", "rb"],
+    ["le", "re"],
+    ["le", "nose"],
+    ["re", "nose"],
+    ["nose", "ml"],
+    ["nose", "mr"],
+    ["ml", "mr"],
+    ["le", "lb"],
+    ["re", "rb"],
+  ];
   function iou(a, b) {
     const x1 = Math.max(a.x, b.x);
     const y1 = Math.max(a.y, b.y);
@@ -147,6 +211,83 @@
           ? "多人远场：可同时框出多张脸，包括远景小脸。歌曲按人数最多的情绪来。"
           : "单人精检：只认近景里最大最稳的一张脸。需要合影或远镜头时再切多人远场。";
     }
+  }
+
+  function postCamChrome() {
+    post({
+      type: "cam-chrome",
+      landmark: state.landmarkMode,
+      zoom: state.camZoom,
+      fill: !!state.camFill,
+      fit: state.camFit,
+    });
+  }
+
+  function applyCamView() {
+    const vp = $("#viewport");
+    const layer = $("#cam-layer");
+    document.body.classList.toggle("is-cam-fill", !!state.camFill);
+    if (vp) {
+      vp.classList.toggle("is-fill", !!state.camFill);
+      vp.classList.toggle("is-contain", state.camFit === "contain");
+      vp.dataset.fit = state.camFit || "cover";
+    }
+    if (layer) layer.style.setProperty("--cam-zoom", String(state.camZoom || 1));
+    const zoomVal = $("#cam-zoom-val");
+    if (zoomVal) zoomVal.textContent = `${Math.round((state.camZoom || 1) * 100)}%`;
+    const zoomInput = $("#cam-zoom");
+    if (zoomInput) zoomInput.value = String(Math.round((state.camZoom || 1) * 100));
+    $$("#landmark-picks [data-landmark]").forEach((btn) => {
+      const on = btn.dataset.landmark === state.landmarkMode;
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    const fillBtn = $("#btn-cam-fill");
+    if (fillBtn) {
+      fillBtn.classList.toggle("is-on", !!state.camFill);
+      fillBtn.textContent = state.camFill ? "退出铺满" : "铺满窗口";
+    }
+    const fitBtn = $("#btn-cam-fit");
+    if (fitBtn) {
+      const cover = state.camFit !== "contain";
+      fitBtn.classList.toggle("is-on", cover);
+      fitBtn.textContent = cover ? "铺满画面" : "完整画面";
+    }
+    sizeOverlay();
+    paintOverlay();
+    requestAnimationFrame(() => {
+      sizeOverlay();
+      paintOverlay();
+    });
+  }
+
+  function setLandmarkMode(id, persist) {
+    state.landmarkMode = ["overlay", "mesh", "off"].includes(id) ? id : "overlay";
+    if (persist !== false) localStorage.setItem("emotune-landmark", state.landmarkMode);
+    applyCamView();
+    if (persist) postCamChrome();
+  }
+
+  function setCamZoom(value, persist) {
+    const n = Number(value);
+    state.camZoom = Number.isFinite(n) ? Math.max(0.5, Math.min(2.5, n)) : 1;
+    if (persist !== false) localStorage.setItem("emotune-cam-zoom", String(state.camZoom));
+    applyCamView();
+    if (persist) postCamChrome();
+  }
+
+  function setCamFill(on, persist) {
+    state.camFill = !!on;
+    if (state.camFill) window.scrollTo(0, 0);
+    applyCamView();
+    if (persist) postCamChrome();
+  }
+
+  function setCamFit(id, persist) {
+    state.camFit = id === "contain" ? "contain" : "cover";
+    if (persist !== false) localStorage.setItem("emotune-cam-fit", state.camFit);
+    applyCamView();
+    if (persist) postCamChrome();
   }
 
   function setFaceMode(id, persist, silent) {
@@ -286,6 +427,42 @@
     cam.srcObject = null;
   }
 
+  function commitHud(emo) {
+    const id = emo && emo.id && EMO_META[emo.id] && emo.id !== "idle" ? emo.id : "";
+    if (!id) return state.uiEmo || "";
+    if (!state.uiEmo) {
+      state.uiEmo = id;
+      state.uiGuess = id;
+      state.uiGuessHits = 0;
+      state.uiGuessAt = Date.now();
+      return id;
+    }
+    if (id === state.uiEmo) {
+      state.uiGuess = id;
+      state.uiGuessHits = 0;
+      return id;
+    }
+    const spike = { surprise: true, fear: true, angry: true, disgust: true };
+    const prob = Number(emo.prob) || 0;
+    const hitsNeed = spike[id] ? 2 : 3;
+    const dwellNeed = spike[id] ? 280 : id === "neutral" && state.uiEmo && state.uiEmo !== "neutral" ? 640 : 480;
+    const minProb = spike[id] ? 0.55 : id === "neutral" ? 0 : 0.42;
+    if (prob < minProb && id !== "neutral") return state.uiEmo;
+    if (state.uiGuess !== id) {
+      state.uiGuess = id;
+      state.uiGuessHits = 1;
+      state.uiGuessAt = Date.now();
+      return state.uiEmo;
+    }
+    state.uiGuessHits += 1;
+    if (state.uiGuessHits >= hitsNeed && Date.now() - (state.uiGuessAt || 0) >= dwellNeed) {
+      state.uiEmo = id;
+      state.uiGuessHits = 0;
+      return id;
+    }
+    return state.uiEmo;
+  }
+
   function updateHud(data) {
     const hud = $("#live-emo-hud");
     if (!hud) return;
@@ -294,6 +471,18 @@
     const vote = (data && data.vote) || {};
     const countEl = $("#live-emo-count");
     if (!emo) {
+      const keep = state.uiEmo && EMO_META[state.uiEmo] ? state.uiEmo : "";
+      if (keep) {
+        hud.classList.remove("is-miss");
+        hud.dataset.emo = keep;
+        const keepMeta = EMO_META[keep] || {};
+        hud.style.setProperty("--emo", keepMeta.color || "#c4a574");
+        $("#live-emo-zh").textContent = keepMeta.zh || "";
+        $("#live-emo-name").textContent = keepMeta.name || "";
+        $("#live-emo-pct").textContent = "";
+        if (countEl) countEl.textContent = "";
+        return;
+      }
       hud.dataset.emo = "idle";
       hud.classList.add("is-miss");
       $("#live-emo-zh").textContent = "";
@@ -302,14 +491,15 @@
       if (countEl) countEl.textContent = "";
       return;
     }
+    const shown = commitHud(emo) || emo.id || "idle";
     hud.classList.remove("is-miss");
-    hud.dataset.emo = emo.id || "idle";
-    const color = emoHex(emo.id, emo.color);
+    hud.dataset.emo = shown;
+    const color = emoHex(shown, shown === emo.id ? emo.color : "");
     hud.style.setProperty("--emo", color);
-    const meta = EMO_META[emo.id] || {};
-    $("#live-emo-zh").textContent = meta.zh || emo.zh || "";
-    $("#live-emo-name").textContent = meta.name || emo.name || "";
-    $("#live-emo-pct").textContent = Math.round((emo.prob || 0) * 100) ? `${Math.round(emo.prob * 100)}%` : "";
+    const meta = EMO_META[shown] || {};
+    $("#live-emo-zh").textContent = meta.zh || "";
+    $("#live-emo-name").textContent = meta.name || "";
+    $("#live-emo-pct").textContent = shown === emo.id && Math.round((emo.prob || 0) * 100) ? `${Math.round(emo.prob * 100)}%` : "";
     const n = vote.total || data.face_count || 0;
     if (countEl) countEl.textContent = n > 1 ? `${n} 张 · 多数 ${vote.majority || n}` : n === 1 ? "1 张脸" : "";
     const bar = $("#vote-bar");
@@ -328,7 +518,11 @@
           .join("");
       } else bar.hidden = true;
     }
-    document.body.dataset.emotion = emo.id || "idle";
+    document.body.dataset.emotion = shown || "idle";
+  }
+
+  function clonePoint(p) {
+    return p ? Object.assign({}, p, { x: p.x, y: p.y }) : p;
   }
 
   function cloneOverlayItem(item) {
@@ -336,7 +530,26 @@
       box: item.box ? { x: item.box.x, y: item.box.y, w: item.box.w, h: item.box.h } : item.box,
       primary: item.primary,
       emo: item.emo,
+      points: (item.points || []).map(clonePoint),
+      cues: item.cues || [],
     };
+  }
+
+  function lerpPt(a, b, t) {
+    if (!a) return b;
+    if (!b) return a;
+    return Object.assign({}, b, { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  }
+
+  function lerpPoints(prev, next, t) {
+    const map = {};
+    (prev || []).forEach((p) => {
+      if (p && p.id) map[p.id] = p;
+    });
+    return (next || []).map((p) => {
+      const q = map[p.id];
+      return q ? lerpPt(q, p, t) : clonePoint(p);
+    });
   }
 
   function blendOverlay(prev, target, t) {
@@ -354,10 +567,28 @@
       });
       if (best >= 0) {
         used.add(best);
-        return { box: lerpBox(prev[best].box, item.box, t), primary: item.primary, emo: item.emo };
+        const old = prev[best];
+        return {
+          box: lerpBox(old.box, item.box, t),
+          primary: item.primary,
+          emo: item.emo,
+          points: lerpPoints(old.points, item.points, t),
+          cues: item.cues || [],
+        };
       }
       return cloneOverlayItem(item);
     });
+  }
+
+  function paintFaceLandmarks(ctx, item, color) {
+    if (window.EmoTuneDraw) {
+      if (state.landmarkMode === "mesh") EmoTuneDraw.paintMesh(ctx, item, color);
+      else EmoTuneDraw.paintDots(ctx, item, color);
+    }
+  }
+
+  function paintFaceCues(ctx, item, color) {
+    if (window.EmoTuneDraw) EmoTuneDraw.paintAuChips(ctx, item, color, overlay);
   }
 
   function paintOverlay() {
@@ -365,48 +596,33 @@
     const sized = sizeOverlay();
     if (!sized) return;
     ctx.clearRect(0, 0, overlay.width, overlay.height);
-    const mapped = state.overlaySmooth || [];
+    if (state.landmarkMode === "off") return;
+    const shown = state.uiEmo && EMO_META[state.uiEmo] ? state.uiEmo : "";
+    const shownMeta = EMO_META[shown] || {};
+    const mapped = (state.overlaySmooth || []).map((item) => {
+      const emo = item.emo || {};
+      const solo = item.primary || (state.overlaySmooth || []).length === 1;
+      if (!solo || !shown) return item;
+      return Object.assign({}, item, {
+        emo: Object.assign({}, emo, {
+          id: shown,
+          zh: shownMeta.zh || emo.zh,
+          name: shownMeta.name || emo.name,
+          color: shownMeta.color || emo.color,
+          prob: emo.id === shown ? emo.prob : 0,
+        }),
+      });
+    });
+    if (window.EmoTuneDraw) {
+      EmoTuneDraw.paintFaces(ctx, mapped, { mode: state.landmarkMode, canvas: overlay });
+      return;
+    }
     mapped.forEach((item) => {
-      const { box, emo, primary } = item;
-      const id = (emo && emo.id) || "idle";
-      const color = emoHex(id, emo && emo.color);
-      const radius = Math.max(8, box.w * 0.08);
-      ctx.save();
-      roundRectPath(ctx, box.x, box.y, box.w, box.h, radius);
-      ctx.fillStyle = hexToRgba(color, primary ? 0.14 : 0.08);
-      ctx.fill();
-      ctx.lineWidth = primary ? Math.max(3.2, box.w * 0.018) : 2;
+      const color = emoHex((item.emo && item.emo.id) || "idle", item.emo && item.emo.color);
       ctx.strokeStyle = color;
-      ctx.globalAlpha = primary ? 1 : 0.82;
-      ctx.stroke();
-      const meta = EMO_META[id] || {};
-      const pct = Math.round(((emo && emo.prob) || 0) * 100);
-      const label = [meta.zh || (emo && emo.zh) || "", meta.name || (emo && emo.name) || "", pct ? `${pct}%` : ""]
-        .filter(Boolean)
-        .join(" ");
-      if (label) {
-        const fontPx = Math.max(13, Math.min(22, box.w * 0.16));
-        ctx.font = `700 ${fontPx}px "Noto Sans SC","Microsoft YaHei",sans-serif`;
-        ctx.textBaseline = "middle";
-        const padX = 10;
-        const tw = ctx.measureText(label).width;
-        const pillW = tw + padX * 2;
-        const pillH = fontPx + 12;
-        let px = box.x;
-        let py = box.y - pillH - 8;
-        if (py < 6) py = box.y + 6;
-        if (px + pillW > overlay.width - 6) px = Math.max(6, overlay.width - pillW - 6);
-        roundRectPath(ctx, px, py, pillW, pillH, pillH / 2);
-        ctx.globalAlpha = 1;
-        ctx.fillStyle = "rgba(8,7,6,0.78)";
-        ctx.fill();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1.6;
-        ctx.stroke();
-        ctx.fillStyle = color;
-        ctx.fillText(label, px + padX, py + pillH / 2);
-      }
-      ctx.restore();
+      ctx.strokeRect(item.box.x, item.box.y, item.box.w, item.box.h);
+      paintFaceLandmarks(ctx, item, color);
+      if (item.primary) paintFaceCues(ctx, item, color);
     });
   }
 
@@ -417,7 +633,7 @@
       if (!state.trackOn) return;
       const target = state.overlayTarget || [];
       if (target.length && (state.overlaySmooth || []).length) {
-        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, 0.4);
+        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, 0.22);
       } else if (target.length) {
         state.overlaySmooth = target.map(cloneOverlayItem);
       }
@@ -447,7 +663,23 @@
         const box = mapBox(f.box, imageSize, sized, state.mirror);
         if (!box) return null;
         const emo = f.emotion || data.emotion || {};
-        return { box, emo, primary: !!f.primary };
+        const srcPts =
+          f.points && f.points.length
+            ? f.points
+            : (f.landmarks || []).map((xy, i) =>
+                Object.assign({}, FACE_POINT_FALLBACK[i] || { id: `p${i}`, zh: "点", symbol: `p${i}`, part: "face" }, {
+                  x: xy[0],
+                  y: xy[1],
+                })
+              );
+        const points = srcPts
+          .map((p) => {
+            const xy = mapPoint([p.x, p.y], imageSize, sized, state.mirror);
+            if (!xy) return null;
+            return Object.assign({}, p, { zh: mirrorZh(p.zh, !!state.mirror), x: xy.x, y: xy.y });
+          })
+          .filter(Boolean);
+        return { box, emo, primary: !!f.primary, points, cues: f.cues || [] };
       })
       .filter(Boolean);
     if (!mapped.length) {
@@ -463,10 +695,8 @@
     state.overlayTarget = mapped;
     if (!state.overlaySmooth.length) {
       state.overlaySmooth = mapped.map(cloneOverlayItem);
-    } else {
-      state.overlaySmooth = blendOverlay(state.overlaySmooth, mapped, 0.72);
+      paintOverlay();
     }
-    paintOverlay();
     ensureOverlayPump();
   }
 
@@ -489,7 +719,8 @@
       if (!state.trackBusy) {
         state.trackBusy = true;
         try {
-          const blob = await captureBlob(0.72, 640);
+          const crowd = state.faceMode === "crowd";
+          const blob = await captureBlob(crowd ? 0.8 : 0.86, crowd ? 800 : 720);
           if (blob && state.trackOn) {
             const fd = new FormData();
             fd.append("image", blob, "track.jpg");
@@ -504,6 +735,11 @@
               draw(data);
               post({ type: "track", data });
             }
+            const elapsed = Number((data && data.elapsed_ms) || 40);
+            if (state.trackOn && cameraReady()) {
+              state.trackTimer = setTimeout(tick, Math.max(90, 200 - elapsed));
+            }
+            return;
           }
         } catch {
           /* next tick */
@@ -511,9 +747,9 @@
           state.trackBusy = false;
         }
       }
-      if (state.trackOn && cameraReady()) state.trackTimer = setTimeout(tick, 50);
+      if (state.trackOn && cameraReady()) state.trackTimer = setTimeout(tick, 140);
     };
-    state.trackTimer = setTimeout(tick, 40);
+    state.trackTimer = setTimeout(tick, 80);
   }
 
   async function recognize(source) {
@@ -575,7 +811,7 @@
     if (state.live) {
       state.liveTimer = setInterval(() => {
         if (!state.recognizing && cameraReady()) recognize("camera-live");
-      }, 1600);
+      }, 1400);
     }
   }
 
@@ -602,6 +838,15 @@
   $$("#face-mode-picks [data-face-mode]").forEach((btn) => {
     btn.addEventListener("click", () => setFaceMode(btn.dataset.faceMode, true));
   });
+  $$("#landmark-picks [data-landmark]").forEach((btn) => {
+    btn.addEventListener("click", () => setLandmarkMode(btn.dataset.landmark, true));
+  });
+  const fillBtn = $("#btn-cam-fill");
+  if (fillBtn) fillBtn.addEventListener("click", () => setCamFill(!state.camFill, true));
+  const fitBtn = $("#btn-cam-fit");
+  if (fitBtn) fitBtn.addEventListener("click", () => setCamFit(state.camFit === "contain" ? "cover" : "contain", true));
+  const zoomInput = $("#cam-zoom");
+  if (zoomInput) zoomInput.addEventListener("input", () => setCamZoom(Number(zoomInput.value) / 100, true));
   const camSelect = $("#cam-select");
   if (camSelect) {
     camSelect.addEventListener("change", async () => {
@@ -623,14 +868,27 @@
     stopCamera();
   });
   window.addEventListener("resize", () => sizeOverlay());
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && state.camFill) {
+      e.preventDefault();
+      setCamFill(false, true);
+    }
+  });
   if (channel) {
     channel.addEventListener("message", (ev) => {
       const msg = ev.data || {};
       if (msg.type === "face-mode" && msg.id) setFaceMode(msg.id, false, true);
+      if (msg.type === "cam-chrome") {
+        if (msg.landmark) setLandmarkMode(msg.landmark, false);
+        if (Number.isFinite(Number(msg.zoom))) setCamZoom(Number(msg.zoom), false);
+        if (typeof msg.fill === "boolean") setCamFill(msg.fill, false);
+        if (msg.fit) setCamFit(msg.fit, false);
+      }
     });
   }
 
   paintFaceMode();
+  applyCamView();
   listCameras();
   const wantLive = params.get("live") === "1";
   startCamera().then((ok) => {

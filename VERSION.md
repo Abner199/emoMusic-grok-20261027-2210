@@ -6,7 +6,46 @@
 
 ---
 
-## 当前快照 2026-10-28 15:25 · 小学 40 分钟成功场
+## 当前快照 2026-10-30 08:38 · 532 首曲库 + 日常/高潮情绪分级
+
+| 项 | 内容 |
+| --- | --- |
+| 快照时间 | **2026-10-30 08:38** |
+| Git 标签 | `snapshot-20261030-0838` |
+| 发布名 | 心弦 EmoTune 快照 2026-10-30 08:38 |
+| 分支 | `main` |
+| Python | 3.12（conda 环境 `emotune`），CPU 版 `onnxruntime` |
+| 自检 | `python tests/selfcheck.py` 全部通过 |
+
+### 这一版相对 `snapshot-20261028-1525` 做了什么
+
+- 本地曲库从 280 首扩到 **532 首**（每类 76 首），中文优先，少量网红英文；新增 252 首试听与封面
+- 情绪分级：平静、喜悦、悲伤为日常三类，多确认一会儿再换歌；惊讶、恐惧、愤怒、厌恶为高潮四类，认到后立刻锁反差歌单
+- 人脸框、此刻情绪、播放器、可视化与语音提示共用同一确认标签；语音提示随此刻节奏播报
+- 在线热歌源扩充：苹果热歌榜 / 热播 / 亚洲热歌、网易云与 QQ 热歌榜、Deezer、Audius
+- 新增 `static/js/face-draw.js`（人脸框绘制拆分），新增测试 `test_live_calibrate.py`、`test_voice_once.py`
+
+### 快速恢复这一版（继续开发请从这里开分支）
+
+```bat
+git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
+cd emoMusic-grok-20261027-2210
+git checkout snapshot-20261030-0838
+git switch -c dev-from-20261030
+conda create -n emotune python=3.12 pip -y
+conda activate emotune
+python -m pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+python tools\verify_cpu.py
+python app.py
+```
+
+本机已有目录：`git fetch --tags && git checkout snapshot-20261030-0838`，然后 `conda activate emotune`、`python app.py`，打开 http://127.0.0.1:5000 。
+
+以前的快照标签（`snapshot-20261028-1525` 等）全部保留，不被覆盖。
+
+---
+
+## 以前的快照 2026-10-28 15:25 · 小学 40 分钟成功场
 
 **【20261028日  小学40分钟  10月28日下午15:25-16:05】**
 
@@ -25,7 +64,7 @@
 | 推理 | **CPU 版** pip 包 `onnxruntime` |
 | 网页标题 | 当AI遇见旋律：从表情感知到智能音乐推荐 |
 
-本仓库 `main` 指向这一版。克隆后默认已在该版本；用标签 `snapshot-20261028-1525` 可以随时精确回到这场小学课用的系统。
+克隆后用 用标签 `snapshot-20261028-1525` 可以随时精确回到这场小学课用的系统。
 
 上一版 `snapshot-20261028-1252`（讲座准备）、`snapshot-20261028-1105`、`snapshot-20261028-1043`、`snapshot-20261028-0951` 与 `snapshot-20261027-2210`（224 首）仍然保留，**不会被本标签覆盖**。
 

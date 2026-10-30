@@ -191,7 +191,7 @@
     faceMode: localStorage.getItem("emotune-face-mode") || "solo",
     landmarkMode: localStorage.getItem("emotune-landmark") || "overlay",
     camZoom: 1,
-    camFill: false,
+    camFill: localStorage.getItem("emotune-cam-size") !== "default",
     camFit: localStorage.getItem("emotune-cam-fit") === "contain" ? "contain" : "cover",
     camId: localStorage.getItem("emotune-cam") || "",
     mirror: true,
@@ -511,7 +511,7 @@
     empty: $("#cam-empty"),
     scan: $("#scan"),
     file: $("#file-input"),
-    drop: $("#dropzone"),
+    drop: $("#photo-stage"),
     songs: $("#songs"),
     tags: $("#emo-tags"),
     icon: $("#emo-icon"),
@@ -1853,7 +1853,6 @@
       return;
     }
     stopLive();
-    if (!isLiveMode(next) && state.camFill) setCamFill(false, true);
     if (isLiveMode(prev) || isLiveMode(next)) stopCameraStream();
     showPanel(next);
     setMirror(next === "camera");
@@ -2295,7 +2294,6 @@
         type: "cam-chrome",
         landmark: state.landmarkMode,
         zoom: state.camZoom,
-        fill: !!state.camFill,
         fit: state.camFit,
       });
     } catch {
@@ -2306,7 +2304,7 @@
   function applyCamView() {
     const vp = $("#viewport");
     const layer = $("#cam-layer");
-    document.body.classList.toggle("is-cam-fill", !!state.camFill);
+    document.body.classList.toggle("is-block-fill", !!state.camFill);
     if (vp) {
       vp.classList.toggle("is-fill", !!state.camFill);
       vp.classList.toggle("is-contain", state.camFit === "contain");
@@ -2326,11 +2324,16 @@
     });
     const fillBtn = $("#btn-cam-fill");
     if (fillBtn) {
-      fillBtn.classList.toggle("is-on", !!state.camFill);
-      fillBtn.textContent = state.camFill ? "退出铺满" : "铺满窗口";
+      fillBtn.classList.toggle("is-on", !state.camFill);
+      fillBtn.textContent = state.camFill ? "默认尺寸" : "铺满区块";
     }
-    const exitBtn = $("#btn-cam-exit");
-    if (exitBtn) exitBtn.hidden = !state.camFill;
+    $$("#cam-size-picks [data-cam-size]").forEach((btn) => {
+      const on = (btn.dataset.camSize === "fill") === !!state.camFill;
+      btn.classList.toggle("is-on", on);
+      btn.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    const zoomChip = $("#cam-zoom-chip");
+    if (zoomChip) zoomChip.textContent = `${Math.round((state.camZoom || 1) * 100)}%`;
     const fitBtn = $("#btn-cam-fit");
     if (fitBtn) {
       const cover = state.camFit !== "contain";
@@ -2343,7 +2346,59 @@
     requestAnimationFrame(() => {
       sizeFaceOverlay();
       paintFaceOverlay();
+      paintPhotoOverlay();
     });
+  }
+
+  /* 照片模式：在照片上画人脸框、关键点与表情标签（完整画面，不镜像） */
+  function paintPhotoOverlay(data) {
+    if (data !== undefined) state.photoData = data;
+    const canvas = $("#photo-overlay");
+    const img = $("#picked-img");
+    if (!canvas || !img) return;
+    const host = canvas.parentElement;
+    const cssW = img.clientWidth;
+    const cssH = img.clientHeight;
+    const ctx = canvas.getContext("2d");
+    if (!host || cssW < 8 || cssH < 8) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    canvas.style.width = `${cssW}px`;
+    canvas.style.height = `${cssH}px`;
+    canvas.style.left = `${img.offsetLeft}px`;
+    canvas.style.top = `${img.offsetTop}px`;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const d = state.photoData;
+    if (!d || !d.ok || state.landmarkMode === "off" || !window.EmoTuneDraw) return;
+    const imageSize = (d.face && d.face.image_size) || [img.naturalWidth, img.naturalHeight];
+    const sized = { cssW, cssH, dpr };
+    const raw = (d.faces && d.faces.length
+      ? d.faces
+      : d.face && d.face.box
+        ? [{ box: d.face.box, primary: true, emotion: d.emotion }]
+        : []
+    ).filter((f) => f && f.box);
+    const mapped = raw
+      .map((f) => {
+        const box = EmoTuneDraw.mapBox(f.box, imageSize, sized, false, "contain");
+        if (!box) return null;
+        const srcPts =
+          f.points && f.points.length
+            ? f.points
+            : (f.landmarks || []).map((xy, i) =>
+                Object.assign({}, FACE_POINT_FALLBACK[i] || { id: `p${i}`, zh: "点", symbol: `p${i}`, part: "face" }, { x: xy[0], y: xy[1] })
+              );
+        const points = srcPts
+          .map((p) => {
+            const xy = EmoTuneDraw.mapPoint([p.x, p.y], imageSize, sized, false, "contain");
+            return xy ? Object.assign({}, p, { x: xy.x, y: xy.y }) : null;
+          })
+          .filter(Boolean);
+        return { box, primary: !!f.primary || raw.length === 1, emo: f.emotion || d.emotion || {}, points, cues: f.cues || [] };
+      })
+      .filter(Boolean);
+    if (mapped.length) EmoTuneDraw.paintFaces(ctx, mapped, { mode: state.landmarkMode, canvas });
   }
 
   function setLandmarkMode(id, persist) {
@@ -2364,10 +2419,7 @@
 
   function setCamFill(on, persist) {
     state.camFill = !!on;
-    if (state.camFill) {
-      window.scrollTo(0, 0);
-      setSettingsOpen(false);
-    }
+    if (persist !== false) localStorage.setItem("emotune-cam-size", state.camFill ? "fill" : "default");
     applyCamView();
     if (persist) postCamChrome();
   }
@@ -2385,8 +2437,18 @@
     });
     const fillBtn = $("#btn-cam-fill");
     if (fillBtn) fillBtn.addEventListener("click", () => setCamFill(!state.camFill, true));
-    const exitBtn = $("#btn-cam-exit");
-    if (exitBtn) exitBtn.addEventListener("click", () => setCamFill(false, true));
+    $$("#cam-size-picks [data-cam-size]").forEach((btn) => {
+      btn.addEventListener("click", () => setCamFill(btn.dataset.camSize === "fill", true));
+    });
+    const stepZoom = (d) => setCamZoom(Math.round(((state.camZoom || 1) + d) * 20) / 20, true);
+    const zin = $("#btn-zoom-in");
+    if (zin) zin.addEventListener("click", () => stepZoom(0.1));
+    const zout = $("#btn-zoom-out");
+    if (zout) zout.addEventListener("click", () => stepZoom(-0.1));
+    const zreset = $("#btn-zoom-reset");
+    if (zreset) zreset.addEventListener("click", () => setCamZoom(1, true));
+    const chip = $("#cam-zoom-chip");
+    if (chip) chip.addEventListener("dblclick", () => setCamZoom(1, true));
     const fitBtn = $("#btn-cam-fit");
     if (fitBtn) {
       fitBtn.addEventListener("click", () => setCamFit(state.camFit === "contain" ? "cover" : "contain", true));
@@ -2398,6 +2460,7 @@
     window.addEventListener("resize", () => {
       sizeFaceOverlay();
       paintFaceOverlay();
+      paintPhotoOverlay();
     });
   }
 
@@ -3102,6 +3165,12 @@
       next.textContent = "";
       return;
     }
+    if (lines.length > 1 && t + 0.25 < Number(lines[0].t)) {
+      prev.textContent = "";
+      now.textContent = "♪";
+      next.textContent = lines[0].text || "";
+      return;
+    }
     let i = 0;
     for (let k = 0; k < lines.length; k += 1) {
       if (Number(lines[k].t) <= t) i = k;
@@ -3115,7 +3184,8 @@
   }
 
   function lyricDuration(song) {
-    const d = Number(audio && audio.duration);
+    /* 切歌时 audio 还是上一首，不能拿上一首的时长去对齐 */
+    const d = song && sameAudio(song.audio) ? Number(audio.duration) : 0;
     if (d && isFinite(d) && d > 1) return d;
     const id = (song && song.id) || "";
     if (/^(vocal|itunes|local)-/.test(id)) return 30;
@@ -3388,6 +3458,7 @@
   }
 
   function handleRecognizeData(data, source, t0) {
+    if (source === "upload") paintPhotoOverlay(data && data.ok ? data : null);
     const live = isLiveSource(source) || isLiveSource(data && data.source);
     if (!data || !data.ok) {
       if (live) {
@@ -3566,8 +3637,19 @@
     const picked = $("#picked");
     const img = $("#picked-img");
     const cap = $("#picked-cap");
-    if (img) img.src = url;
+    paintPhotoOverlay(null);
+    if (img) {
+      img.onload = () => paintPhotoOverlay();
+      img.src = url;
+    }
     if (picked) picked.hidden = false;
+    const drop = $("#dropzone");
+    if (drop) drop.hidden = true;
+    const stage = $("#photo-stage");
+    if (stage) {
+      stage.classList.add("has-photo");
+      if (stage.getBoundingClientRect().top < 0) stage.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
     if (cap) cap.textContent = "已选择照片，正在识别…";
     Promise.resolve(recognize(file, "upload")).finally(() => {
       if (cap) cap.textContent = "已选择照片";
@@ -3718,11 +3800,24 @@
         )
         .join("");
       $$("#demo-list button").forEach((btn) => {
-        btn.addEventListener("click", async () => {
-          unlockAudio();
-          const blob = await (await fetch(btn.dataset.url)).blob();
-          const file = new File([blob], btn.dataset.file || `${btn.dataset.id}.jpg`, { type: blob.type || "image/jpeg" });
-          useFile(file);
+        const pick = async () => {
+          if (btn.dataset.busy) return;
+          btn.dataset.busy = "1";
+          try {
+            unlockAudio();
+            const blob = await (await fetch(btn.dataset.url)).blob();
+            const file = new File([blob], btn.dataset.file || `${btn.dataset.id}.jpg`, { type: blob.type || "image/jpeg" });
+            $$("#demo-list button").forEach((b) => b.classList.toggle("is-on", b === btn));
+            useFile(file);
+          } finally {
+            setTimeout(() => delete btn.dataset.busy, 400);
+          }
+        };
+        btn.addEventListener("click", pick);
+        btn.addEventListener("dblclick", (e) => {
+          e.preventDefault();
+          const stage = $("#photo-stage");
+          if (stage) stage.scrollIntoView({ block: "start", behavior: "smooth" });
         });
       });
     } catch {
@@ -3810,13 +3905,21 @@
       } else if (msg.type === "cam-chrome") {
         if (msg.landmark) setLandmarkMode(msg.landmark, false);
         if (Number.isFinite(Number(msg.zoom))) setCamZoom(Number(msg.zoom), false);
-        if (typeof msg.fill === "boolean") setCamFill(msg.fill, false);
         if (msg.fit) setCamFit(msg.fit, false);
       }
     });
   }
 
   function bind() {
+    const hintBtn = $("#live-hint-btn");
+    const hintBox = $("#live-hint");
+    if (hintBtn && hintBox) {
+      const show = (on) => hintBox.classList.toggle("is-show", on);
+      hintBtn.addEventListener("mouseenter", () => show(true));
+      hintBtn.addEventListener("mouseleave", () => show(document.activeElement === hintBtn && hintBtn.matches(":focus-visible")));
+      hintBtn.addEventListener("focus", () => show(true));
+      hintBtn.addEventListener("blur", () => show(false));
+    }
     $$(".tab").forEach((t) => t.addEventListener("click", () => setMode(t.dataset.mode)));
     $("#btn-cam").addEventListener("click", () => {
       unlockAudio();
@@ -3882,7 +3985,11 @@
       } else stopLive();
     });
 
-    ui.file.addEventListener("change", () => useFile(ui.file.files[0]));
+    ui.file.addEventListener("change", () => {
+      const f = ui.file.files[0];
+      if (f) useFile(f);
+      ui.file.value = "";
+    });
     ["dragenter", "dragover"].forEach((ev) =>
       ui.drop.addEventListener(ev, (e) => {
         e.preventDefault();
@@ -3896,6 +4003,12 @@
       })
     );
     ui.drop.addEventListener("drop", (e) => useFile(e.dataTransfer.files[0]));
+    const pickedImg = $("#picked-img");
+    if (pickedImg) {
+      pickedImg.addEventListener("dblclick", () => {
+        if (state.lastFile) recognize(state.lastFile, "upload");
+      });
+    }
 
     ui.songs.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-play]");
@@ -4081,11 +4194,6 @@
     bindChromeUi();
 
     window.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && state.camFill) {
-        e.preventDefault();
-        setCamFill(false, true);
-        return;
-      }
       if (e.key === "Escape") {
         setSettingsOpen(false);
       }

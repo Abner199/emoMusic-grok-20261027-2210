@@ -2,13 +2,15 @@
 """Verify default online source, manual local toggle, and auto fallback."""
 from __future__ import annotations
 
+import os
+
 import json
 import sys
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-BASE = "http://127.0.0.1:5000"
+BASE = os.environ.get("EMOTUNE_BASE", "http://127.0.0.1:5000")
 OUT = Path(r"C:\Users\niewe\AppData\Local\Temp\emotune-online-source")
 CROP = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
 
@@ -77,6 +79,10 @@ def main() -> int:
 
         page.route("**/api/recommend**", handle_recommend)
         page.goto(BASE, wait_until="domcontentloaded", timeout=20000)
+        page.wait_for_selector("#online-toggle", state="attached")
+        # 在线热歌开关收在「设置 · 播放显示」里
+        page.locator("#btn-settings").click()
+        page.locator('#settings-panel details[data-set="play"] summary').click()
         page.wait_for_selector("#online-toggle")
         chk("默认打开在线曲库", page.locator("#online-toggle").is_checked())
         chk("状态默认在线", page.evaluate("() => window.__emotune.getState().onlineOn") is True)
@@ -110,8 +116,14 @@ def main() -> int:
         local_badges = [t for t in badges if "本地" in t]
         chk("上传后列出歌曲", len(badges) == 24, str(len(badges)))
         chk("默认在线优先或本地兜底", bool(online_badges) or bool(local_badges), f"online={len(online_badges)} local={len(local_badges)}")
+        live.locator("#btn-settings").click()
+        live.locator('#settings-panel details[data-set="play"] summary').click()
         live.locator("#online-toggle").uncheck()
-        live.wait_for_function("() => document.querySelectorAll('#songs .song').length >= 8", timeout=15000)
+        live.wait_for_function(
+            "() => { const s = [...document.querySelectorAll('#songs .song')];"
+            " return s.length >= 8 && s.every((e) => !(e.innerText || '').includes('在线 ·')); }",
+            timeout=15000,
+        )
         live.wait_for_timeout(300)
         after = live.locator("#songs .song").evaluate_all("els => els.map(e => (e.innerText || ''))")
         chk("手动切本地后仍有歌", len(after) >= 8, str(len(after)))

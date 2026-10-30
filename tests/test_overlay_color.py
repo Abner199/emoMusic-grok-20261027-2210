@@ -2,6 +2,8 @@
 """Verify live face-box and HUD text colors follow the current emotion."""
 from __future__ import annotations
 
+import os
+
 import json
 import re
 import sys
@@ -11,7 +13,7 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = Path(r"C:\Users\niewe\AppData\Local\Temp\emotune-overlay-color")
-BASE = "http://127.0.0.1:5000"
+BASE = os.environ.get("EMOTUNE_BASE", "http://127.0.0.1:5000")
 
 EMOS = [
     ("happy", "喜", "喜悦", (255, 212, 0), "#ffd400"),

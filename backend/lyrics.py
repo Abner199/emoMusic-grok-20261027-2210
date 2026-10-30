@@ -5326,6 +5326,26 @@ def _align_preview(official: list[dict], local: list[dict], preview_s: float) ->
     return _shift_window(official, start, preview_s)
 
 
+_ALIGNED: dict | None = None
+
+
+def _aligned_lines(song_id: str) -> list[dict] | None:
+    """tools/align_lyrics.py 用语音识别定位过的试听歌词（本机，无需联网）。"""
+    global _ALIGNED
+    if _ALIGNED is None:
+        try:
+            from config import DATA_DIR
+
+            path = DATA_DIR / "lyrics_aligned.json"
+            _ALIGNED = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        except Exception:
+            logger.debug("读取对齐歌词失败", exc_info=True)
+            _ALIGNED = {}
+    row = _ALIGNED.get(song_id) or {}
+    lines = row.get("lines")
+    return lines if lines and len(lines) >= 2 else None
+
+
 def get_lyrics(song_id: str = "", title: str = "", artist: str = "", duration: float = 0.0) -> dict:
     orig_sid = (song_id or "").strip()
     sid = orig_sid
@@ -5359,6 +5379,18 @@ def get_lyrics(song_id: str = "", title: str = "", artist: str = "", duration: f
         orig_sid.startswith("vocal-") or orig_sid.startswith("itunes-") or orig_sid.startswith("local-")
     ):
         preview_s = 30.0
+    if 0 < preview_s <= 42 and orig_sid.startswith("vocal-"):
+        aligned = _aligned_lines(orig_sid)
+        if aligned:
+            return {
+                "ok": True,
+                "id": orig_sid,
+                "title": title_in,
+                "artist": artist_in,
+                "lines": aligned,
+                "timed": True,
+                "source": "aligned",
+            }
     official: list[dict] = []
     try:
         official = _official_lines(title_in, artist_in, _qq_mid_from_id(sid))

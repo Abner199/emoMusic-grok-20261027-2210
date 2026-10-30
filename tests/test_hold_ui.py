@@ -268,7 +268,10 @@ def main() -> int:
                 str(color_info),
             )
             page.screenshot(path=str(shots / "overlay.png"))
-            page.locator("#live-toggle").check()
+            # 实时捕捉开关收在「设置」里，这里直接拨动
+            page.locator("#live-toggle").evaluate(
+                "el => { el.checked = true; el.dispatchEvent(new Event('change', { bubbles: true })); }"
+            )
             page.wait_for_function("() => window.__emotune.getState().lock === 'surprise'", timeout=12000)
             page.wait_for_timeout(400)
             page.screenshot(path=str(shots / "locked.png"), full_page=True)

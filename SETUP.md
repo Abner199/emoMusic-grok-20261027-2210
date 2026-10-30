@@ -1,11 +1,11 @@
 # 当AI遇见旋律：换电脑完整部署说明
 
-品牌 **心弦 EmoTune**。本页写给要把**讲座这一版原样**装到另一台 Windows 电脑、并从零跑起来的人，**包含情绪足迹怎么带走**。固定版本、标签和如何回到某一版，见 [VERSION.md](VERSION.md)。
+品牌 **心弦 EmoTune**。本页写给要把**这一版原样**装到另一台 Windows 电脑、并从零跑起来的人。**从这一版起，情绪足迹（历史记录、人脸截图、播过的歌、偏好）已经直接提交进仓库**，克隆下来就和本机一模一样。固定版本、标签和如何回到某一版，见 [VERSION.md](VERSION.md)。
 
-**当前快照：【20261028日  小学40分钟  10月28日下午15:25-16:05】**  
-标签 `snapshot-20261028-1525` · 仓库 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）
+**当前快照：2026-10-30 12:30 · 歌词语音对齐 + 顶栏一行 + 左区块铺满 + 照片直检 + 足迹入库**  
+标签 `snapshot-20261030-1230` · 仓库 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）
 
-静态介绍页（不能跑摄像头）：https://emomusic-grok-20261028-1252.surge.sh
+静态介绍页（不能跑摄像头）：https://emomusic-grok-20261030-1230.surge.sh
 
 **运行方式：conda 新建空环境 `emotune`，Python 3.12。** 不要把依赖装进系统 Python，也不要装进已经有 `datasets` / `fastapi` / `jax` / `kaggle` 的旧环境。推理只用 **CPU 版** `onnxruntime`（pip 包名就是 `onnxruntime`）。
 
@@ -18,7 +18,7 @@
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
-git checkout snapshot-20261028-1525
+git checkout snapshot-20261030-1230
 ```
 
 双击 `tools\setup-conda.bat`，等它打印 `PASS onnxruntime CPU`。再双击 `run.bat`。
@@ -31,17 +31,17 @@ git checkout snapshot-20261028-1525
 
 演示：切「照片」→ 点选 `static/demo` 里已命名的表情（01 喜 … 07 中性），或开摄像头正对镜头。检测方式默认「单人精检」。
 
-要连旧电脑的足迹：先在旧电脑打包（第 8 节），再在新电脑解包，然后刷新「历史」。
+足迹已在仓库里：启动后点「历史」或看页面下方「情绪足迹」，应看到本机调试时留下的全部记录（截至 2026-10-30 约 790 条，含人脸截图与当时播放的歌）。
 
 ---
 
 ## 0. 先弄清两件事
 
 1. **识曲必须在本机跑 Flask。** Surge 只放介绍页，没有 Python、没有 ONNX、没有摄像头。
-2. **情绪足迹不进 GitHub。** 仓库里故意没有你的人脸截图和听歌记录。换电脑要「连历史一起原样」，必须把本机数据单独带走，见第 8 节。
+2. **情绪足迹已进 GitHub（本版起）。** `data/history.json`、`data/prefs.json`、`static/history/*.jpg` 都提交在仓库里。注意仓库是**公开**的，这些人脸截图任何人都能看到。
 
-克隆仓库 = 代码 + 三个 ONNX + 532 首试听 + 演示图。  
-克隆仓库 **再** 解入足迹包 = 和旧电脑一样能认出人、能播、能看到以前的足迹。
+克隆仓库 = 代码 + 三个 ONNX + 532 首试听 + 封面 + 演示图 + 474 首对齐歌词 + **全部情绪足迹**。  
+克隆后无需再解包，和旧电脑一样能认出人、能播、能看到以前的足迹。
 
 ---
 
@@ -54,7 +54,7 @@ git checkout snapshot-20261028-1525
 | conda | **Miniconda3** 或 Anaconda3（64 位）。环境名固定为 `emotune` |
 | Git | 从 GitHub 克隆时需要 [Git for Windows](https://git-scm.com/download/win) |
 | 浏览器 | Chrome 或 Edge（摄像头、屏幕分享用） |
-| 磁盘 | 约 1 GB（代码 + 三个 ONNX + 532 首试听）+ conda 环境约 0.5–1 GB（CPU）；足迹另计 |
+| 磁盘 | 约 1.2 GB（代码 + 三个 ONNX + 532 首试听 + 足迹约 80 MB）+ conda 环境约 0.5–1 GB（CPU）；足迹另计 |
 | 网络 | 首次创建环境和缺模型时要联网；平时可完全离线识别和播本地曲 |
 | 摄像头 | 本机摄像头；页面必须用 `http://127.0.0.1:端口` 打开 |
 | GPU | **不需要。** 不要装 CUDA / `onnxruntime-gpu` |
@@ -101,17 +101,17 @@ conda tos accept
 
 ## 3. 把项目放到新电脑
 
-任选一种。**讲座 / 原版还原推荐 A**（Git 克隆固定标签）。**方式 B** 会连足迹一起带走，适合 U 盘搬家。仓库已公开，克隆一般不用登录。
+任选一种。**原版还原推荐 A**（Git 克隆固定标签，已含足迹）。**方式 B** 适合没有网络、用 U 盘搬家。仓库已公开，克隆一般不用登录。
 
-### 方式 A：从 GitHub 克隆讲座这一版（不含旧足迹）
+### 方式 A：从 GitHub 克隆这一版（已含足迹）
 
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
-git checkout snapshot-20261028-1525
+git checkout snapshot-20261030-1230
 ```
 
-`main` 一般已指向同一提交；用标签可以精确钉在讲座这一版，以后 `main` 再往前走也不怕。
+仓库约 700 MB，克隆要几分钟。`main` 一般已指向同一提交；用标签可以精确钉在这一版，以后 `main` 再往前走也不怕。
 
 ### 方式 B：U 盘 / 网盘拷整个文件夹（连历史一起）
 
@@ -142,10 +142,12 @@ OpenCV 读 ONNX 已按内存加载，中文路径可用。
 
 不要指望拷来的 `.venv` 或别人电脑上的 conda 环境能直接用。新电脑按第 4 节**新建** `emotune`。
 
-### 方式 C：Git 克隆 + 单独恢复足迹（代码用仓库、历史用打包）
+### 方式 C：克隆这一版后，再并入更新的足迹
+
+本版标签之后又在旧电脑上产生了新足迹时用：
 
 1. 在**旧电脑**项目根目录打包足迹（见第 8 节）。
-2. 在**新电脑**按方式 A 克隆并检出 `snapshot-20261028-1525`。
+2. 在**新电脑**按方式 A 克隆并检出 `snapshot-20261030-1230`。
 3. 按第 4、5 节建好 conda 环境。
 4. 把 `emotune-local-data.zip` 拷到新项目的 `data\` 下，运行解包脚本。
 5. 再启动 Flask，打开页面点「历史」。
@@ -356,7 +358,7 @@ python tests/test_full_ui.py
 
 ## 8. 情绪足迹（历史记录）怎么原样带走
 
-足迹是**个人数据**，仓库和 Surge 都不会带。位置：
+从 `snapshot-20261030-1230` 起，足迹**已提交进仓库**，克隆或检出该标签就自动带上（Surge 静态页不带）。位置：
 
 | 路径 | 内容 |
 | --- | --- |
@@ -368,7 +370,7 @@ python tests/test_full_ui.py
 
 ### 8.1 整夹拷贝（最省事）
 
-方式 B 已经包含这三项。拷完在新电脑建好 `emotune` 再启动即可。
+方式 A（克隆本标签）和方式 B（整夹拷贝）都已经包含这三项。建好 `emotune` 再启动即可。下面 8.2、8.3 只在要并入**标签之后**新产生的足迹时才需要。
 
 ### 8.2 打包脚本（Git 克隆后单独恢复）
 
@@ -381,7 +383,7 @@ python tools\pack_local_data.py
 
 或双击 `tools\pack-local-data.bat`。
 
-会生成 `data\emotune-local-data.zip`（含 `history.json`、`prefs.json`、全部历史人脸图）。把这个 zip 拷到 U 盘或网盘。zip **不要**提交到 GitHub。
+会生成 `data\emotune-local-data.zip`（含 `history.json`、`prefs.json`、全部历史人脸图）。把这个 zip 拷到 U 盘或网盘。zip 本身不提交（已在 `.gitignore`），解包后的文件可以照常 `git add`。
 
 **在新电脑**（已经按方式 A 检出本快照、建好 `emotune`）：
 
@@ -416,16 +418,19 @@ python tools\pack_local_data.py --unpack data\emotune-local-data.zip
 
 目录不存在就新建。不要改 json 里的截图文件名。
 
-### 8.4 不要把足迹推进 Git
+### 8.4 足迹进 Git 的约定
 
-`.gitignore` 已排除：
+本版起 `.gitignore` 不再排除 `data/history.json`、`data/prefs.json`、`static/history/`，只排除打包 zip 和 conda 环境。
 
-- `data/history.json`
-- `data/prefs.json`
-- `static/history/`
-- `data/emotune-local-data.zip`
+继续调试后要把新足迹同步到 GitHub：
 
-不要 `git add -f` 它们。不要把真实人脸传到 GitHub。conda 环境本身也不在仓库里。
+```bat
+git add data/history.json data/prefs.json static/history
+git commit -m "同步情绪足迹"
+git push
+```
+
+仓库是公开的：提交前确认里面的人脸照片可以公开（例如讲座现场有学生入镜时）。若不想公开，把这三行加回 `.gitignore` 并用 8.2 的打包方式私下带走。
 
 ---
 
@@ -435,7 +440,9 @@ python tools\pack_local_data.py --unpack data\emotune-local-data.zip
 2. 四种输入：摄像头、照片（JPG/PNG/WEBP）、本地视频、屏幕分享。
 3. 「实时捕捉」可持续识曲；「识别此刻」截一帧并关掉实时捕捉。问号上的说明要**把鼠标放到问号上**才出现。
 4. 默认在线热歌；关掉「在线热歌」只用本地 532 首。在线长时间失败会提示并自动切本地。讲座现场网络不稳时，先关掉「在线热歌」。
-5. 歌词能联网时用官方词并对齐 30 秒试听；断网用本地词。
+5. 本地 532 首里有 474 首歌词已用语音识别对过时间轴（`data/lyrics_aligned.json`），断网也准；其余联网时用官方词按锚点对齐。
+8. 顶栏一行：摄像头 / 照片 / 视频 / 屏幕、弹出人脸窗、识别此刻；摄像头默认铺满左区块，右下角可切「默认尺寸」并放大缩小，设置 → 画面也能调。
+9. 照片：选图、拖入或单击/双击示例，照片直接显示在左侧检测区并画出人脸框、关键点和表情标签；双击照片重新检测。
 6. 完整算法说明：http://127.0.0.1:5000/guide
 7. 演示图在 `static/demo/`，文件名已按中文情绪命名（每种三张）。
 
@@ -443,11 +450,11 @@ python tools\pack_local_data.py --unpack data\emotune-local-data.zip
 
 ## 10. 从固定版本恢复 / 继续开发
 
-回到**讲座这一版**（仍用 conda 环境 `emotune`）：
+回到**这一版**（`snapshot-20261030-1230`，仍用 conda 环境 `emotune`）：
 
 ```bat
 git fetch --tags
-git checkout snapshot-20261028-1525
+git checkout snapshot-20261030-1230
 conda activate emotune
 python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 python tools\verify_cpu.py
@@ -455,6 +462,18 @@ python app.py
 ```
 
 若新电脑还没有环境：先 `tools\setup-conda.bat`。
+
+回到 2026-10-28 15:25 小学 40 分钟讲座版：
+
+```bat
+git checkout snapshot-20261028-1525
+```
+
+回到 2026-10-30 08:38（532 首扩库）：
+
+```bat
+git checkout snapshot-20261030-0838
+```
 
 回到 2026-10-28 12:52 讲座准备版：
 
@@ -486,19 +505,19 @@ git checkout snapshot-20261028-0951
 git checkout snapshot-20261027-2210
 ```
 
-旧标签也可以在现在的 `emotune`（3.12）里运行；请仍用 conda，不要退回系统 Python。这场小学课请用 `snapshot-20261028-1525`。
+旧标签也可以在现在的 `emotune`（3.12）里运行；请仍用 conda，不要退回系统 Python。这场小学课请用 `snapshot-20261028-1525`。注意：早于本版的标签里没有足迹文件，检出旧标签后足迹会从工作区消失，切回本版或 `main` 即恢复。
 
 在本快照上继续改代码（不要直接改标签指向的提交）：
 
 ```bat
-git checkout -b dev/continue snapshot-20261028-1525
+git checkout -b dev/continue snapshot-20261030-1230
 conda activate emotune
 ```
 
 对比当前与本快照：
 
 ```bat
-git diff snapshot-20261028-1525
+git diff snapshot-20261030-1230
 ```
 
 更完整的标签说明见 [VERSION.md](VERSION.md)。
@@ -509,15 +528,15 @@ git diff snapshot-20261028-1525
 
 识别和播放跑在本机 Flask 上，**Surge 不能跑 Python / ONNX / 摄像头**。
 
-本快照（讲座版本）的静态介绍：
+本快照的静态介绍：
 
-https://emomusic-grok-20261028-1252.surge.sh
+https://emomusic-grok-20261030-1230.surge.sh
 
-上一版介绍页仍在：https://emomusic-grok-20261028-1105.surge.sh （对应 `snapshot-20261028-1105`）
+以前的介绍页仍在：https://emomusic-grok-20261028-1252.surge.sh 、https://emomusic-grok-20261028-1105.surge.sh
 
 那一页不能代替 `python app.py`。真正用摄像头识曲，仍按上面第 6 步在本机、conda 环境里启动。
 
-域名规则：`emomusic-grok-版本号.surge.sh`，必须小写。本版版本号为 `20261028-1252`。
+域名规则：`emomusic-grok-版本号.surge.sh`，必须小写。本版版本号为 `20261030-1230`。重新发布：`surge deploy\surge emomusic-grok-20261030-1230.surge.sh`（`deploy\surge\CNAME` 已写好）。
 
 ---
 
@@ -561,13 +580,13 @@ python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.
 关掉系统代理后再试，或关闭「在线热歌」用本地歌。讲座现场建议先关在线。
 
 **换电脑后历史是空的**  
-只克隆了仓库。按第 8 节解包或拷贝 `data/history.json` 与 `static/history/`。
+检出的是早于本版的旧标签（旧标签不含足迹）。`git checkout snapshot-20261030-1230` 或 `main` 即可；仍为空则按第 8 节解包。
 
-**Git 推送不要带足迹**  
-见 8.4。
+**重新对齐本地试听歌词（新增歌曲后）**  
+`pip install torch transformers av` 后依次运行 `python toolssr_previews.py`、`python toolslign_lyrics.py`。只在维护曲库时需要，正常运行不要装 torch。
 
 **旧电脑路径有中文，新电脑没有（或反过来）**  
 可以。项目不依赖盘符和中文路径；ONNX 已内存加载。足迹 json 里的截图是相对 `/static/history/...`，换盘符不用改。
 
 **页面是旧的标题、旧图标，或问号说明一直挡在画面上**  
-强制刷新：Ctrl+F5。本快照静态资源带 `?v=52`。
+强制刷新：Ctrl+F5。本快照静态资源带 `?v=73`。

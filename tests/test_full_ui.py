@@ -133,7 +133,7 @@ def main() -> int:
         )
         open_set("picture")
         chk("关键点三种模式", page.locator("#landmark-picks [data-landmark]").count() == 3)
-        chk("铺满窗口按钮", page.locator("#btn-cam-fill").count() == 1)
+        chk("铺满区块按钮", page.locator("#btn-cam-fill").count() == 1)
         chk("放大比率滑杆", page.locator("#cam-zoom").count() == 1)
         chk(
             "默认放大比率为 100%",
@@ -169,38 +169,32 @@ def main() -> int:
         page.wait_for_timeout(80)
         chk("可切换铺满画面", page.evaluate("() => window.__emotune.getState().camFit") in {"cover", "contain"})
         page.locator("#btn-cam-fit").click()
-        page.locator("#btn-cam-fill").click()
-        page.wait_for_timeout(80)
-        chk("可铺满窗口", page.evaluate("() => window.__emotune.getState().camFill") is True)
+        chk("默认铺满左区块", page.evaluate("() => window.__emotune.getState().camFill") is True)
         fill_box = page.evaluate(
             """() => {
-              const vp = document.querySelector('#viewport');
-              const r = vp.getBoundingClientRect();
+              const vp = document.querySelector('#viewport').getBoundingClientRect();
+              const st = document.querySelector('#stage').getBoundingClientRect();
+              const rs = document.querySelector('#result').getBoundingClientRect();
               return {
-                cls: document.body.classList.contains('is-cam-fill'),
-                top: r.top, left: r.left, w: r.width, h: r.height,
-                iw: window.innerWidth, ih: window.innerHeight,
+                cls: document.body.classList.contains('is-block-fill'),
+                dw: st.width - vp.width, dl: vp.left - st.left, rw: rs.width,
               };
             }"""
         )
         chk(
-            "铺满后摄像头占满窗口",
-            bool(
-                fill_box
-                and fill_box["cls"]
-                and fill_box["top"] <= 2
-                and fill_box["left"] <= 2
-                and fill_box["w"] >= fill_box["iw"] * 0.96
-                and fill_box["h"] >= fill_box["ih"] * 0.92
-            ),
+            "铺满只占左区块，右区块仍在",
+            bool(fill_box and fill_box["cls"] and fill_box["dw"] <= 4 and fill_box["dl"] <= 3 and fill_box["rw"] > 200),
             str(fill_box),
         )
+        page.locator('#cam-size-picks [data-cam-size="default"]').click()
+        page.wait_for_timeout(80)
+        chk("可切回默认尺寸", page.evaluate("() => window.__emotune.getState().camFill") is False)
         page.locator("#cam-zoom").evaluate("el => { el.value = '160'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
         page.wait_for_timeout(80)
-        chk("可调节放大比率", page.evaluate("() => Math.round(window.__emotune.getState().camZoom * 100)") == 160)
-        page.locator("#btn-cam-exit").click()
-        page.wait_for_timeout(80)
-        chk("可退出铺满", page.evaluate("() => window.__emotune.getState().camFill") is False)
+        chk("可调节放大比例", page.evaluate("() => Math.round(window.__emotune.getState().camZoom * 100)") == 160)
+        page.locator("#btn-zoom-reset").click()
+        chk("比例可复原", page.evaluate("() => Math.round(window.__emotune.getState().camZoom * 100)") == 100)
+        page.locator('#cam-size-picks [data-cam-size="fill"]').click()
         page.locator("#cam-zoom").evaluate("el => { el.value = '100'; el.dispatchEvent(new Event('input', {bubbles:true})); }")
         close_set()
         chk("人脸对照位", page.locator("#emo-shot").count() == 1 and page.locator("#emo-icon").count() == 1)
@@ -242,6 +236,14 @@ def main() -> int:
 
         chk("上传后仍停在上传页", page.locator(".tab[data-mode='upload']").get_attribute("aria-selected") == "true")
         chk("上传页显示已选照片", page.locator("#picked").is_visible() and page.locator("#picked-img").get_attribute("src", timeout=2000) not in (None, ""))
+        chk(
+            "照片上画出人脸框",
+            page.evaluate("""() => { const c = document.querySelector('#photo-overlay');
+              const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+              for (let i = 3; i < d.length; i += 4) if (d[i]) return true; return false; }"""),
+        )
+        chk("顶栏含输入方式与识别此刻", page.locator(".top .tabs .tab").count() == 4 and page.locator(".top #btn-recognize").count() == 1)
+        chk("已删去「情绪识别」标题", page.locator("#stage-title").count() == 0)
         n_songs = page.locator("#songs .song").count()
         chk("界面列出歌曲 24 首", n_songs == 24, str(n_songs))
         chk("歌曲列出曲调匹配", page.locator("#songs .song-algo").count() >= 1)

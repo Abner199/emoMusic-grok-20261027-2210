@@ -6,12 +6,9 @@ venv/
 env/
 .conda/
 conda-env/
-data/history.json
-data/prefs.json
 data/sessions/
 data/emotune-local-data.zip
 emotune-local-data.zip
-static/history/
 *.part
 .DS_Store
 Thumbs.db

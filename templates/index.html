@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=71" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=73" />
 </head>
 <body data-emotion="idle">
   <div class="grain" aria-hidden="true"></div>
@@ -31,11 +31,22 @@
         </svg>
       </span>
       <span class="brand-text">
-        <strong>当AI遇见旋律</strong>
+        <strong role="heading" aria-level="1">当AI遇见旋律</strong>
         <em>表情配歌</em>
       </span>
     </a>
-    <p class="tagline">把此刻的表情，换成一首刚好的歌</p>
+    <div class="top-center">
+      <div class="tabs" role="tablist" aria-label="输入方式">
+        <button type="button" class="tab is-on" data-mode="camera" role="tab" aria-selected="true">摄像头</button>
+        <button type="button" class="tab" data-mode="upload" role="tab" aria-selected="false">照片</button>
+        <button type="button" class="tab" data-mode="video" role="tab" aria-selected="false">视频</button>
+        <button type="button" class="tab" data-mode="screen" role="tab" aria-selected="false">屏幕</button>
+      </div>
+      <div class="stage-ops">
+        <button type="button" class="ghost" id="btn-face-pop" title="在独立窗口里看人脸检测">弹出人脸窗</button>
+        <button type="button" class="primary" id="btn-recognize" title="截取当前画面识别并播放，同时关闭实时捕捉">识别此刻</button>
+      </div>
+    </div>
     <nav class="top-actions">
       <button type="button" class="ghost" id="btn-settings" aria-controls="settings-panel" aria-expanded="false">设置</button>
       <a class="ghost" id="btn-guide" href="/guide">说明</a>
@@ -75,13 +86,20 @@
           </div>
         </div>
         <div class="cam-dock-row">
-          <button type="button" class="dock-pick" id="btn-cam-fill" title="摄像头铺满整个窗口">铺满窗口</button>
+          <span class="cam-dock-label">尺寸</span>
+          <div class="dock-picks" id="cam-size-picks" role="radiogroup" aria-label="画面尺寸">
+            <button type="button" class="dock-pick is-on" data-cam-size="fill" role="radio" aria-checked="true" title="摄像头铺满左边整个区块（默认）">铺满区块</button>
+            <button type="button" class="dock-pick" data-cam-size="default" role="radio" aria-checked="false" title="恢复默认尺寸">默认尺寸</button>
+          </div>
           <button type="button" class="dock-pick is-on" id="btn-cam-fit" title="画面铺满视窗，可切到完整画面">铺满画面</button>
-          <label class="cam-zoom" title="放大缩小比率">
-            <span>比率</span>
-            <input type="range" id="cam-zoom" min="50" max="250" step="5" value="100" aria-label="摄像头放大缩小比率" />
+        </div>
+        <div class="cam-dock-row">
+          <label class="cam-zoom" title="放大缩小比例">
+            <span>比例</span>
+            <input type="range" id="cam-zoom" min="50" max="250" step="5" value="100" aria-label="摄像头放大缩小比例" />
             <em id="cam-zoom-val">100%</em>
           </label>
+          <button type="button" class="dock-pick" id="btn-zoom-reset" title="比例恢复 100%">复原</button>
         </div>
       </div>
     </details>
@@ -156,17 +174,7 @@
   </aside>
 
   <main class="layout">
-    <section class="panel stage" id="stage" aria-labelledby="stage-title">
-      <div class="panel-head">
-        <h1 id="stage-title">情绪识别</h1>
-        <div class="tabs" role="tablist">
-          <button type="button" class="tab is-on" data-mode="camera" role="tab" aria-selected="true">摄像头</button>
-          <button type="button" class="tab" data-mode="upload" role="tab" aria-selected="false">照片</button>
-          <button type="button" class="tab" data-mode="video" role="tab" aria-selected="false">视频</button>
-          <button type="button" class="tab" data-mode="screen" role="tab" aria-selected="false">屏幕</button>
-        </div>
-      </div>
-
+    <section class="panel stage" id="stage" aria-label="表情输入画面">
       <div class="stage-body" data-view="live">
         <div class="viewport" id="viewport" data-fit="cover">
           <div class="cam-layer" id="cam-layer">
@@ -183,7 +191,12 @@
             <em id="live-emo-pct"></em>
             <em id="live-emo-count"></em>
           </div>
-          <button type="button" class="ghost cam-exit" id="btn-cam-exit" hidden>退出铺满</button>
+          <div class="view-dock" id="view-dock" role="group" aria-label="画面尺寸与比例">
+            <button type="button" class="vd-btn" id="btn-cam-fill" title="铺满左边区块 / 默认尺寸">默认尺寸</button>
+            <button type="button" class="vd-btn" id="btn-zoom-out" title="缩小" aria-label="缩小">−</button>
+            <em id="cam-zoom-chip">100%</em>
+            <button type="button" class="vd-btn" id="btn-zoom-in" title="放大" aria-label="放大">＋</button>
+          </div>
           <div class="scan" id="scan" hidden></div>
           <div class="cam-empty" id="cam-empty">
             <p id="cam-empty-text">点下面的按钮开启摄像头，把面部落在椭圆里</p>
@@ -197,29 +210,29 @@
             <label class="source-label" for="video-input">本地视频</label>
             <input id="video-input" type="file" accept="video/mp4,video/webm,video/quicktime,video/*" />
           </div>
-          <div class="stage-ops">
-            <button type="button" class="ghost" id="btn-face-pop" title="在独立窗口里看人脸检测">弹出人脸窗</button>
-            <button type="button" class="primary" id="btn-recognize" title="截取当前画面识别并播放，同时关闭实时捕捉">识别此刻</button>
-          </div>
         </div>
       </div>
 
       <div class="stage-body" data-view="upload" hidden>
-        <label class="drop" id="dropzone" for="file-input">
-          <input id="file-input" type="file" accept="image/*" hidden />
-          <strong>拖入照片，或点击选择</strong>
-          <span>JPG / PNG / WEBP，正面、光线均匀效果更好</span>
-        </label>
-        <figure class="picked" id="picked" hidden>
-          <img id="picked-img" alt="已选择的照片" />
-          <figcaption id="picked-cap">已选择照片</figcaption>
-        </figure>
+        <div class="photo-stage" id="photo-stage">
+          <label class="drop" id="dropzone" for="file-input">
+            <input id="file-input" type="file" accept="image/*" hidden />
+            <strong>拖入照片，或点击选择</strong>
+            <span>JPG / PNG / WEBP，正面、光线均匀效果更好；也可点下方示例</span>
+          </label>
+          <figure class="picked" id="picked" hidden>
+            <img id="picked-img" alt="已选择的照片" />
+            <canvas id="photo-overlay" class="photo-overlay" aria-hidden="true"></canvas>
+            <figcaption id="picked-cap">已选择照片</figcaption>
+            <label class="ghost mini photo-swap" for="file-input">换一张</label>
+          </figure>
+        </div>
         <div class="demo-row" id="demo-row" hidden>
-          <p>没有照片？点选已命名的亚洲人脸典型表情（01–21，每种三张），也可从 static/demo 文件夹直接上传</p>
+          <p>示例表情：单击或双击直接进入检测（01–21，每种三张）</p>
           <div class="demo-list" id="demo-list"></div>
         </div>
       </div>
-      <p class="hint" id="stage-hint" hidden>四种输入：摄像头、照片、视频、屏幕。画面可铺满窗口并调节放大比率。关键点可选实拍、线框或关闭。检测默认为单人精检；多人远场按人数最多的情绪来。算法见「说明」。摄像头请用 http://127.0.0.1:5000 打开。</p>
+      <p class="hint" id="stage-hint" hidden>四种输入：摄像头、照片、视频、屏幕。画面默认铺满左区块，可切默认尺寸，右下角可放大缩小。关键点可选实拍、线框或关闭。检测默认为单人精检；多人远场按人数最多的情绪来。算法见「说明」。摄像头请用 http://127.0.0.1:5000 打开。</p>
     </section>
 
     <section class="panel result" id="result" aria-labelledby="result-title">
@@ -393,7 +406,7 @@
       <li>人脸本机识别。默认「单人精检」只取近景主脸，五点精修对齐后做翻转/微转 TTA，再与 HSEmotion 野外模型加权融合、多帧平均；「多人远场」可同时检多张脸和远景小脸，歌曲按人数最多的情绪来。可弹出人脸窗。</li>
       <li>四种输入：摄像头（可切换设备）、照片、本地视频、屏幕分享。</li>
       <li>本地 532 首按情绪分类的人声试听（每类 76 首），中文优先，仅特别网红英文作为例外；默认走在线热歌（苹果音乐、苹果热歌榜、苹果热播、苹果亚洲热歌、网易云热歌榜、QQ 热歌榜、网易云、咪咕、酷狗、QQ、酷我、国际曲库、Audius），可手动切本地；断网也能连播。在线长时间失败会提示并自动切本地。</li>
-      <li>播放时显示歌词、封面、波形振动、频率频谱、谱通量、色度与 V–A 声学分析，并按当前情绪上色，均可单独关闭。摄像头可铺满窗口并调节放大比率。关键点可选实拍标注、线框骨架，或不显示。</li>
+      <li>播放时显示歌词、封面、波形振动、频率频谱、谱通量、色度与 V–A 声学分析，并按当前情绪上色，均可单独关闭。摄像头默认铺满左区块，可切默认尺寸并放大缩小比例。照片选好后直接在左侧大图上画人脸框与关键点。关键点可选实拍标注、线框骨架，或不显示。</li>
       <li>日常以平静、喜悦、悲伤为主，这三类会稳住再换歌。惊讶、恐惧、愤怒、厌恶是短高潮：认到后锁反差歌，不会立刻换歌，大约十秒内松开脸也继续播；持续平静几秒后会切到平静歌单，做出另一种明显表情也会切换。点「识别此刻」会截图并关闭实时捕捉。人脸框、此刻情绪、播放器、音乐可视化和语音提示共用同一套标签；高潮情绪很快说，日常三类稳住约 3 秒才说，识别此刻或上传立刻说一次。</li>
       <li>情绪足迹全部保存；点选可回放当时的歌。相同情绪再次识别会尽量换没听过的歌。</li>
       <li>图像只在本机处理，不上传到云端。</li>
@@ -403,7 +416,7 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="{{ url_for('static', filename='js/face-draw.js') }}?v=71"></script>
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=71"></script>
+  <script src="{{ url_for('static', filename='js/face-draw.js') }}?v=73"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=73"></script>
 </body>
 </html>

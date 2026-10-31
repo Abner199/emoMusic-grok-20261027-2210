@@ -17,6 +17,8 @@ import time
 from typing import Optional
 
 import cv2
+import contextvars
+
 import numpy as np
 
 from collections import defaultdict
@@ -228,6 +230,34 @@ def landmark_cues(landmarks5, box=None) -> dict:
     }
 
 
+# 课堂演示模式（网页设置里打开，按请求传入）：孩子扮表情时惊讶张口不够大、平静时忍不住笑
+DEMO_MODE: contextvars.ContextVar[bool] = contextvars.ContextVar("emotune_demo_mode", default=False)
+# 实时识别快速模式（来源带 -live 时由 app 设置）：单次前向 + HSEmotion 单裁剪，不做 4 向 TTA
+FAST_MODE: contextvars.ContextVar[bool] = contextvars.ContextVar("emotune_fast_mode", default=False)
+# 由 static/demo 21 张示例量出：喜悦嘴宽 0.89–0.91，平静 0.84–0.87；惊讶张口 0.58–0.69，平静 ≤0.47
+DEMO_SMILE_W = 0.88
+DEMO_OPEN_DROP = 0.52
+
+
+def _demo_adjust(vec: np.ndarray, geo: dict) -> np.ndarray:
+    """喜悦要真的笑开（嘴宽够）才算；张口够就把平静、喜悦的一部分分给惊讶。"""
+    if not geo:
+        return vec
+    i_hap, i_neu, i_sur = 3, 4, 6
+    mouth_w = float(geo.get("mouth_w") or 0.0)
+    mouth_drop = float(geo.get("mouth_drop") or 0.0)
+    if vec[i_hap] >= 0.12 and mouth_w < DEMO_SMILE_W:
+        move = vec[i_hap] * 0.70
+        vec[i_hap] -= move
+        vec[i_neu] += move
+    if mouth_drop >= DEMO_OPEN_DROP:
+        move = vec[i_neu] * 0.45 + vec[i_hap] * 0.50
+        vec[i_neu] -= vec[i_neu] * 0.45
+        vec[i_hap] -= vec[i_hap] * 0.50
+        vec[i_sur] += move
+    return vec
+
+
 def calibrate_live_vec(p: np.ndarray, metrics: Optional[dict] = None) -> np.ndarray:
     """把张嘴说话、轻微笑意从惊讶/喜悦拉回平静。
 
@@ -288,6 +318,8 @@ def calibrate_live_vec(p: np.ndarray, metrics: Optional[dict] = None) -> np.ndar
             vec[i_hap] -= move
             vec[i_neu] += move
 
+    if DEMO_MODE.get():
+        vec = _demo_adjust(vec, geo)
     vec = np.clip(vec, 1e-12, None)
     return vec / vec.sum()
 
@@ -808,7 +840,15 @@ class EmotionRecognizer:
             aligned = align_face(image_bgr, np.array(face["landmarks"], dtype=np.float64))
         else:
             aligned = crop_face(image_bgr, face["box"])
-        if precision:
+        if precision and FAST_MODE.get():
+            aligned = self._auto_light(aligned)
+            p = _softmax(self._mbf_logits(aligned), temperature=1.55)
+            if self.hse is not None:
+                crop = self._auto_light(crop_face(image_bgr, face["box"], size=224, margin=0.28))
+                p_hse = self._hse_probs7(crop)
+                if p_hse is not None:
+                    p = self._fuse_probs(p, p_hse)
+        elif precision:
             aligned = self._auto_light(aligned)
             p_mbf = _softmax(self._mbf_tta_logits(aligned), temperature=1.55)
             p = p_mbf

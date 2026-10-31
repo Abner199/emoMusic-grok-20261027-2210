@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="night">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>当AI遇见旋律：表情演示教程</title>
+  <meta name="description" content="七类表情怎么做，系统才认得出：平静、喜悦、悲伤、惊讶、愤怒、恐惧、厌恶的口诀、动画示范与真人照片。" />
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}?v=50" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fonts.css') }}?v=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=92" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/doc.css') }}?v=1" />
+</head>
+<body class="pose-page doc-page">
+  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div class="grain" aria-hidden="true"></div>
+  <header class="top">
+    <a class="brand" href="/" aria-label="当AI遇见旋律首页">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="30" height="30" fill="none">
+          <rect x="2.2" y="2.2" width="43.6" height="43.6" rx="11.5" stroke="currentColor" stroke-width="1.35" opacity=".5"/>
+          <path d="M15.2 13.2c-1.3 7.6-1.2 15.2 3 20.4 2.1 2.6 6.3 3.8 8.6 1.7 4.3-3.9 5.5-12.1 4.5-22.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          <ellipse cx="24" cy="25.2" rx="3.7" ry="4.4" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+      </span>
+      <span class="brand-text"><strong>当AI遇见旋律</strong><em>表情教程</em></span>
+    </a>
+    <nav class="pose-jump" aria-label="跳到某种表情">
+      {% for p in poses %}<a href="#pose-{{ p.id }}" data-emo="{{ p.id }}">{{ p.name }}</a>{% endfor %}
+    </nav>
+    <nav class="top-actions">
+      <a class="ghost" href="/guide">说明</a>
+      <a class="primary" href="/">去镜头前试试</a>
+    </nav>
+  </header>
+
+  <main class="pose-shell">
+    <section class="pose-hero">
+      <h1>怎么做表情，系统才认得出？</h1>
+      <p>按日常最常见到最少见排序：先练<b>平静、喜悦、悲伤</b>，再练<b>惊讶、愤怒、恐惧、厌恶</b>。每张卡片左边的动画脸会从平静变成目标表情，照着做就行。</p>
+      <ul class="pose-tips">
+        {% for t in tips %}<li><b>{{ t[0] }}</b>{{ t[1] }}</li>{% endfor %}
+      </ul>
+    </section>
+
+    {% for p in poses %}
+    <article class="pose-card" id="pose-{{ p.id }}" data-emo="{{ p.id }}">
+      <div class="pose-visual">
+        <svg class="pose-face" viewBox="0 0 200 200" role="img" aria-label="{{ p.name }}动画示范：从平静变成{{ p.name }}">
+          <circle cx="100" cy="104" r="84" class="pf-skin"/>
+          <path class="pf-brow" d="{{ neutral.brow_l }}">
+            <animate attributeName="d" dur="3.6s" repeatCount="indefinite" keyTimes="0;0.25;0.75;1"
+                     values="{{ neutral.brow_l }};{{ p.face.brow_l }};{{ p.face.brow_l }};{{ neutral.brow_l }}"/>
+          </path>
+          <path class="pf-brow" d="{{ neutral.brow_r }}">
+            <animate attributeName="d" dur="3.6s" repeatCount="indefinite" keyTimes="0;0.25;0.75;1"
+                     values="{{ neutral.brow_r }};{{ p.face.brow_r }};{{ p.face.brow_r }};{{ neutral.brow_r }}"/>
+          </path>
+          {% for cx in (72, 128) %}
+          <ellipse class="pf-eye" cx="{{ cx }}" cy="94" rx="9" ry="{{ neutral.eye_ry }}">
+            <animate attributeName="ry" dur="3.6s" repeatCount="indefinite" keyTimes="0;0.25;0.75;1"
+                     values="{{ neutral.eye_ry }};{{ p.face.eye_ry }};{{ p.face.eye_ry }};{{ neutral.eye_ry }}"/>
+          </ellipse>
+          {% endfor %}
+          <path class="pf-nose" d="M100 100 Q96 116 100 122"/>
+          {% if p.id == 'disgust' %}
+          <path class="pf-wrinkle" d="M90 104 l6 4 M110 104 l-6 4">
+            <animate attributeName="opacity" dur="3.6s" repeatCount="indefinite" keyTimes="0;0.25;0.75;1" values="0;1;1;0"/>
+          </path>
+          {% endif %}
+          <path class="pf-mouth" d="{{ neutral.mouth }}">
+            <animate attributeName="d" dur="3.6s" repeatCount="indefinite" keyTimes="0;0.25;0.75;1"
+                     values="{{ neutral.mouth }};{{ p.face.mouth }};{{ p.face.mouth }};{{ neutral.mouth }}"/>
+          </path>
+        </svg>
+        <p class="pose-loop">平静 → <b>{{ p.name }}</b> → 平静</p>
+        {% if photos[p.id] %}
+        <div class="pose-photos">
+          {% for src in photos[p.id] %}<figure class="{{ 'is-real' if src.endswith(('-d.jpg', '-e.jpg', '-f.jpg')) else '' }}"><img src="{{ src }}" alt="{{ p.name }}示范 {{ loop.index }}" loading="lazy" /></figure>{% endfor %}
+        </div>
+        <p class="pose-photo-cap">示范照片（标“真人”的是真人照片，其余为合成肖像）</p>
+        {% endif %}
+      </div>
+      <div class="pose-text">
+        <header>
+          <span class="pose-zh">{{ p.zh }}</span>
+          <h2>{{ p.name }}</h2>
+          <span class="pose-group">{{ '日常情绪' if p.group == '日常' else '短高潮' }} · 第 {{ loop.index }} 常见</span>
+        </header>
+        <p class="pose-slogan">“{{ p.slogan }}”</p>
+        <ol class="pose-steps">
+          {% for part, how in p.steps %}<li><b>{{ part }}</b>{{ how }}</li>{% endfor %}
+        </ol>
+        <p class="pose-note warn"><b>常见错误</b>{{ p.mistakes }}</p>
+        <p class="pose-note"><b>系统看什么</b>{{ p.system }}</p>
+        <p class="pose-note hold"><b>保持多久</b>{{ p.hold }}</p>
+      </div>
+    </article>
+    {% endfor %}
+
+    <p class="pose-credit">标“真人”的示范照片来自 <a href="https://commons.wikimedia.org" target="_blank" rel="noopener">Wikimedia Commons</a>（CC BY / CC BY-SA / 公有领域，作者见 static/demo/示例照片来源与授权.txt）与 <a href="https://unsplash.com" target="_blank" rel="noopener">Unsplash</a>（Unsplash License），已裁剪缩放；其余为合成肖像。</p>
+    <p class="pose-foot">准备好了就 <a href="/">回到识曲页</a>，点「摄像头」正对镜头，按上面的口诀做。学生上台演示时，可以在「设置 → 检测方式」打开「课堂演示模式」。</p>
+  </main>
+</body>
+</html>

@@ -6,191 +6,270 @@
   <title>当AI遇见旋律：算法、理论与使用说明</title>
   <meta name="description" content="当AI遇见旋律的使用方法、人脸情绪识别、旋律曲调分析，以及多种可选推荐策略的理论说明。" />
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}?v=50" />
-  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v=50" />
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}?v=50" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=71" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fonts.css') }}?v=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=94" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/doc.css') }}?v=1" />
 </head>
-<body class="guide-page">
+<body class="doc-page guide-page">
+  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
   <div class="grain" aria-hidden="true"></div>
-  <header class="top">
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="ig" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#ffd27a"/><stop offset="1" stop-color="#ff7ac8"/>
+      </linearGradient>
+    </defs>
+    <symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><path d="M10 8.5l6 3.5-6 3.5z" class="fill"/></symbol>
+    <symbol id="i-flow" viewBox="0 0 24 24"><rect x="2.5" y="4" width="6" height="5" rx="1.5"/><rect x="15.5" y="4" width="6" height="5" rx="1.5"/><rect x="9" y="15" width="6" height="5" rx="1.5"/><path d="M8.5 6.5h7M5.5 9v3.5h13V9M12 12.5V15"/></symbol>
+    <symbol id="i-face" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><circle cx="8.8" cy="10" r="1.1" class="fill"/><circle cx="15.2" cy="10" r="1.1" class="fill"/><path d="M8 14.5c2.2 2.4 5.8 2.4 8 0"/><path d="M3 7V3h4M21 7V3h-4M3 17v4h4M21 17v4h-4"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M2 12h2l2-6 3 12 3-15 3 15 3-9 2 3h2"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="1.6" class="fill"/></symbol>
+    <symbol id="i-class" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M7 12l3-3 2 2 4-4"/></symbol>
+    <symbol id="i-disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2.5a9.5 9.5 0 0 1 9.5 9.5"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="M3 7.5L12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5l9 4.5 9-4.5M12 12v9"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4.5h6a2 2 0 0 1 2 2V20a2 2 0 0 0-2-2H4zM20 4.5h-6a2 2 0 0 0-2 2V20a2 2 0 0 1 2-2h6z"/></symbol>
+  </svg>
+
+  <header class="top doc-top">
     <a class="brand" href="/" aria-label="当AI遇见旋律首页">
       <span class="mark" aria-hidden="true">
         <svg viewBox="0 0 48 48" width="30" height="30" fill="none">
           <rect x="2.2" y="2.2" width="43.6" height="43.6" rx="11.5" stroke="currentColor" stroke-width="1.35" opacity=".5"/>
           <path d="M15.2 13.2c-1.3 7.6-1.2 15.2 3 20.4 2.1 2.6 6.3 3.8 8.6 1.7 4.3-3.9 5.5-12.1 4.5-22.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-          <path d="M16.4 16.2h15.2" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
-          <path d="M19.2 16.7v16.2M24 16.7v18.2M28.8 16.7v16.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
           <ellipse cx="24" cy="25.2" rx="3.7" ry="4.4" stroke="currentColor" stroke-width="1.2"/>
-          <circle cx="24" cy="25.2" r="1.05" fill="currentColor"/>
         </svg>
       </span>
-      <span class="brand-text"><strong>当AI遇见旋律</strong><em>说明</em></span>
+      <span class="brand-text"><strong>当AI遇见旋律</strong><em>算法与说明</em></span>
     </a>
-    <p class="tagline">算法 · 理论 · 使用，都写在这一页</p>
-    <nav class="top-actions guide-nav">
-      <a class="ghost mini" href="#use">使用</a>
-      <a class="ghost mini" href="#face">人脸</a>
-      <a class="ghost mini" href="#music">曲调</a>
-      <a class="ghost mini" href="#recommend">推荐</a>
-      <a class="ghost mini" href="#library">曲库</a>
-      <a class="ghost mini" href="#setup">换电脑</a>
-      <a class="primary mini" href="/">回到识曲</a>
+    <p class="tagline">从一张脸，到一首刚好的歌</p>
+    <nav class="top-actions">
+      <a class="ghost" href="/pose">表情教程</a>
+      <a class="primary" href="/">回到识曲</a>
     </nav>
   </header>
 
-  <article class="guide-shell">
-    <section class="panel guide-hero" id="top">
-      <p class="algo-kicker">当AI遇见旋律 · 独立说明页</p>
-      <h1>把表情换成歌之前，先把方法讲清楚</h1>
-      <p>主页只做识别和播放。算法是怎么做的、为什么这样推荐、界面怎么用，都在这一页。三套核心方法都在本机跑：人脸不上传，曲调不靠云端，推荐方式可以自己选。</p>
-    </section>
-
-    <nav class="panel guide-toc" aria-label="本页目录">
-      <a href="#use">使用说明</a>
-      <a href="#face">人脸情绪算法</a>
-      <a href="#music">旋律曲调算法</a>
-      <a href="#recommend">推荐策略与理论</a>
-      <a href="#library">曲库与接口</a>
+  <div class="doc-layout">
+    <nav class="doc-toc glass" aria-label="本页目录">
+      <p class="doc-toc-title">目录</p>
+      <a href="#use"><svg><use href="#i-play"/></svg>使用说明</a>
+      <a href="#pipeline"><svg><use href="#i-flow"/></svg>系统总览</a>
+      <a href="#face"><svg><use href="#i-face"/></svg>人脸情绪识别</a>
+      <a href="#live"><svg><use href="#i-target"/></svg>实时判断与换歌</a>
+      <a href="#classroom"><svg><use href="#i-class"/></svg>课堂演示模式</a>
+      <a href="#music"><svg><use href="#i-wave"/></svg>旋律曲调情绪</a>
+      <a href="#recommend"><svg><use href="#i-disc"/></svg>推荐策略与理论</a>
+      <a href="#library"><svg><use href="#i-box"/></svg>曲库与部署</a>
+      <a href="#refs"><svg><use href="#i-book"/></svg>参考文献</a>
     </nav>
 
-    <section class="panel" id="use">
-      <div class="panel-head">
-        <h2>使用说明</h2>
-        <p class="meta">主页操作一遍就会</p>
-      </div>
-      <ol class="guide-steps">
-        <li>用 Chrome 或 Edge 打开 <code>http://127.0.0.1:5000</code>（本机占用时用启动时提示的端口）。摄像头必须走本机地址。</li>
-        <li>四种输入都可做人脸情绪检测：<strong>摄像头</strong>（可切换设备）、<strong>照片</strong>、<strong>本地视频</strong>、<strong>屏幕分享</strong>。视频和屏幕只截当前帧，不把整段文件上传。</li>
-        <li>检测方式默认为「单人精检」：只取近景里最大最稳的一张脸，阈值更高，适合自拍和对镜。课堂合影或远镜头再切「多人远场」。</li>
-        <li>点「开启摄像头」，把面部落在椭圆里。可用下拉框切换多个摄像头。画面会框出人脸并标出情绪。</li>
-        <li>打开「实时捕捉」可持续识别并按当前推荐方式连播。日常以平静、喜悦、悲伤为主，这三类会稳住再换歌。惊讶、恐惧、愤怒、厌恶是短高潮：认到后锁反差歌单，脸松开也不会立刻换歌；持续平静几秒后会切到平静歌单。人脸框、左侧「此刻情绪」、播放器情绪、音乐可视化和语音提示共用同一套七类标签。高潮情绪很快语音提示，日常三类稳住约 3 秒才说；点「识别此刻」或上传立刻说一次。</li>
-        <li>点「识别此刻」会截取当前画面识别并播放，同时关掉实时捕捉。</li>
-        <li>也可切到「照片」，拖入 JPG / PNG / WEBP，或点选已命名的示例表情；「视频」选本地 MP4 / WEBM；「屏幕」分享窗口或整屏。</li>
-        <li>点「弹出人脸窗」可把人脸画面放到独立窗口，方便放到第二块屏幕。弹窗独占摄像头，也可切换设备和检测方式。</li>
-        <li>「多人远场」下多人同时入镜时，每张脸各自识别；歌曲按<strong>人数最多</strong>的情绪执行，票数相同再比面积和置信度。</li>
-        <li>顶部「设置」里可选推荐方式，默认同频：同频、修复、先同频再修复、对比、回暖、降唤醒、升效价、强化、平衡。换方式会立刻重排歌单。检测方式、画面尺寸（默认铺满左区块，可切默认尺寸）、铺满画面、放大缩小比例、主题颜色也在设置里，默认收起。顶栏一行放着摄像头 / 照片 / 视频 / 屏幕、弹出人脸窗和识别此刻。</li>
-        <li>设置里可开关：在线热歌、语音提示、歌词、封面、声纹。实时捕捉时人脸框和此刻情绪跟脸走：日常三类约半秒连续一致才切换此刻；高潮四类更快确认并锁反差歌。语音：平静喜悦悲伤稳住约 3 秒说一次，惊讶恐惧愤怒厌恶认到后很快说。点「识别此刻」或上传照片会立刻说一次。此刻情绪旁显示融合后 p(k) 概率条和 Russell 效价-唤醒环面。声纹打开时，播放器画出振动 x(t)、快慢 BPM、频率 |X(f)|、音调 f₀ 和 Thayer 效价-唤醒平面。图的颜色跟人脸此刻同一套七类标签；V·A 是数值。推荐默认同频。关掉「在线热歌」只用本地 532 首；在线长时间播不了会提示并自动切本地。</li>
-        <li>情绪足迹全部保存。点选可回放当时的歌，回放不计入新的已播。相同情绪再次识别会尽量换没听过的歌。</li>
-      </ol>
-    </section>
+    <main class="doc-main">
+      <section class="doc-hero glass">
+        <p class="doc-kicker">当AI遇见旋律 · 算法、理论与使用</p>
+        <h1>把表情换成歌之前，<span class="grad">先把方法讲清楚</span></h1>
+        <p>主页只做识别和播放；算法怎么做、为什么这样推荐、界面怎么用，都在这一页。三套核心方法全部在本机运行：人脸不上传，曲调不靠云端，推荐方式可以自己选。</p>
+        <div class="doc-stats">
+          <div><b>7</b><span>类基本情绪</span></div>
+          <div><b>88.27%</b><span>RAF-DB 公开评测</span></div>
+          <div><b>≈ 90 ms</b><span>实时识别单帧</span></div>
+          <div><b>532</b><span>首本地人声试听</span></div>
+        </div>
+      </section>
 
-    <section class="panel" id="face">
-      <div class="panel-head">
-        <h2>人脸情绪识别</h2>
-        <p class="meta">YuNet + MobileFaceNet FER × HSEmotion</p>
-      </div>
-      <p class="algo-classic">经典：Ekman 七类基本情绪（1992）；OpenCV Zoo 人脸表情识别；公开评测 RAF-DB <strong>88.27%</strong>；HSEmotion EfficientNet-B0（AffectNet 野外）</p>
-      <ol>
-        <li>两种可切换模式。默认<strong>单人精检</strong>：检测阈值更高，只保留最大最稳的一张近景脸，不做远景放大和 Haar 补检。检出后在脸附近再检一次，把五点对齐到 112×112。</li>
-        <li>单人精检分类走高精度路径：MobileFaceNet FER 做原图、水平翻转和 ±7° 微转的 TTA；再跑 HSEmotion EfficientNet-B0（AffectNet 野外人脸，多尺度裁剪 + 翻转）。两模型判断一致时加权平均；不一致时更信野外模型，避免实验室模型在摄像头上过自信。多帧截图按七类概率平均，不取单帧最高分。</li>
-        <li><strong>多人远场</strong>：YuNet 在较高分辨率上检出画面里的每一张脸，包括远景小脸（输入约 1280，阈值放宽后再用高阈值对齐近景）。找不到脸时会放大再检，再不行走 Haar。</li>
-        <li>摄像头实时框走轻量路径：YuNet 出框并给出五点（左眼、右眼、鼻尖、左右嘴角），网页按瞳距在眼上方估计眉区；同时用嘴宽/IOD 与嘴角上扬对照 FACS AU12 / AU15 / AU27。没有张口+挑眉时会把惊讶压回平静，没有拉开上扬时会把喜悦压回平静，减少休息脸和说话口型误锁。关键点可切「实拍」把动作单元贴在脸上，「线框」画眉眼鼻口骨架，也可关闭。分类仍是 MobileFaceNet 单次前向，隔帧叠加一次 HSEmotion，再用跨帧指数平滑稳住标签。框和关键点在网页里用 60fps 插值。画面默认铺满左区块，可切默认尺寸并放大缩小。点「识别此刻」仍走完整 TTA 精检。</li>
-        <li>每张脸输出七类概率：喜、怒、哀、惧、惊、厌、中性。单人精检按主脸情绪推荐。多人远场按人数最多的情绪执行；并列时取面积更大、再取平均置信度更高的一类。</li>
-      </ol>
-      <p class="algo-note">模型是本机 ONNX，图像不上传。可弹出独立人脸窗查看人脸框和标签。单人精检通常一两百毫秒，摄像头截图用更高 JPEG 质量以保住眉眼细节。</p>
-    </section>
+      <section class="doc-sec glass" id="use">
+        <h2><svg class="doc-ic"><use href="#i-play"/></svg>使用说明</h2>
+        <div class="doc-grid">
+          <div class="doc-card"><h3>打开</h3><p>用 Chrome 或 Edge 打开 <code>http://127.0.0.1:5000</code>。摄像头必须走本机地址。</p></div>
+          <div class="doc-card"><h3>四种输入</h3><p>顶栏一行：<strong>摄像头</strong>（可切换设备）、<strong>照片</strong>（拖入或单击 / 双击示例）、<strong>本地视频</strong>、<strong>屏幕分享</strong>。视频和屏幕只截当前帧。</p></div>
+          <div class="doc-card"><h3>两种检测方式</h3><p>默认<strong>单人精检</strong>：只取近景最大最稳的一张脸。课堂合影或远镜头切<strong>多人远场</strong>，歌曲按人数最多的情绪来。</p></div>
+          <div class="doc-card"><h3>实时检测</h3><p>摄像头一开即实时检测并自动连播；顶栏「实时检测 开/关」随时停。<strong>识别此刻</strong>截一帧精检并播放。</p></div>
+          <div class="doc-card"><h3>播放控制</h3><p>暂停后不会被自动恢复；<strong>■ 停止</strong>同时停歌并关实时检测。播放器可展开、迷你一行或折叠。</p></div>
+          <div class="doc-card"><h3>足迹与历史</h3><p>每次情绪变化都留下人脸、图标、时间和听过的歌，实时出现在「情绪足迹」，点选可回放。</p></div>
+        </div>
+      </section>
 
-    <section class="panel" id="music">
-      <div class="panel-head">
-        <h2>歌曲旋律曲调情绪</h2>
-        <p class="meta">Thayer 二维模型 + Krumhansl–Kessler 调式</p>
-      </div>
-      <p class="algo-classic">经典：Thayer 1989 效价-唤醒 · Krumhansl–Kessler 1982 大小调剖面 · Juslin 2001 声学线索</p>
-      <ol>
-        <li>能量包络自相关网格搜索速度（54–176 BPM，Scheirer / Ellis）。</li>
-        <li>12 音级直方图与 Krumhansl–Kessler 大小调剖面求相关，判断大调 / 小调。</li>
-        <li>调式决定效价 valence，速度与能量决定唤醒 arousal，再投到七类情绪。</li>
-        <li>播放时浏览器 Web Audio 再抽实时振动 x(t)、谱通量节拍、对数频谱 |X(f)|、12 音级色度、基频峰值 f₀（80–500 Hz）和频谱质心 C，叠到歌曲预先算好的 Thayer / KK / Juslin 线索上。整组图按当前人脸情绪换色（喜金、怒赤、哀蓝、惧紫、惊粉、厌青、中性银灰），与人脸框、此刻情绪、播放器共用同一套标签。V·A 卡片只写效价-唤醒数值。</li>
-      </ol>
-      <p class="algo-note">能解码的波形直接抽特征；人声 AAC 试听在未装解码器时，用同一规则分析该情绪的典型旋律骨架，并与 Juslin 对照表印证。全程本机 numpy / scipy。</p>
-    </section>
+      <section class="doc-sec glass" id="pipeline">
+        <h2><svg class="doc-ic"><use href="#i-flow"/></svg>系统总览</h2>
+        <svg class="doc-flow" viewBox="0 0 960 190" role="img" aria-label="系统流程：画面、人脸检测、对齐、双模型、融合、平滑校正、七类概率、推荐、播放">
+          <defs>
+            <linearGradient id="fl" x1="0" x2="1"><stop offset="0" stop-color="#7ad7ff"/><stop offset="1" stop-color="#ff8ad8"/></linearGradient>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#9fb3d9"/></marker>
+          </defs>
+          <g class="fl-line"><path d="M110 60H150M260 60H300M410 60H450M560 60H600M710 60H750"/><path d="M805 85V120H160V145" /></g>
+          <g class="fl-node">
+            <rect x="10" y="30" width="100" height="60" rx="14"/><text x="60" y="55">画面</text><text x="60" y="75" class="s">摄像头 / 照片</text>
+            <rect x="150" y="30" width="110" height="60" rx="14"/><text x="205" y="55">YuNet</text><text x="205" y="75" class="s">人脸框 + 五点</text>
+            <rect x="300" y="30" width="110" height="60" rx="14"/><text x="355" y="55">对齐</text><text x="355" y="75" class="s">相似变换 112²</text>
+            <rect x="450" y="30" width="110" height="60" rx="14"/><text x="505" y="55">双模型</text><text x="505" y="75" class="s">MobileFaceNet · HSE</text>
+            <rect x="600" y="30" width="110" height="60" rx="14"/><text x="655" y="55">融合</text><text x="655" y="75" class="s">加权 · TTA</text>
+            <rect x="750" y="30" width="110" height="55" rx="14"/><text x="805" y="53">平滑 · 校正</text><text x="805" y="72" class="s">EMA · 几何</text>
+            <rect x="110" y="145" width="150" height="40" rx="12" class="hl"/><text x="185" y="170">七类概率 p(k)</text>
+            <rect x="320" y="145" width="160" height="40" rx="12" class="hl"/><text x="400" y="170">语音播报 → 换歌</text>
+            <rect x="540" y="145" width="170" height="40" rx="12" class="hl"/><text x="625" y="170">曲调向量 · 余弦推荐</text>
+            <rect x="770" y="145" width="150" height="40" rx="12" class="hl"/><text x="845" y="170">播放 · 足迹</text>
+          </g>
+          <g class="fl-line"><path d="M260 165H320M480 165H540M710 165H770"/></g>
+        </svg>
+      </section>
 
-    <section class="panel" id="recommend">
-      <div class="panel-head">
-        <h2>推荐策略与理论</h2>
-        <p class="meta">主页可选，默认同频</p>
-      </div>
-      <p>推荐在「未播优先、已播回绕」的分档之上，再按你选的方式决定<strong>听哪一类情绪的歌、按什么顺序听</strong>。档内仍用人脸或目标向量与曲调向量做余弦相似度（基于内容的推荐，Pazzani / Billsus）。</p>
-      <div class="guide-strats">
-        {% for s in strategies %}
-        <article class="algo-card" id="strat-{{ s.id }}">
-          <p class="algo-kicker">{{ loop.index }} · {{ s.zh }}</p>
-          <h3>{{ s.name }}</h3>
-          <p class="algo-classic">经典：{{ s.classic }}</p>
-          <p>{{ s.theory }}</p>
-          <p><strong>怎么执行：</strong>{{ s.how }}</p>
-          <p><strong>什么时候选：</strong>{{ s.when }}</p>
-          <p class="algo-note">规则：{{ s.rule }}</p>
-        </article>
-        {% endfor %}
-      </div>
-      <h3 class="guide-sub">对照简表</h3>
-      <div class="guide-table-wrap">
-        <table class="guide-table">
-          <thead>
-            <tr>
-              <th>当前表情</th>
-              <th>同频</th>
-              <th>修复</th>
-              <th>先同频再修复</th>
-              <th>对比</th>
-              <th>回暖</th>
-              <th>降唤醒</th>
-              <th>升效价</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr><td>喜</td><td>喜</td><td>喜</td><td>喜</td><td>哀</td><td>喜</td><td>平静</td><td>喜</td></tr>
-            <tr><td>怒</td><td>怒</td><td>平静</td><td>怒 → 平静 → 喜</td><td>喜</td><td>怒 → 惊 → 喜</td><td>哀</td><td>惊</td></tr>
-            <tr><td>哀</td><td>哀</td><td>喜</td><td>哀 → 平静 → 喜</td><td>喜</td><td>哀 → 平静 → 喜</td><td>哀</td><td>喜</td></tr>
-            <tr><td>惧</td><td>惧</td><td>平静</td><td>惧 → 平静 → 喜</td><td>喜</td><td>惧 → 惊 → 喜</td><td>哀</td><td>惊</td></tr>
-            <tr><td>惊</td><td>惊</td><td>喜</td><td>惊 → 喜</td><td>哀</td><td>惊 → 喜</td><td>平静</td><td>喜</td></tr>
-            <tr><td>厌</td><td>厌</td><td>喜</td><td>厌 → 平静 → 喜</td><td>喜</td><td>厌 → 平静 → 喜</td><td>哀</td><td>喜</td></tr>
-            <tr><td>平静</td><td>平静</td><td>喜</td><td>平静 → 喜</td><td>惊</td><td>平静 → 喜</td><td>平静</td><td>喜</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <p class="algo-note">强化：仍用当前类，把更典型的歌排前面。平衡：一半同频、一半修复，交错播放。</p>
-    </section>
+      <section class="doc-sec glass" id="face">
+        <h2><svg class="doc-ic"><use href="#i-face"/></svg>人脸情绪识别 <small>YuNet + MobileFaceNet FER × HSEmotion</small></h2>
+        <p class="doc-classic">经典：Ekman 七类基本情绪（1992）· OpenCV Zoo 人脸表情识别，公开评测 RAF-DB <strong>88.27%</strong> · HSEmotion EfficientNet-B0（AffectNet 野外人脸）</p>
 
-    <section class="panel" id="library">
-      <div class="panel-head">
-        <h2>曲库与在线接口</h2>
-        <p class="meta">人声试听，不是纯音乐</p>
-      </div>
-      <ul>
-        <li>本地曲库按七类情绪分好，每类 76 首，共 532 首 30 秒人声试听。播放中文优先，仅特别网红英文作为例外。喜悦以小苹果打头，悲伤以后来打头。人脸框与界面主色：平静天蓝、喜悦亮黄、愤怒正红、悲伤暗灰蓝、恐惧深紫、惊讶鲜橙、厌恶浊绿。缺文件时按规则生成旋律兜底，断网也能连播。</li>
-        <li>默认走在线接口：先检索苹果音乐、苹果热歌榜、苹果热播、苹果亚洲热歌，不够再补网易云热歌榜、QQ 热歌榜、网易云、咪咕、酷狗、QQ 音乐、酷我、Deezer、Audius；可手动关掉「在线热歌」只用本地。在线长时间播不了会提示并自动切回本地。</li>
-        <li>在线试听经本机 <code>/api/stream</code> 同源代理，播放器才能画实时振动、快慢、频率和音调。</li>
-        <li>歌词能联网时用 QQ 官方 LRC，并按 30 秒试听窗口对齐；断网用本机词。可关。</li>
-      </ul>
-    </section>
+        <div class="doc-step">
+          <span class="doc-n">1</span>
+          <div>
+            <h3>检测与五点对齐</h3>
+            <p>YuNet 给出人脸框和五个关键点（双眼、鼻尖、两嘴角）。用非反射相似变换把五点对齐到 112×112 的标准模板：</p>
+            <math display="block"><mrow><munder><mo movablelimits="false">min</mo><mrow><mi>s</mi><mo>,</mo><mi>R</mi><mo>,</mo><mi mathvariant="bold">t</mi></mrow></munder><mo>&#x2061;</mo><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mn>5</mn></munderover><msup><mrow><mo>‖</mo><mi>s</mi><mi>R</mi><msub><mi mathvariant="bold">p</mi><mi>i</mi></msub><mo>+</mo><mi mathvariant="bold">t</mi><mo>−</mo><msub><mi mathvariant="bold">q</mi><mi>i</mi></msub><mo>‖</mo></mrow><mn>2</mn></msup></mrow></math>
+            <p class="doc-note"><b>p</b><sub>i</sub> 为检测到的五点，<b>q</b><sub>i</sub> 为模板点，s 为缩放、R 为旋转、<b>t</b> 为平移，最小二乘求解。</p>
+          </div>
+        </div>
 
-    <section class="panel" id="setup">
-      <div class="panel-head">
-        <h2>换电脑部署</h2>
-        <p class="meta">完整步骤见仓库里的 SETUP.md</p>
-      </div>
-      <ol>
-        <li>新电脑安装 Miniconda3（或 Anaconda3）以及 Chrome / Edge。Python 用 conda 环境里的 <strong>3.12</strong>，不要用系统 Python。</li>
-        <li>克隆仓库并回到小学 40 分钟成功场：<code>git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git</code> 后执行 <code>git checkout snapshot-20261028-1525</code>。</li>
-        <li>双击 <code>tools\setup-conda.bat</code>，或 <code>conda create -n emotune python=3.12 pip -y</code> 后 <code>conda activate emotune</code>，再 <code>python -m pip install -r requirements.txt</code>。启动：<code>python app.py</code> 或双击 <code>run.bat</code>。</li>
-        <li>浏览器打开 <code>http://127.0.0.1:5000</code>。摄像头必须用 127.0.0.1 或 localhost。端口被占用时：<code>set EMOTUNE_PORT=18765</code> 再启动。</li>
-        <li>若要带走旧足迹：整夹拷贝，或旧电脑运行 <code>tools\pack-local-data.bat</code>，新电脑把 zip 放到 <code>data\</code> 再运行 <code>tools\unpack-local-data.bat</code>。<code>data/history.json</code>、<code>data/prefs.json</code>、<code>static/history/</code> 不进 GitHub。</li>
-        <li>核对：<code>python tests/selfcheck.py</code>。详细说明见项目根目录 <code>SETUP.md</code> 与 <code>VERSION.md</code>。</li>
-      </ol>
-    </section>
+        <div class="doc-step">
+          <span class="doc-n">2</span>
+          <div>
+            <h3>温度 Softmax 与 TTA（单人精检）</h3>
+            <p>MobileFaceNet 对 4 个视角（原图、水平翻转、±7° 旋转）求 logits 平均，再做带温度的 Softmax，抑制过度自信：</p>
+            <math display="block"><mrow><mover><mi mathvariant="bold">z</mi><mo>‾</mo></mover><mo>=</mo><mfrac><mn>1</mn><mn>4</mn></mfrac><munder><mo>∑</mo><mrow><mi>a</mi><mo>∈</mo><mi>𝒜</mi></mrow></munder><mi>f</mi><mo stretchy="false">(</mo><mi>a</mi><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo stretchy="false">)</mo><mo>,</mo><mspace width="1.2em"/><msub><mi>p</mi><mi>k</mi></msub><mo>=</mo><mfrac><msup><mi>e</mi><mrow><msub><mover><mi>z</mi><mo>‾</mo></mover><mi>k</mi></msub><mo>/</mo><mi>T</mi></mrow></msup><mrow><munderover><mo>∑</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mn>7</mn></munderover><msup><mi>e</mi><mrow><msub><mover><mi>z</mi><mo>‾</mo></mover><mi>j</mi></msub><mo>/</mo><mi>T</mi></mrow></msup></mrow></mfrac><mo>,</mo><mspace width="0.8em"/><mi>T</mi><mo>=</mo><mn>1.55</mn></mrow></math>
+            <p class="doc-note">实时识别走快速路径：单次前向（T=1.55）+ HSEmotion 单裁剪，720 像素约 90 ms/帧；在示例图上与完整 TTA 命中率一致。</p>
+          </div>
+        </div>
 
-    <p class="guide-foot">参考文献（经典来源，供对照，不是本页要背的作业）：Ekman 1992；Altshuler 1948；Gaston 1968；Bower 1981；Zillmann 1988；Saarikallio &amp; Erkkilä 2007；Thayer 1989；Russell 1980；Hevner 1936；Krumhansl &amp; Kessler 1982；Juslin 2001；Pazzani &amp; Billsus 2007。</p>
-  </article>
+        <div class="doc-step">
+          <span class="doc-n">3</span>
+          <div>
+            <h3>双模型自适应融合</h3>
+            <p>实验室模型（MobileFaceNet）与野外模型（HSEmotion）判断一致时加权平均，不一致时更信野外模型：</p>
+            <math display="block"><mrow><mi mathvariant="bold">p</mi><mo>=</mo><mi>w</mi><mspace width="0.15em"/><msub><mi mathvariant="bold">p</mi><mtext>MBF</mtext></msub><mo>+</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>w</mi><mo stretchy="false">)</mo><mspace width="0.15em"/><msub><mi mathvariant="bold">p</mi><mtext>HSE</mtext></msub><mo>,</mo><mspace width="1em"/><mi>w</mi><mo>=</mo><mrow><mo>{</mo><mtable columnalign="left"><mtr><mtd><mn>0.46</mn><mo>+</mo><mn>0.14</mn><mo>·</mo><mtext>clip</mtext><mo stretchy="false">(</mo><mi>Δ</mi><mo>/</mo><mn>0.5</mn><mo stretchy="false">)</mo></mtd><mtd><mtext>两模型首选一致</mtext></mtd></mtr><mtr><mtd><mn>0.55</mn></mtd><mtd><mtext>MBF 首选在 HSE 前二且 ≥0.85</mtext></mtd></mtr><mtr><mtd><mn>0.68</mn></mtd><mtd><mtext>MBF 极其确定（≥0.96）</mtext></mtd></mtr><mtr><mtd><mn>0.26</mn></mtd><mtd><mtext>其余分歧</mtext></mtd></mtr></mtable></mrow></mrow></math>
+            <p class="doc-note">Δ 为 MobileFaceNet 第一与第二名的概率差。多帧截图按七类概率平均，不取单帧最高分。</p>
+          </div>
+        </div>
+
+        <div class="doc-step">
+          <span class="doc-n">4</span>
+          <div>
+            <h3>跨帧指数平滑与几何校正</h3>
+            <math display="block"><mrow><msub><mi mathvariant="bold">p</mi><mi>t</mi></msub><mo>=</mo><mi>α</mi><msub><mi mathvariant="bold">q</mi><mi>t</mi></msub><mo>+</mo><mo stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>α</mi><mo stretchy="false">)</mo><msub><mi mathvariant="bold">p</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>,</mo><mspace width="1em"/><mi>α</mi><mo>=</mo><mrow><mo>{</mo><mtable columnalign="left"><mtr><mtd><mn>0.22</mn></mtd><mtd><mtext>两帧间隔 &lt; 0.35 s</mtext></mtd></mtr><mtr><mtd><mn>0.38</mn></mtd><mtd><mtext>否则</mtext></mtd></mtr></mtable></mrow></mrow></math>
+            <p>再用五点几何对照 FACS 动作单元做否决：以瞳距 IOD 归一化</p>
+            <math display="block"><mrow><mi>w</mi><mo>=</mo><mfrac><mrow><mo>‖</mo><msub><mi mathvariant="bold">m</mi><mi>r</mi></msub><mo>−</mo><msub><mi mathvariant="bold">m</mi><mi>l</mi></msub><mo>‖</mo></mrow><mtext>IOD</mtext></mfrac><mo>,</mo><mspace width="1.2em"/><mi>d</mi><mo>=</mo><mfrac><mrow><msub><mi>y</mi><mtext>mouth</mtext></msub><mo>−</mo><msub><mi>y</mi><mtext>nose</mtext></msub></mrow><mtext>IOD</mtext></mfrac></mrow></math>
+            <p class="doc-note">没有张口（d 小）就把惊讶压回平静；嘴没拉开上扬（AU12，w 小）就把喜悦压回平静，减少休息脸、说话口型的误判。</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="doc-sec glass" id="live">
+        <h2><svg class="doc-ic"><use href="#i-target"/></svg>实时判断与换歌</h2>
+        <div class="doc-grid">
+          <div class="doc-card"><h3>先稳住，再播报</h3><p>平静、喜悦、悲伤（日常三类）要稳约 2.5 秒才播报；惊讶、恐惧、愤怒、厌恶（短高潮）约 0.4 秒。</p></div>
+          <div class="doc-card"><h3>播报完立刻换歌</h3><p>语音「情绪标签变为…」一结束就换成该情绪的歌，实测约 0.4 秒；关掉语音时按保持时间换歌。</p></div>
+          <div class="doc-card"><h3>保持时间</h3><p>高潮四类换歌前至少保持 6 秒、日常两类 3 秒，避免一闪而过的表情来回切歌。</p></div>
+          <div class="doc-card"><h3>代表曲先播</h3><p>每类开头是一听就懂的代表曲：喜悦《小苹果》、悲伤《后来》、平静《同桌的你》……可设前 1–6 首或全部轮换。</p></div>
+        </div>
+      </section>
+
+      <section class="doc-sec glass" id="classroom">
+        <h2><svg class="doc-ic"><use href="#i-class"/></svg>课堂演示模式</h2>
+        <p>学生扮表情时惊讶往往张口不够大、扮平静又忍不住笑。设置 → 检测方式里打开后，几何规则按示例照片量出的边界调整：</p>
+        <math display="block"><mrow><mtext>喜悦</mtext><mo>⇐</mo><mi>w</mi><mo>≥</mo><mn>0.88</mn><mspace width="0.6em"/><mo stretchy="false">(</mo><mtext>真的笑开</mtext><mo stretchy="false">)</mo><mo>,</mo><mspace width="1.6em"/><mtext>偏向惊讶</mtext><mo>⇐</mo><mi>d</mi><mo>≥</mo><mn>0.52</mn></mrow></math>
+        <p class="doc-note">示例照片实测：喜悦嘴宽 0.89–0.91、平静 0.84–0.87；惊讶张口 0.58–0.69、平静 ≤0.47。惊讶确认门槛 70% → 50%，喜悦 60% → 68%。成人或日常使用请关掉。<a href="/pose">七类表情怎么做 →</a></p>
+      </section>
+
+      <section class="doc-sec glass" id="music">
+        <h2><svg class="doc-ic"><use href="#i-wave"/></svg>旋律曲调情绪 <small>Thayer 二维模型 + Krumhansl–Kessler 调式</small></h2>
+        <p class="doc-classic">经典：Thayer 1989 效价-唤醒 · Krumhansl–Kessler 1982 大小调剖面 · Juslin 2001 声学线索</p>
+        <div class="doc-formula-grid">
+          <div class="doc-card">
+            <h3>速度：能量包络自相关</h3>
+            <math display="block"><mrow><mi>R</mi><mo stretchy="false">(</mo><mi>τ</mi><mo stretchy="false">)</mo><mo>=</mo><munder><mo>∑</mo><mi>t</mi></munder><mi>e</mi><mo stretchy="false">(</mo><mi>t</mi><mo stretchy="false">)</mo><mspace width="0.1em"/><mi>e</mi><mo stretchy="false">(</mo><mi>t</mi><mo>+</mo><mi>τ</mi><mo stretchy="false">)</mo><mo>,</mo><mspace width="0.8em"/><mtext>BPM</mtext><mo>=</mo><mfrac><mn>60</mn><msup><mi>τ</mi><mo>*</mo></msup></mfrac></mrow></math>
+            <p class="doc-note">在 54–176 BPM 网格上取峰值（Scheirer / Ellis）。</p>
+          </div>
+          <div class="doc-card">
+            <h3>调式：音级剖面相关</h3>
+            <math display="block"><mrow><mover><mi>k</mi><mo>^</mo></mover><mo>=</mo><munder><mrow><mi>arg</mi><mo>⁡</mo><mi>max</mi></mrow><mrow><mi>k</mi><mo>∈</mo><mtext>24 调</mtext></mrow></munder><mo>⁡</mo><mtext>corr</mtext><mo stretchy="false">(</mo><mi mathvariant="bold">c</mi><mo>,</mo><msub><mi mathvariant="bold">K</mi><mi>k</mi></msub><mo stretchy="false">)</mo></mrow></math>
+            <p class="doc-note"><b>c</b> 为 12 音级色度直方图，<b>K</b><sub>k</sub> 为旋转后的 Krumhansl–Kessler 大小调剖面。</p>
+          </div>
+          <div class="doc-card">
+            <h3>音色：频谱质心</h3>
+            <math display="block"><mrow><mi>C</mi><mo>=</mo><mfrac><mrow><munder><mo>∑</mo><mi>f</mi></munder><mi>f</mi><mspace width="0.1em"/><mo>|</mo><mi>X</mi><mo stretchy="false">(</mo><mi>f</mi><mo stretchy="false">)</mo><mo>|</mo></mrow><mrow><munder><mo>∑</mo><mi>f</mi></munder><mo>|</mo><mi>X</mi><mo stretchy="false">(</mo><mi>f</mi><mo stretchy="false">)</mo><mo>|</mo></mrow></mfrac></mrow></math>
+            <p class="doc-note">X(f) 为短时傅里叶变换（STFT）幅度谱，质心越高声音越亮。</p>
+          </div>
+          <div class="doc-card">
+            <h3>效价-唤醒 → 七类</h3>
+            <math display="block"><mrow><mi>V</mi><mo>∝</mo><mtext>大调</mtext><mo>+</mo><mi>C</mi><mo>,</mo><mspace width="0.8em"/><mi>A</mi><mo>∝</mo><mtext>BPM</mtext><mo>+</mo><mtext>能量</mtext></mrow></math>
+            <p class="doc-note">调式定效价 V，速度与能量定唤醒 A，再投到 Russell 环面上的七类情绪。</p>
+          </div>
+        </div>
+        <p class="doc-note">播放时浏览器 Web Audio 再抽实时振动 x(t)、谱通量节拍、对数频谱 |X(f)|、色度、基频 f₀ 与质心 C，颜色跟随人脸此刻的情绪。全程本机 numpy / scipy。</p>
+      </section>
+
+      <section class="doc-sec glass" id="recommend">
+        <h2><svg class="doc-ic"><use href="#i-disc"/></svg>推荐策略与理论 <small>主页可选，默认同频</small></h2>
+        <p>先决定<strong>听哪一类情绪的歌、按什么顺序听</strong>，同一类内再用人脸（或目标）向量与曲调向量做余弦相似度排序（基于内容的推荐，Pazzani / Billsus）：</p>
+        <math display="block"><mrow><mtext>sim</mtext><mo stretchy="false">(</mo><mi mathvariant="bold">f</mi><mo>,</mo><mi mathvariant="bold">s</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><mrow><mi mathvariant="bold">f</mi><mo>·</mo><mi mathvariant="bold">s</mi></mrow><mrow><mo>‖</mo><mi mathvariant="bold">f</mi><mo>‖</mo><mspace width="0.1em"/><mo>‖</mo><mi mathvariant="bold">s</mi><mo>‖</mo></mrow></mfrac></mrow></math>
+        <p class="doc-note">排序优先级：代表曲 &gt; 中文 &gt; 特别网红英文 &gt; 其余；「排除已播」打开时听过的歌排到后面。Russell 效价-唤醒环面用于修复、回暖、降唤醒等跨类策略（ISO 原则：先同频再修复）。</p>
+        <div class="guide-strats">
+          {% for s in strategies %}
+          <article class="doc-card strat" id="strat-{{ s.id }}">
+            <p class="doc-kicker">{{ loop.index }} · {{ s.zh }}</p>
+            <h3>{{ s.name }}</h3>
+            <p class="doc-classic">经典：{{ s.classic }}</p>
+            <p>{{ s.theory }}</p>
+            <p><strong>怎么执行：</strong>{{ s.how }}</p>
+            <p><strong>什么时候选：</strong>{{ s.when }}</p>
+            <p class="doc-note">规则：{{ s.rule }}</p>
+          </article>
+          {% endfor %}
+        </div>
+        <h3 class="doc-sub">对照简表</h3>
+        <div class="guide-table-wrap">
+          <table class="guide-table">
+            <thead>
+              <tr><th>当前表情</th><th>同频</th><th>修复</th><th>先同频再修复</th><th>对比</th><th>回暖</th><th>降唤醒</th><th>升效价</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>喜</td><td>喜</td><td>喜</td><td>喜</td><td>哀</td><td>喜</td><td>平静</td><td>喜</td></tr>
+              <tr><td>怒</td><td>怒</td><td>平静</td><td>怒 → 平静 → 喜</td><td>喜</td><td>怒 → 惊 → 喜</td><td>哀</td><td>惊</td></tr>
+              <tr><td>哀</td><td>哀</td><td>喜</td><td>哀 → 平静 → 喜</td><td>喜</td><td>哀 → 平静 → 喜</td><td>哀</td><td>喜</td></tr>
+              <tr><td>惧</td><td>惧</td><td>平静</td><td>惧 → 平静 → 喜</td><td>喜</td><td>惧 → 惊 → 喜</td><td>哀</td><td>惊</td></tr>
+              <tr><td>惊</td><td>惊</td><td>喜</td><td>惊 → 喜</td><td>哀</td><td>惊 → 喜</td><td>平静</td><td>喜</td></tr>
+              <tr><td>厌</td><td>厌</td><td>喜</td><td>厌 → 平静 → 喜</td><td>喜</td><td>厌 → 平静 → 喜</td><td>哀</td><td>喜</td></tr>
+              <tr><td>平静</td><td>平静</td><td>喜</td><td>平静 → 喜</td><td>惊</td><td>平静 → 喜</td><td>平静</td><td>喜</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="doc-note">强化：仍用当前类，把更典型的歌排前面。平衡：一半同频、一半修复，交错播放。</p>
+      </section>
+
+      <section class="doc-sec glass" id="library">
+        <h2><svg class="doc-ic"><use href="#i-box"/></svg>曲库与部署</h2>
+        <div class="doc-grid">
+          <div class="doc-card"><h3>本地曲库</h3><p>七类情绪各 76 首，共 532 首 30 秒人声试听；501 首歌词经语音识别对过时间轴，断网也准。</p></div>
+          <div class="doc-card"><h3>在线热歌</h3><p>先用本地歌立刻开播，在线热歌（苹果音乐、网易云、QQ、酷狗等）在后台补进歌单；网络差也不耽误换歌。</p></div>
+          <div class="doc-card"><h3>换电脑</h3><p>整个文件夹复制过去，双击 <code>tools\setup-conda.bat</code> 再双击 <code>run.bat</code>。情绪足迹在 <code>data/history.json</code> 与 <code>static/history/</code>，随文件夹带走。详见 <code>换电脑-整夹复制即用.md</code>。</p></div>
+          <div class="doc-card"><h3>隐私</h3><p>模型是本机 ONNX，图像不上传；字体、歌词对齐结果都在本地，断网可用。</p></div>
+        </div>
+      </section>
+
+      <section class="doc-sec glass" id="refs">
+        <h2><svg class="doc-ic"><use href="#i-book"/></svg>参考文献</h2>
+        <p class="doc-refs">Ekman 1992；Russell 1980；Thayer 1989；Krumhansl &amp; Kessler 1982；Juslin 2001；Hevner 1936；Altshuler 1948（ISO 原则）；Gaston 1968；Bower 1981；Zillmann 1988（情绪调节）；Saarikallio &amp; Erkkilä 2007；Pazzani &amp; Billsus 2007；Scheirer 1998；Ellis 2007；Savchenko 2022（HSEmotion）；Wu et al. 2023（YuNet）。</p>
+      </section>
+    </main>
+  </div>
 
   <script>
     (function () {
       const theme = localStorage.getItem("emotune-theme") || "night";
       document.documentElement.dataset.theme = theme;
+      const links = [...document.querySelectorAll(".doc-toc a")];
+      const io = new IntersectionObserver((rows) => {
+        rows.forEach((r) => {
+          if (!r.isIntersecting) return;
+          links.forEach((a) => a.classList.toggle("is-on", a.getAttribute("href") === "#" + r.target.id));
+        });
+      }, { rootMargin: "-40% 0px -55% 0px" });
+      document.querySelectorAll(".doc-sec").forEach((s) => io.observe(s));
     })();
   </script>
 </body>

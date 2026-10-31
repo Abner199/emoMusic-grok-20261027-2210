@@ -704,6 +704,7 @@
     const headers = {
       "X-Emo-Online": state.onlineOn ? "1" : "0",
       "X-Emo-Face-Mode": state.faceMode || "solo",
+      "X-Emo-Demo": localStorage.getItem("emotune-demo-mode") === "1" ? "1" : "0",
     };
     if (extra) Object.assign(headers, extra);
     return headers;
@@ -759,7 +760,7 @@
       const burst = [];
       const n = source === "camera-live" ? 1 : 3;
       for (let i = 0; i < n; i += 1) {
-        const blob = await captureBlob(0.94, 1280);
+        const blob = await captureBlob(0.94, source === "camera-live" ? 720 : 1280);
         if (blob) burst.push(blob);
         if (i < n - 1) await new Promise((r) => setTimeout(r, 80));
       }

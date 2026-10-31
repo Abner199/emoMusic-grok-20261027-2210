@@ -96,7 +96,7 @@ def main() -> int:
         )
         context = browser.new_context(viewport={"width": 1280, "height": 900}, locale="zh-CN")
         page = context.new_page()
-        page.add_init_script("localStorage.setItem('emotune-voice','0');")
+        page.add_init_script("localStorage.setItem('emotune-voice','0'); localStorage.setItem('emotune-auto-live','0');")
 
         def handle_recognize(route):
             emo = queue[0] if queue else "neutral"
@@ -158,12 +158,12 @@ def main() -> int:
         chk("声纹说明情绪标签同步", "同一标签" in viz_note, viz_note)
         chk("默认同频文案", "默认同频" in (page.locator("#emo-copy").inner_text() + page.locator("#recs-meta").inner_text()), page.locator("#strat-now").inner_text())
         chk("默认同频", page.evaluate("() => window.__emotune.getState().strategy") == "iso")
-        chk("情绪区说明可见", "不会立刻换歌" in hold_note and "惊讶、恐惧" in hold_note, hold_note)
+        chk("情绪区说明可见", "6 秒内不换歌" in hold_note and "惊讶、恐惧" in hold_note, hold_note)
         chk("歌曲区说明可见", "松开后也不会马上换歌" in recs_meta, recs_meta)
 
         page.locator("#btn-about").click()
         about = page.locator("#about-dialog").inner_text()
-        chk("关于里说明保持播放", "不会立刻换歌" in about and "另一种明显表情" in about)
+        chk("关于里说明保持播放", "6 秒内继续播" in about and "另一种明显表情" in about)
         page.locator("#btn-close-about").click()
 
         page.screenshot(path=str(shots / "copy.png"), full_page=True)
@@ -190,8 +190,8 @@ def main() -> int:
         chk("恐惧后没表情仍保持", policy["noface"]["action"] == "hold", str(policy["noface"]))
         chk("短暂表情包含惊惧怒厌", all(policy["transient"].get(k) for k in ("surprise", "fear", "angry", "disgust")))
         hold_ms = page.evaluate("() => window.__emotune.holdMs")
-        chk("高潮锁定不少于十秒", hold_ms["surprise"] >= 10000 and hold_ms["fear"] >= 10000, str(hold_ms))
-        chk("日常喜悦悲伤也会锁几秒", hold_ms["happy"] >= 6000 and hold_ms["sad"] >= 6000, str(hold_ms))
+        chk("高潮锁定约 6 秒（不长到只换标签不换歌）", 5000 <= hold_ms["surprise"] <= 8000 and 5000 <= hold_ms["fear"] <= 8000, str(hold_ms))
+        chk("日常喜悦悲伤锁约 3 秒", 2000 <= hold_ms["happy"] <= 4000 and 2000 <= hold_ms["sad"] <= 4000, str(hold_ms))
         switch_need = page.evaluate(
             """() => {
               const n = window.__emotune.playlistSwitchNeed;
@@ -273,7 +273,12 @@ def main() -> int:
                 "el => { el.checked = true; el.dispatchEvent(new Event('change', { bubbles: true })); }"
             )
             page.wait_for_function("() => window.__emotune.getState().lock === 'surprise'", timeout=12000)
-            page.wait_for_timeout(400)
+            # 锁定只保持约 6 秒，读状态条前把锁定时刻重置为刚刚，等状态条每秒刷新一次
+            page.evaluate("() => window.__emotune.setLockForTest('surprise', 0)")
+            try:
+                page.wait_for_function("() => (document.querySelector('#emo-hold').textContent || '').includes('锁定')", timeout=4000)
+            except Exception:
+                pass
             page.screenshot(path=str(shots / "locked.png"), full_page=True)
             hold_txt = page.locator("#emo-hold").inner_text()
             titles = page.evaluate("() => window.__emotune.getState().titles")
@@ -294,7 +299,7 @@ def main() -> int:
             now_txt = page.locator("#emo-now").inner_text()
             chk("松开后画面此刻显示平静", "平静" in now_txt, now_txt)
             chk("松开后此刻情绪跟画面", page.locator("#emo-zh").inner_text().strip() == "中", page.locator("#emo-zh").inner_text())
-            chk("松开后播放器情绪跟画面", page.locator("#player-emo b").inner_text().strip() == "中", page.locator("#player-emo").inner_text())
+            chk("松开后播放器仍标这首歌自己的情绪", page.locator("#player-emo b").inner_text().strip() == "惊", page.locator("#player-emo").inner_text())
             chk("松开后可视化情绪跟画面", page.locator("#audio-viz").get_attribute("data-emo") == "neutral", page.locator("#audio-viz").get_attribute("data-emo"))
 
             queue[:] = ["happy"]

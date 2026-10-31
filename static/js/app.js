@@ -2,128 +2,24 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
-  const EMO_ORDER = ["happy", "angry", "sad", "fear", "surprise", "disgust", "neutral"];
-  const EMO_META = {
-    happy: { zh: "喜", name: "喜悦", color: "#ffd400" },
-    angry: { zh: "怒", name: "愤怒", color: "#e02020" },
-    sad: { zh: "哀", name: "悲伤", color: "#4e7390" },
-    fear: { zh: "惧", name: "恐惧", color: "#6b2d91" },
-    surprise: { zh: "惊", name: "惊讶", color: "#ff7a18" },
-    disgust: { zh: "厌", name: "厌恶", color: "#6f7d32" },
-    neutral: { zh: "中", name: "平静", color: "#4ec6f5" },
-    idle: { zh: "待", name: "待识别", color: "#c4a574" },
-  };
-  const EMO_HEX = Object.fromEntries(Object.keys(EMO_META).map((k) => [k, EMO_META[k].color]));
-  const SOURCE_ZH = {
-    upload: "上传照片",
-    camera: "摄像头",
-    "camera-live": "实时捕捉",
-    video: "本地视频",
-    "video-live": "视频捕捉",
-    screen: "屏幕",
-    "screen-live": "屏幕捕捉",
-  };
-  const FACE_MODE_META = {
-    solo: { id: "solo", zh: "单人精检", blurb: "只取画面里最大、最稳的一张脸，检测阈值更高，不扫远景杂脸。适合自拍和对镜。近景会融合两套表情模型；两模型不一致时更信野外模型。" },
-    crowd: { id: "crowd", zh: "多人远场", blurb: "同时框出多张脸，包括远景小脸；歌曲按人数最多的情绪来。适合课堂、合影和远镜头。" },
-  };
-  const TRAD =
-    "愛後為國樂發時長門開東風雲點實現與無這個們來對會體醜強獨戰鐘煙湧陰貓樹傑銘謙飛兒鄧陳趙歲戀聽記過錯氣龍捲義術單簡當從業書華語經總應該說讓給還進運關問題歡熱陽離獸團傳蘭齊劉買綱願乾燦爛態戲劇觀覺優傷殤俠雙盧樸馮靜倫誇闆裡麼線將畫憶懷邊條孫隻隻臺蘋麼麼聲帶專輯場錄選數賜碼銀鏡際內寫讀請區灣標準寶貝頁頭題顏館廣廳響處歷據產權號級類組員並確滿漢彙視藝職網質價電務間葉滾搖見絲詩迴蕭驚顫慄溫學認島黃嘆髮孃煉園遊盤騎亂羅曖榮詞話親變萬遠換擇證驗聯習鳳車馬魚錢賣鬆麵廠鐵億儀慶禮節責曆絡織閉係裏詠曉鴻穎聰艷偉麗鵬濤潔純紅機軍殺謝鋒殘竅極誘計動軌跡約橋興嗎雞嵐張妳瑋議の層樓寶暢蘇綠瀧險夢牆墻剛違獻凍轉蓋結絕劍樣個幾終峯傾喬舊賞韋禮編楊韓吳寧許靚夠彈帥週製複採捨";
-  const SIMP =
-    "爱后为国乐发时长门开东风云点实现与无这个们来对会体丑强独战钟烟涌阴猫树杰铭谦飞儿邓陈赵岁恋听记过错气龙卷义术单简当从业书华语经总应该说让给还进运关问题欢热阳离兽团传兰齐刘买纲愿干灿烂态戏剧观觉优伤殇侠双卢朴冯静伦夸板里么线将画忆怀边条孙只只台苹么么声带专辑场录选数赐码银镜际内写读请区湾标准宝贝页头题颜馆广厅响处历据产权号级类组员并确满汉汇视艺职网质价电务间叶滚摇见丝诗回萧惊颤栗温学认岛黄叹发娘炼园游盘骑乱罗暧荣词话亲变万远换择证验联习凤车马鱼钱卖松面厂铁亿仪庆礼节责历络织闭系里咏晓鸿颖聪艳伟丽鹏涛洁纯红机军杀谢锋残窍极诱计动轨迹约桥兴吗鸡岚张你玮议之层楼宝畅苏绿泷险梦墙墙刚违献冻转盖结绝剑样个几终峰倾乔旧赏韦礼编杨韩吴宁许靓够弹帅周制复采舍";
-  const TRAD_MAP = (() => {
-    const map = Object.create(null);
-    for (let i = 0; i < TRAD.length; i += 1) map[TRAD[i]] = SIMP[i];
-    return map;
-  })();
+  /* app.js 章节目录（搜索中文标题即可跳到对应位置）
+   *   工具与常量 ........ core.js（EmoCore）
+   *   状态 state ........ const state = {
+   *   语音播报 .......... function speakText / speakEmotionChange / switchAfterSpeech
+   *   摄像头与画面 ...... async function startCamera / attachStream / captureBlob
+   *   实时判断 .......... decideLiveAction / lockPlaylist / updateHoldUi
+   *   人脸框绘制 ........ paintFaceOverlay / startTrackLoop（face-draw.js 负责具体画法）
+   *   歌单与播放 ........ renderSongs / playAt / autoPlayList / fillOnlineLater
+   *   声学可视化 ........ drawVizFrame / setVizSize
+   *   播放器三档 ........ setPlayerMode；投影大屏 setProjector；情绪时间线 sampleTimeline
+   *   换歌原因提示 ...... showSwitchReason
+   *   识别结果处理 ...... handleRecognizeData
+   *   照片模式 .......... useFile / paintPhotoOverlay / loadDemo
+   *   情绪足迹 .......... loadHistory / loadMoreHistory / refreshTrailLive / renderTrail
+   *   事件绑定 .......... function bind()
+   */
+  const { EMO_ORDER, EMO_META, EMO_HEX, SOURCE_ZH, FACE_MODE_META, TRAD, SIMP, TRAD_MAP, FACE, prettyText, esc, faceSvg, fmt, hexToRgba, foldTitle, clampNum, normRange } = window.EmoCore;
 
-  function prettyText(text) {
-    let t = String(text || "")
-      .replace(/[^\u0000-\u007F]/g, (ch) => TRAD_MAP[ch] || ch)
-      .trim();
-    if (!t) return "";
-    t = t.replace(/\s*[-–—]\s*Single\b/gi, " - 单曲");
-    t = t.replace(/\(\s*Single\s*\)/gi, "(单曲)");
-    t = t.replace(/\s*[-–—]\s*EP\s*$/i, " - 迷你专辑");
-    t = t.replace(/\s*[-–—]\s*Album\s*$/i, " - 专辑");
-    t = t.replace(/\(\s*Live\s*\)/gi, "(现场)");
-    t = t.replace(/(第\d+期)Live/gi, "$1现场");
-    t = t.replace(/\(\s*Hong Kong Version\s*\)/gi, "(香港版)");
-    t = t.replace(/\bVersion\b/g, "版");
-    t = t.replace(/iTunes/g, "苹果音乐");
-    t = t.replace(/Deezer/g, "国际曲库");
-    return t;
-  }
-
-  const FACE = {
-    idle: `
-      <circle cx="50" cy="50" r="42" fill="currentColor" opacity=".1"/>
-      <circle cx="32" cy="42" r="6.4" fill="currentColor"/>
-      <circle cx="68" cy="42" r="6.4" fill="currentColor"/>
-      <path d="M26 70h48" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>`,
-    happy: `
-      <circle cx="50" cy="50" r="42" fill="currentColor" opacity=".14"/>
-      <path d="M10 50c12-30 30-30 36 8" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
-      <path d="M54 50c12-30 30-30 36 8" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
-      <path d="M10 56c12 40 68 40 80 0" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
-      <path d="M20 64c10 28 50 28 60 0" fill="currentColor" opacity=".32"/>
-      <ellipse cx="12" cy="66" rx="12" ry="8" fill="currentColor" opacity=".48"/>
-      <ellipse cx="88" cy="66" rx="12" ry="8" fill="currentColor" opacity=".48"/>`,
-    angry: `
-      <circle cx="50" cy="50" r="42" fill="currentColor" opacity=".16"/>
-      <path d="M4 12l46 36" stroke="currentColor" stroke-width="9" stroke-linecap="round"/>
-      <path d="M96 12l-46 36" stroke="currentColor" stroke-width="9" stroke-linecap="round"/>
-      <ellipse cx="30" cy="58" rx="12" ry="8" fill="currentColor"/>
-      <ellipse cx="70" cy="58" rx="12" ry="8" fill="currentColor"/>
-      <circle cx="35" cy="55" r="3" fill="#fff" opacity=".92"/>
-      <circle cx="75" cy="55" r="3" fill="#fff" opacity=".92"/>
-      <path d="M16 76l10-20 8 18 8-18 8 18 8-18 10 20" stroke="currentColor" stroke-width="6.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M10 8c2-12 14-12 14 2M76 8c2-12 14-12 14 2" stroke="currentColor" stroke-width="3.6" stroke-linecap="round" opacity=".8"/>`,
-    sad: `
-      <circle cx="50" cy="50" r="42" fill="currentColor" opacity=".12"/>
-      <path d="M8 20c20-16 34 4 36 24" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
-      <path d="M92 20c-20-16-34 4-36 24" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
-      <ellipse cx="32" cy="56" rx="9" ry="11" fill="currentColor"/>
-      <ellipse cx="68" cy="56" rx="9" ry="11" fill="currentColor"/>
-      <path d="M16 88c16-34 52-34 68 0" stroke="currentColor" stroke-width="7.2" stroke-linecap="round"/>
-      <path d="M16 62c-5 18 2 30 14 34" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
-      <ellipse cx="12" cy="94" rx="7" ry="9" fill="currentColor"/>
-      <circle cx="88" cy="74" r="4.6" fill="currentColor" opacity=".8"/>`,
-    fear: `
-      <circle cx="50" cy="50" r="42" fill="currentColor" opacity=".12"/>
-      <path d="M8 12c18-6 32 10 34 28" stroke="currentColor" stroke-width="6.4" stroke-linecap="round"/>
-      <path d="M92 12c-18-6-32 10-34 28" stroke="currentColor" stroke-width="6.4" stroke-linecap="round"/>
-      <ellipse cx="32" cy="50" rx="17" ry="21" stroke="currentColor" stroke-width="5" fill="currentColor" fill-opacity=".08"/>
-      <ellipse cx="68" cy="50" rx="17" ry="21" stroke="currentColor" stroke-width="5" fill="currentColor" fill-opacity=".08"/>
-      <circle cx="32" cy="58" r="4.6" fill="currentColor"/>
-      <circle cx="68" cy="58" r="4.6" fill="currentColor"/>
-      <path d="M28 80c6 14 12-14 16 0s12-14 16 0 12-14 16 0" stroke="currentColor" stroke-width="5.6" stroke-linecap="round"/>
-      <ellipse cx="92" cy="42" rx="6" ry="10" fill="currentColor" opacity=".88"/>
-      <ellipse cx="8" cy="48" rx="4" ry="7" fill="currentColor" opacity=".7"/>`,
-    surprise: `
-      <circle cx="50" cy="50" r="42" fill="currentColor" opacity=".12"/>
-      <path d="M6 10h30" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
-      <path d="M64 10h30" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
-      <circle cx="32" cy="38" r="18" stroke="currentColor" stroke-width="5.4"/>
-      <circle cx="68" cy="38" r="18" stroke="currentColor" stroke-width="5.4"/>
-      <circle cx="32" cy="38" r="7" fill="currentColor"/>
-      <circle cx="68" cy="38" r="7" fill="currentColor"/>
-      <ellipse cx="50" cy="82" rx="18" ry="16" stroke="currentColor" stroke-width="6"/>`,
-    disgust: `
-      <circle cx="50" cy="50" r="42" fill="currentColor" opacity=".14"/>
-      <path d="M6 22c22-14 38 8 40 20" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
-      <path d="M94 10c-16 16-26 32-30 40" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
-      <path d="M12 50h26" stroke="currentColor" stroke-width="7.2" stroke-linecap="round"/>
-      <path d="M54 60h28" stroke="currentColor" stroke-width="7.2" stroke-linecap="round"/>
-      <path d="M38 40c3 12 12 16 18 6" stroke="currentColor" stroke-width="4.6" stroke-linecap="round"/>
-      <path d="M18 70c12-18 24-8 32 2 18 12 30-10 34-20" stroke="currentColor" stroke-width="6.4" stroke-linecap="round"/>
-      <path d="M42 74c10 20 24 22 32 4" stroke="currentColor" stroke-width="6" stroke-linecap="round" fill="currentColor" fill-opacity=".3"/>`,
-    neutral: `
-      <circle cx="50" cy="50" r="42" fill="currentColor" opacity=".1"/>
-      <path d="M14 44h26" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
-      <path d="M60 44h26" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
-      <path d="M28 72h44" stroke="currentColor" stroke-width="6.2" stroke-linecap="round"/>`,
-  };
 
   const state = {
     mode: "camera",
@@ -171,6 +67,14 @@
     lastPlayedStamp: "",
     replayHistory: false,
     voiceOn: localStorage.getItem("emotune-voice") !== "0",
+    skipPlayed: localStorage.getItem("emotune-skip-played") !== "0",
+    demoMode: localStorage.getItem("emotune-demo-mode") === "1",
+    // 1–6：在前 N 首代表曲之间轮换；0：歌单里全部歌曲轮流当第一首
+    pinRotate: (() => {
+      const raw = localStorage.getItem("emotune-pin-rotate");
+      if (raw === "0") return 0;
+      return Math.max(1, Math.min(6, Number(raw) || 3));
+    })(),
     lastSpokenEmo: "",
     lastSpokenAt: 0,
     lastSpokenText: "",
@@ -372,7 +276,7 @@
   }
 
   const LIVE_SPEAK_DWELL_MS = 2500;
-  const SPIKE_SPEAK_DWELL_MS = 400;
+  const SPIKE_SPEAK_DWELL_MS = 400; // 高潮表情：画面已确认两次，再稳 0.4 秒就播报，播报完立刻换歌
 
   function speakDwellMs(id) {
     return TRANSIENT_EMO[id] ? SPIKE_SPEAK_DWELL_MS : LIVE_SPEAK_DWELL_MS;
@@ -420,17 +324,41 @@
     if (Date.now() - (state.speakSince || 0) >= speakDwellMs(id)) {
       const meta = EMO_META[id] || {};
       const same = emotion && emotion.id === id ? emotion : null;
-      speakEmotionChange({
-        id,
-        zh: (same && same.zh) || meta.zh,
-        name: (same && same.name) || meta.name,
-      });
+      speakEmotionChange(
+        {
+          id,
+          zh: (same && same.zh) || meta.zh,
+          name: (same && same.name) || meta.name,
+        },
+        false,
+        () => switchAfterSpeech(id)
+      );
       state.speakPending = "";
       state.speakHits = 0;
     }
   }
 
-  function speakText(text, force) {
+  /* 语音播报一结束就换成该情绪的歌：有几秒内的识别结果直接用，没有就当场截一帧确认 */
+  const LIVE_DATA_FRESH_MS = 5000;
+  function switchAfterSpeech(id) {
+    if (!state.live || !id || id === "idle") return;
+    if (id === state.lockEmotion) return;
+    if (state.uiEmo && state.uiEmo !== id) return; // 播报被新表情打断：以新表情为准
+    const cached = (state.liveLatest || {})[id];
+    state.forceApplyEmo = id;
+    state.forceApplyAt = Date.now();
+    if (cached && Date.now() - cached.at <= LIVE_DATA_FRESH_MS) {
+      handleRecognizeData(cached.data, cached.source, 0);
+      return;
+    }
+    if (!state.recognizing && frameReady()) {
+      captureBlob(0.9, 720).then((blob) => {
+        if (blob && state.live) recognize(blob, liveSource());
+      });
+    }
+  }
+
+  function speakText(text, force, onDone) {
     if (!state.voiceOn || !text) return false;
     if (!("speechSynthesis" in window)) return false;
     const synth = window.speechSynthesis;
@@ -447,10 +375,17 @@
     utter.volume = 1;
     if (!state.zhVoice) refreshZhVoice();
     if (state.zhVoice) utter.voice = state.zhVoice;
+    let finished = false;
     const done = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(guard);
       state.speaking = false;
       duckMusic(false);
+      if (typeof onDone === "function") onDone();
     };
+    /* 个别浏览器不触发 onend：按字数估一个上限兜底 */
+    const guard = setTimeout(done, 1200 + text.length * 260);
     utter.onend = done;
     utter.onerror = done;
     state.speaking = true;
@@ -460,13 +395,13 @@
     return true;
   }
 
-  function speakEmotionChange(emotion, force) {
+  function speakEmotionChange(emotion, force, onDone) {
     if (!emotion || !emotion.id || emotion.id === "idle") return;
     const now = Date.now();
     if (!force && emotion.id === state.lastSpokenEmo) return;
     const zh = emotion.zh || (EMO_META[emotion.id] || {}).zh || "";
     const name = emotion.name || (EMO_META[emotion.id] || {}).name || "";
-    if (!speakText(`情绪标签变为${zh}，${name}`, force)) return;
+    if (!speakText(`情绪标签变为${zh}，${name}`, force, onDone)) return;
     state.lastSpokenEmo = emotion.id;
     state.lastSpokenAt = now;
   }
@@ -526,19 +461,7 @@
     vol: $("#vol"),
   };
 
-  function esc(s) {
-    return String(s ?? "").replace(/[&<>"']/g, (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
-    );
-  }
 
-  function faceSvg(id, size = 160) {
-    const inner = FACE[id] || FACE.idle;
-    return `<svg viewBox="0 0 100 100" width="${size}" height="${size}" fill="none" aria-hidden="true">
-      <circle cx="50" cy="50" r="46" stroke="currentColor" stroke-width="4.2" opacity=".45"/>
-      ${inner}
-    </svg>`;
-  }
 
   function toast(msg, kind = "") {
     const box = $("#toasts");
@@ -549,12 +472,6 @@
     setTimeout(() => el.remove(), 4200);
   }
 
-  function fmt(t) {
-    if (!Number.isFinite(t) || t < 0) t = 0;
-    const m = Math.floor(t / 60);
-    const s = Math.floor(t % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
-  }
 
   function isLocalHost() {
     const h = location.hostname;
@@ -595,6 +512,8 @@
       "X-Emo-Online": state.onlineOn ? "1" : "0",
       "X-Emo-Strategy": state.strategy || "iso",
       "X-Emo-Face-Mode": state.faceMode || "solo",
+      "X-Emo-Fresh": state.skipPlayed ? "1" : "0",
+      "X-Emo-Demo": state.demoMode ? "1" : "0",
     };
     if (extra) Object.assign(headers, extra);
     return headers;
@@ -1024,17 +943,18 @@
 
   const TRANSIENT_EMO = { surprise: true, fear: true, angry: true, disgust: true };
   const DAILY_EMO = { happy: true, sad: true, neutral: true };
+  /* 换歌前的最短保持：防止一闪而过的表情来回切歌，但表情变了几秒内就要换到对应的歌 */
   const EMO_HOLD_MS = {
-    surprise: 16000,
-    fear: 16000,
-    angry: 12000,
-    disgust: 12000,
-    happy: 8000,
-    sad: 8000,
+    surprise: 6000,
+    fear: 6000,
+    angry: 6000,
+    disgust: 6000,
+    happy: 3000,
+    sad: 3000,
     neutral: 0,
   };
   const LIVE_SWITCH_HITS = 2;
-  const LIVE_NEUTRAL_HITS = 3;
+  const LIVE_NEUTRAL_HITS = 2;
   const LIVE_MIN_PROB = 0.52;
   const LIVE_FIRST_PROB = { surprise: 0.7, happy: 0.6, fear: 0.64, angry: 0.58, disgust: 0.6, sad: 0.52 };
   const LIVE_TICK_MS = 1400;
@@ -1050,7 +970,14 @@
   const UI_SPIKE_DWELL_MS = 280;
   const UI_DAILY_NEUTRAL_DWELL_MS = 640;
 
+  /* 课堂演示模式：惊讶更容易认出；喜悦要更有把握（孩子紧张时的微笑不算） */
+  const DEMO_FIRST_PROB = { surprise: 0.5, fear: 0.56, happy: 0.68 };
+
   function liveProbBar(locked, emoId) {
+    if (state.demoMode && DEMO_FIRST_PROB[emoId]) {
+      if (emoId === "happy") return DEMO_FIRST_PROB.happy;
+      if (TRANSIENT_EMO[emoId] || !locked) return DEMO_FIRST_PROB[emoId];
+    }
     if (TRANSIENT_EMO[emoId]) return LIVE_FIRST_PROB[emoId] || 0.68;
     if (!locked) return LIVE_FIRST_PROB[emoId] || LIVE_MIN_PROB;
     return LIVE_MIN_PROB;
@@ -1058,7 +985,7 @@
 
   function uiSwitchNeed(fromId, toId, prob) {
     if (TRANSIENT_EMO[toId]) {
-      return { hits: UI_SPIKE_HITS, dwell: UI_SPIKE_DWELL_MS, minProb: 0.55 };
+      return { hits: UI_SPIKE_HITS, dwell: UI_SPIKE_DWELL_MS, minProb: state.demoMode ? 0.45 : 0.55 };
     }
     if (toId === "neutral" && fromId && fromId !== "neutral" && DAILY_EMO[fromId]) {
       return { hits: UI_EMO_HITS, dwell: UI_DAILY_NEUTRAL_DWELL_MS, minProb: 0 };
@@ -1108,6 +1035,16 @@
     state.holdTick = setInterval(() => {
       if (!state.live) return;
       tickUiSpeak();
+      /* 兜底：已经播报过当前表情但歌还没换（例如截帧没认出同一情绪），3 秒后再换一次 */
+      const faceEmo = state.uiEmo;
+      if (
+        state.voiceOn &&
+        faceEmo && faceEmo !== "idle" && faceEmo !== state.lockEmotion &&
+        faceEmo === state.lastSpokenEmo && !state.speaking && !state.forceApplyEmo &&
+        Date.now() - (state.lastSpokenAt || 0) > 3000
+      ) {
+        switchAfterSpeech(faceEmo);
+      }
       const pendingId = state.liveGuess;
       if (pendingId && pendingId !== "neutral" && pendingId !== state.lockEmotion) {
         updateHoldUi(false, (EMO_META[pendingId] || {}).name || "");
@@ -1182,6 +1119,11 @@
     updateHoldUi(false);
     syncLiveHudDot();
     syncDetectBtn();
+  }
+
+  function syncDemoBadge() {
+    const badge = $("#demo-badge");
+    if (badge) badge.hidden = !state.demoMode;
   }
 
   function syncDetectBtn() {
@@ -1293,13 +1235,6 @@
     ctx.closePath();
   }
 
-  function hexToRgba(hex, alpha) {
-    const h = String(hex || "").replace("#", "");
-    const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
-    const n = parseInt(full, 16);
-    if (!Number.isFinite(n)) return `rgba(196,165,116,${alpha})`;
-    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
-  }
 
   function emoHex(id, fromApi) {
     if (fromApi && /^#[0-9a-fA-F]{3,8}$/.test(String(fromApi))) return fromApi;
@@ -1438,7 +1373,7 @@
     const now = Date.now();
     if (now - (state.liveKickAt || 0) < TRACK_KICK_GAP_MS) return;
     state.liveKickAt = now;
-    const blob = await captureBlob(0.92, 1280);
+    const blob = await captureBlob(0.9, 720);
     if (blob && state.live) recognize(blob, liveSource());
   }
 
@@ -1468,6 +1403,11 @@
 
   function updateLiveHud(data) {
     noteTrackEmotion(data);
+    if (data && data.ok && data.emotion) {
+      state.uiEmoAt = Date.now(); // 时间线：有人脸就持续记录
+      const sc = (data.emotion.scores || []).find((x) => x && x.id === state.uiEmo);
+      state.uiEmoProb = sc ? Number(sc.prob) || 0 : data.emotion.id === state.uiEmo ? Number(data.emotion.prob) || 0 : state.uiEmoProb;
+    }
     const hud = $("#live-emo-hud");
     if (!hud) return;
     if (ui.empty && !ui.empty.hidden) {
@@ -2052,13 +1992,6 @@
     }
   }
 
-  function foldTitle(title) {
-    let t = prettyText(String(title || "")).toLowerCase();
-    t = t.replace(/°c|℃|°/g, "度");
-    t = t.replace(/[ ,，]/g, "");
-    t = t.split(/[\/（(|]/)[0];
-    return t.trim();
-  }
 
   function uniqueSongs(list) {
     const seen = new Set();
@@ -2079,7 +2012,8 @@
       const id = String(raw || "").trim();
       if (id && EMO_META[id] && id !== "idle") return id;
     }
-    return "";
+    const m = /^vocal-([a-z]+)-\d+$/.exec(String(song.id || ""));
+    return m && EMO_META[m[1]] ? m[1] : "";
   }
 
   function songEmoChip(song, faceId) {
@@ -2140,6 +2074,61 @@
     paintBoardCounts(null, state.songs.length);
   }
 
+  /* 换歌原因：画面上浮出「检测到 惊讶 → 同频 → 《最炫民族风》」约 4 秒 */
+  function showSwitchReason(emoId, rec) {
+    const box = $("#switch-reason");
+    const meta = EMO_META[emoId];
+    if (!box || !meta) return;
+    const song = state.songs[state.index] || state.songs[0];
+    if (!song) return;
+    const strat = ((rec && rec.strategy) || {}).zh || ((rec && rec.strategy) || {}).name || "";
+    box.dataset.emo = emoId;
+    box.innerHTML =
+      `<span class="sr-emo"><b>${esc(meta.zh)}</b>检测到 ${esc(meta.name)}</span>` +
+      `<i aria-hidden="true">→</i>${strat ? `<span class="sr-strat">${esc(strat)}</span><i aria-hidden="true">→</i>` : ""}` +
+      `<span class="sr-song">《${esc(prettyText(song.title))}》</span>`;
+    box.hidden = false;
+    box.classList.remove("is-in");
+    void box.offsetWidth;
+    box.classList.add("is-in");
+    clearTimeout(state.switchReasonTimer);
+    state.switchReasonTimer = setTimeout(() => {
+      box.classList.remove("is-in");
+      setTimeout(() => (box.hidden = true), 400);
+    }, 4200);
+  }
+
+  /* 两段式推荐的第二段：后台拿含在线热歌的歌单，合并进来；正在播的歌不打断、位置不变 */
+  async function fillOnlineLater(emoId) {
+    const token = (state.onlineFillToken = (state.onlineFillToken || 0) + 1);
+    try {
+      const q = new URLSearchParams({
+        emotion: emoId,
+        online: "1",
+        strategy: state.strategy || "iso",
+        fresh: state.skipPlayed ? "1" : "0",
+      });
+      const data = await (await fetch(`/api/recommend?${q}`)).json();
+      if (token !== state.onlineFillToken || !state.onlineOn || state.lockEmotion !== emoId) return;
+      const incoming = uniqueSongs((data && data.songs) || []);
+      if (!incoming.some((s) => isOnlineSong(s))) return;
+      const playing = state.songs[state.index];
+      const merged = incoming.slice();
+      if (playing) {
+        const at = merged.findIndex((s) => foldTitle(s.title) === foldTitle(playing.title));
+        if (at >= 0) merged.splice(at, 1);
+        merged.unshift(playing);
+      }
+      const failed = state.failed;
+      renderSongs(merged, recsCaption(data));
+      state.failed = failed;
+      state.index = playing ? 0 : state.index;
+      markCurrent();
+    } catch {
+      /* 在线补充失败就继续用本地歌单 */
+    }
+  }
+
   function markCurrent() {
     $$(".song").forEach((el) => el.classList.toggle("is-on", Number(el.dataset.idx) === state.index));
   }
@@ -2172,7 +2161,9 @@
   function paintPlayerEmo(id) {
     const emoEl = $("#player-emo");
     if (!emoEl) return;
-    const emoId = id || displayEmotionId();
+    /* 播放器标签只标这首歌自己的情绪，不跟着人脸变，免得看起来像歌被改了标签 */
+    const playing = state.songs[state.index];
+    const emoId = (playing && songEmotionId(playing)) || id || displayEmotionId();
     if (!emoId || !EMO_META[emoId] || emoId === "idle") return;
     const meta = EMO_META[emoId];
     emoEl.hidden = false;
@@ -2190,6 +2181,11 @@
     const meta = EMO_META[emoId];
     const prev = state.uiEmo;
     state.uiEmo = emoId;
+    state.uiEmoAt = Date.now();
+    if (Array.isArray(extra.scores)) {
+      const hit = extra.scores.find((x) => x && x.id === emoId);
+      if (hit) state.uiEmoProb = Number(hit.prob) || 0;
+    } else if (extra.prob != null) state.uiEmoProb = Number(extra.prob) || 0;
     document.body.dataset.emotion = emoId;
     if (ui.hero) ui.hero.dataset.emo = emoId;
     const zhEl = $("#emo-zh");
@@ -2239,7 +2235,7 @@
   async function loadPlaylist(emo, play) {
     const id = emo || currentEmotionId();
     try {
-      const data = await (await fetch(`/api/recommend?emotion=${encodeURIComponent(id)}&online=${state.onlineOn ? "1" : "0"}&strategy=${encodeURIComponent(state.strategy || "iso")}`)).json();
+      const data = await (await fetch(`/api/recommend?emotion=${encodeURIComponent(id)}&online=${state.onlineOn ? "1" : "0"}&strategy=${encodeURIComponent(state.strategy || "iso")}&fresh=${state.skipPlayed ? "1" : "0"}`)).json();
       if (data.strategy && data.strategy.id) {
         state.strategy = data.strategy.id;
         paintStrategyNow(data.strategy);
@@ -2328,6 +2324,114 @@
     ui.player.classList.toggle("is-lyrics-off", !state.lyricsOn);
     ui.player.classList.toggle("is-cover-off", !state.coverOn);
     ui.player.classList.toggle("is-viz-off", !state.vizOn);
+  }
+
+  /* 情绪时间线：每 250ms 记一次此刻情绪与把握度，画最近 60 秒色带 + 曲线 */
+  const TIMELINE_MS = 60000;
+  function sampleTimeline() {
+    const now = Date.now();
+    const list = (state.timeline = state.timeline || []);
+    const fresh = now - (state.uiEmoAt || 0) < 3000;
+    const id = fresh && state.uiEmo && EMO_META[state.uiEmo] && state.uiEmo !== "idle" ? state.uiEmo : "";
+    list.push({ t: now, id, p: id ? Number(state.uiEmoProb || 0) : 0 });
+    while (list.length && now - list[0].t > TIMELINE_MS + 1000) list.shift();
+    drawTimeline();
+  }
+
+  function drawTimeline() {
+    const canvas = $("#emo-timeline");
+    if (!canvas || !canvas.clientWidth) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const w = Math.max(10, Math.round(canvas.clientWidth * dpr));
+    const h = Math.max(10, Math.round(canvas.clientHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, w, h);
+    const list = state.timeline || [];
+    const now = Date.now();
+    const x = (t) => ((t - (now - TIMELINE_MS)) / TIMELINE_MS) * w;
+    const bandTop = h * 0.42;
+    const bandH = h * 0.5;
+    ctx.fillStyle = "rgba(255,255,255,0.05)";
+    ctx.fillRect(0, bandTop, w, bandH);
+    for (let i = 0; i < list.length; i += 1) {
+      const a = list[i];
+      if (!a.id) continue;
+      const b = list[i + 1];
+      const x0 = Math.max(0, x(a.t));
+      const x1 = Math.min(w, b ? x(b.t) : w);
+      if (x1 <= x0) continue;
+      ctx.fillStyle = EMO_META[a.id].color;
+      ctx.globalAlpha = 0.35 + 0.55 * Math.min(1, a.p || 0.5);
+      ctx.fillRect(x0, bandTop, x1 - x0 + 0.5, bandH);
+    }
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    let started = false;
+    list.forEach((a) => {
+      if (!a.id) {
+        started = false;
+        return;
+      }
+      const px = x(a.t);
+      const py = bandTop - 4 * dpr - (bandTop - 10 * dpr) * Math.min(1, a.p || 0);
+      if (!started) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+      started = true;
+    });
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.stroke();
+    ctx.font = `700 ${Math.round(11 * dpr)}px "Noto Sans SC","Microsoft YaHei",sans-serif`;
+    ctx.textBaseline = "middle";
+    let last = "";
+    list.forEach((a) => {
+      if (a.id && a.id !== last) {
+        const px = Math.min(w - 14 * dpr, Math.max(2, x(a.t) + 2));
+        ctx.fillStyle = "#0b0c12";
+        ctx.fillText(EMO_META[a.id].zh, px + 2 * dpr, bandTop + bandH / 2);
+      }
+      last = a.id;
+    });
+  }
+
+  /* 投影大屏：全屏 + 大字 + 只留人脸、此刻情绪、时间线与迷你播放条 */
+  function setProjector(on) {
+    state.projector = !!on;
+    document.body.classList.toggle("is-projector", state.projector);
+    const btn = $("#btn-projector");
+    if (btn) {
+      btn.classList.toggle("is-on", state.projector);
+      btn.textContent = state.projector ? "退出投影" : "投影";
+    }
+    if (state.projector) {
+      state.playerModeBeforeProjector = ui.player ? ui.player.dataset.mode : "mini";
+      setPlayerMode("mini");
+      if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    } else {
+      if (state.playerModeBeforeProjector) setPlayerMode(state.playerModeBeforeProjector);
+      if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    }
+    requestAnimationFrame(() => {
+      sizeFaceOverlay();
+      paintFaceOverlay();
+      drawTimeline();
+    });
+  }
+
+  /* 播放器三档：展开 / 迷你（默认，一行）/ 折叠（右下角小胶囊），记在本机 */
+  function setPlayerMode(mode) {
+    const next = ["full", "mini", "fold"].includes(mode) ? mode : "mini";
+    localStorage.setItem("emotune-player-mode", next);
+    if (ui.player) ui.player.dataset.mode = next;
+    document.body.dataset.player = next;
+    $$("[data-player-mode]").forEach((b) => b.classList.toggle("is-on", b.dataset.playerMode === next));
+    if (next === "full") startVizLoop();
   }
 
   /* 声学分析三档：展开 / 缩小（默认）/ 折叠，记在本机 */
@@ -2673,14 +2777,7 @@
     `;
   }
 
-  function clampNum(v, lo, hi) {
-    return Math.max(lo, Math.min(hi, v));
-  }
 
-  function normRange(v, lo, hi) {
-    if (hi <= lo) return 0.5;
-    return clampNum((v - lo) / (hi - lo), 0, 1);
-  }
 
   function speedWord(bpm) {
     if (bpm < 76) return "缓慢";
@@ -3231,6 +3328,8 @@
     const cur = lines[i] || {};
     prev.textContent = i > 0 ? lines[i - 1].text || "" : "";
     now.textContent = cur.text || "♪";
+    const mini = $("#mini-lyric");
+    if (mini) mini.textContent = cur.text || "";
     now.classList.add("is-on");
     next.textContent = i + 1 < lines.length ? lines[i + 1].text || "" : "";
   }
@@ -3385,8 +3484,28 @@
     }
   }
 
+  /* 歌单开头是该情绪的代表曲（小苹果、后来、同桌的你……）：每次认出这个情绪轮到下一首代表曲 */
+  function nextPinnedPlayable(emo) {
+    const pinned = [];
+    const all = state.pinRotate === 0;
+    state.songs.forEach((song, i) => {
+      if (!song || !isPlayable(song)) return;
+      if (all ? true : song.pin && songEmotionId(song) === emo) pinned.push(i);
+    });
+    if (!pinned.length) return -1;
+    if (!all) pinned.splice(state.pinRotate || 3); // 只在前 N 首代表曲之间轮换（设置里可调）
+    const store = JSON.parse(localStorage.getItem("emotune-pin-cursor") || "{}");
+    const cur = Number(store[emo]) || 0;
+    store[emo] = (cur + 1) % pinned.length;
+    localStorage.setItem("emotune-pin-cursor", JSON.stringify(store));
+    return pinned[cur % pinned.length];
+  }
+
   function firstFreshPlayable() {
     const emo = currentEmotionId();
+    const pinnedIdx = nextPinnedPlayable(emo);
+    if (pinnedIdx >= 0) return pinnedIdx;
+    if (!state.skipPlayed) return firstPlayable(0);
     const played = new Set(state.playedByEmotion[emo] || []);
     const n = state.songs.length;
     for (let i = 0; i < n; i += 1) {
@@ -3528,7 +3647,10 @@
     const rec = data.recommendations || {};
     const emoId = (data.emotion && data.emotion.id) || "";
     const mix = recsCaption(rec);
-    if (data.history_id) state.historyId = data.history_id;
+    if (data.history_id) {
+      state.historyId = data.history_id;
+      if (data.history_saved !== false) scheduleTrailRefresh(); // 实时同一情绪不新记，就不刷新
+    }
     if (emoId && Array.isArray(data.played_keys)) rememberPlayedKeys(emoId, data.played_keys);
     if (data.vote) state.lastVote = data.vote;
 
@@ -3543,6 +3665,8 @@
       renderSongs(rec.songs, mix);
       lockPlaylist(emoId);
       autoPlayList(true);
+      if (data.online_pending && state.onlineOn) fillOnlineLater(emoId);
+      showSwitchReason(emoId, rec);
       startVizLoop();
       if (live && TRANSIENT_EMO[emoId]) {
         const nm = (EMO_META[emoId] || {}).name || "";
@@ -3555,7 +3679,7 @@
       applyNew();
       const cost = Math.round(data.total_ms || (t0 ? performance.now() - t0 : 0));
       if (state.onlineOn && cost > 3000) toast(`本次总耗时 ${cost} 毫秒，略慢于 3 秒目标。`);
-      loadHistory();
+      scheduleTrailRefresh(200);
       return;
     }
 
@@ -3563,6 +3687,22 @@
     const prob = Number((data.emotion && data.emotion.prob) || 0);
     const bar = liveProbBar(locked, emoId);
     const low = !!(data.emotion && (data.emotion.low_confidence || prob < bar));
+
+    if (emoId) {
+      state.liveLatest = state.liveLatest || {};
+      state.liveLatest[emoId] = { data, source, at: Date.now() };
+    }
+    /* 语音刚播报完这个情绪：立刻换歌 */
+    if (state.forceApplyEmo) {
+      if (Date.now() - (state.forceApplyAt || 0) > 8000) state.forceApplyEmo = "";
+      else if (emoId === state.forceApplyEmo) {
+        state.forceApplyEmo = "";
+        applyNew();
+        return;
+      }
+    }
+    /* 语音开着时，换歌统一等播报结束（播报前已有稳定时间），这里只更新画面 */
+    const voiceDriven = !!(state.voiceOn && locked && "speechSynthesis" in window);
     const decision = decideLiveAction(locked, emoId, low);
 
     if (decision.action === "apply") {
@@ -3585,7 +3725,7 @@
       } else {
         state.liveGuessCount += 1;
       }
-      if (state.liveGuessCount >= LIVE_NEUTRAL_HITS) applyNew();
+      if (state.liveGuessCount >= LIVE_NEUTRAL_HITS && !voiceDriven) applyNew();
       else {
         showFaceCrop(data);
         updateHoldUi(true);
@@ -3598,7 +3738,7 @@
         state.liveGuessCount += 1;
       }
       const need = playlistSwitchNeed(locked, emoId, low);
-      if (state.liveGuessCount >= need) applyNew();
+      if (state.liveGuessCount >= need && !voiceDriven) applyNew();
       else {
         showFaceCrop(data);
         const pending = (EMO_META[emoId] || {}).name || "";
@@ -3738,6 +3878,55 @@
     autoPlayList(true, true);
   }
 
+  /* 足迹时间标签：2026-10-31 08:16:05 */
+  function trailTime(ts) {
+    const n = Number(ts);
+    if (!n) return null;
+    const d = new Date(n * 1000);
+    const p = (x) => String(x).padStart(2, "0");
+    return {
+      iso: d.toISOString(),
+      text: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`,
+    };
+  }
+
+  function trailChipHtml(it) {
+    const e = it.emotion || {};
+    const id = e.id || "idle";
+    const emeta = EMO_META[id] || EMO_META.idle;
+    const zh = esc(e.zh || emeta.zh);
+    const name = esc(e.name || emeta.name);
+    const crop = faceCropSrc(it.face);
+    const mirror = isCameraSource(it.source) ? " is-mirror" : "";
+    const faceInner = crop
+      ? `<img src="${crop}" alt="用于判断${name}的人脸">`
+      : `<span class="trail-face-empty">无人脸</span>`;
+    const pair = `<span class="trail-pair">
+          <span class="trail-col">
+            <span class="trail-face${mirror}">${faceInner}</span>
+            <span class="trail-col-cap">识别人脸</span>
+          </span>
+          <span class="trail-col">
+            <span class="trail-icon">${faceSvg(id, 96)}</span>
+            <span class="trail-col-cap">判断情绪</span>
+          </span>
+        </span>`;
+    const when = trailTime(it.ts);
+    return `<button type="button" class="trail-chip has-face" data-id="${esc(it.id)}" data-emo="${esc(id)}" role="listitem">
+      ${when ? `<time class="trail-time" datetime="${esc(when.iso)}">${esc(when.text)}</time>` : ""}
+      ${pair}
+      <b>${zh}</b>
+      <span class="trail-name">${name}</span>
+      ${songsLine(it)}
+    </button>`;
+  }
+
+  function paintTrailMeta(n) {
+    const meta = $("#trail-meta");
+    if (meta) meta.textContent = `已保存 ${n} 次 · 人脸、情绪图标和播过的歌都会留下 · 实时更新 · 点选可回放`;
+    paintBoardCounts(n, null);
+  }
+
   function renderTrail(items) {
     if (!ui.trail) return;
     const meta = $("#trail-meta");
@@ -3747,102 +3936,168 @@
       paintBoardCounts(0, null);
       return;
     }
-    if (meta) meta.textContent = `已保存 ${items.length} 次 · 人脸、情绪图标和播过的歌都会留下 · 点选可回放`;
-    paintBoardCounts(items.length, null);
-    ui.trail.innerHTML = items
-      .map((it) => {
-        const e = it.emotion || {};
-        const id = e.id || "idle";
-        const emeta = EMO_META[id] || EMO_META.idle;
-        const zh = esc(e.zh || emeta.zh);
-        const name = esc(e.name || emeta.name);
-        const crop = faceCropSrc(it.face);
-        const mirror = isCameraSource(it.source) ? " is-mirror" : "";
-        const faceInner = crop
-          ? `<img src="${crop}" alt="用于判断${name}的人脸">`
-          : `<span class="trail-face-empty">无人脸</span>`;
-        const pair = `<span class="trail-pair">
-              <span class="trail-col">
-                <span class="trail-face${mirror}">${faceInner}</span>
-                <span class="trail-col-cap">识别人脸</span>
-              </span>
-              <span class="trail-col">
-                <span class="trail-icon">${faceSvg(id, 96)}</span>
-                <span class="trail-col-cap">判断情绪</span>
-              </span>
-            </span>`;
-        return `<button type="button" class="trail-chip has-face" data-id="${esc(it.id)}" data-emo="${esc(id)}" role="listitem">
-          ${pair}
-          <b>${zh}</b>
-          <span class="trail-name">${name}</span>
-          ${songsLine(it)}
-        </button>`;
-      })
-      .join("");
-    $$(".trail-chip", ui.trail).forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const it = state.history.find((x) => x.id === btn.dataset.id);
-        if (it) applyHistoryItem(it);
-      });
-    });
+    paintTrailMeta(items.length);
+    ui.trail.innerHTML = items.map(trailChipHtml).join("");
   }
 
+  /* 实时足迹：只拉最新几条，新的插到最前，已有的只替换变化的那张卡片，不用刷新页面 */
+  function scheduleTrailRefresh(delay) {
+    clearTimeout(state.trailRefreshTimer);
+    state.trailRefreshTimer = setTimeout(refreshTrailLive, delay == null ? 800 : delay);
+  }
+
+  async function refreshTrailLive() {
+    if (!ui.trail || state.trailRefreshBusy) return;
+    state.trailRefreshBusy = true;
+    try {
+      const data = await (await fetch("/api/history?limit=12&played=0")).json();
+      const fresh = (data && data.items) || [];
+      if (!fresh.length) return;
+      const list = state.history || [];
+      const byId = new Map(list.map((x, i) => [x.id, i]));
+      const added = [];
+      fresh.forEach((it) => {
+        if (!byId.has(it.id)) {
+          added.push(it);
+          return;
+        }
+        const idx = byId.get(it.id);
+        const old = list[idx];
+        if (JSON.stringify(old.played || []) === JSON.stringify(it.played || [])) return;
+        list[idx] = it;
+        const chip = ui.trail.querySelector(`.trail-chip[data-id="${CSS.escape(it.id)}"]`);
+        if (chip) chip.outerHTML = trailChipHtml(it);
+      });
+      if (added.length) {
+        added.sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
+        state.history = added.concat(list);
+        state.historyTotal = Math.max(Number(data.total) || 0, (state.historyTotal || 0) + added.length);
+        const box = $("#history-list");
+        if (box) {
+          const emptyNote = box.querySelector("p.meta");
+          if (emptyNote) emptyNote.remove();
+          box.insertAdjacentHTML("afterbegin", added.map(historyItemHtml).join(""));
+        }
+        const empty = ui.trail.querySelector(".trail-empty");
+        if (empty) empty.remove();
+        ui.trail.insertAdjacentHTML("afterbegin", added.map(trailChipHtml).join(""));
+        added.forEach((it) => {
+          const chip = ui.trail.querySelector(`.trail-chip[data-id="${CSS.escape(it.id)}"]`);
+          if (chip) chip.classList.add("is-new");
+        });
+      }
+      paintTrailMeta(Math.max(Number(data.total) || 0, state.historyTotal || 0, (state.history || []).length));
+    } catch {
+      /* 下一次再刷新 */
+    } finally {
+      state.trailRefreshBusy = false;
+    }
+  }
+
+
+  const HISTORY_PAGE = 60;
+
+  function historyItemHtml(it) {
+    const e = it.emotion || {};
+    const id = e.id || "idle";
+    const t = new Date((it.ts || 0) * 1000).toLocaleString("zh-CN", { hour12: false });
+    const src = SOURCE_ZH[it.source] || "";
+    const ms = it.elapsed_ms ? `${Math.round(it.elapsed_ms)} 毫秒` : "";
+    const crop = faceCropSrc(it.face);
+    const mirror = isCameraSource(it.source) ? " is-mirror" : "";
+    const nm = esc(e.name || (EMO_META[id] || {}).name || "");
+    const faceInner = crop
+      ? `<img src="${crop}" alt="用于判断${nm}的人脸" loading="lazy">`
+      : `<span class="history-face-empty">无人脸</span>`;
+    const songs = songsLine(it, 4).replace("trail-songs", "history-songs");
+    return `<button type="button" class="history-item has-face" data-id="${esc(it.id)}" data-emo="${esc(id)}">
+      <span class="history-pair">
+        <span class="history-col">
+          <span class="history-face${mirror}">${faceInner}</span>
+          <span class="history-col-cap">识别人脸</span>
+        </span>
+        <span class="history-col">
+          <span class="history-icon">${faceSvg(id, 124)}</span>
+          <span class="history-col-cap">判断情绪</span>
+        </span>
+      </span>
+      <span class="history-meta">
+        <b>${esc(e.zh || "")}</b>${esc(e.name || "")}${src ? " · " + src : ""}
+        <span>${esc(t)}${ms ? " · " + ms : ""}</span>
+        ${songs}
+      </span>
+    </button>`;
+  }
+
+  function moreButtonHtml() {
+    const left = Math.max(0, (state.historyTotal || 0) - (state.history || []).length);
+    return left > 0
+      ? `<button type="button" class="history-more" data-more="1">加载更早的记录（还有 ${left} 条）</button>`
+      : "";
+  }
+
+  function paintHistoryLists(items, append) {
+    const box = $("#history-list");
+    if (!append) {
+      renderTrail(items);
+      if (box) box.innerHTML = items.length ? items.map(historyItemHtml).join("") : `<p class="meta">还没有记录。</p>`;
+    } else {
+      if (ui.trail) ui.trail.insertAdjacentHTML("beforeend", items.map(trailChipHtml).join(""));
+      if (box) box.insertAdjacentHTML("beforeend", items.map(historyItemHtml).join(""));
+    }
+    [ui.trail, box].forEach((host) => {
+      if (!host) return;
+      host.querySelectorAll(".history-more").forEach((b) => b.remove());
+      host.insertAdjacentHTML("beforeend", moreButtonHtml());
+    });
+    paintTrailMeta(state.historyTotal || items.length);
+    watchHistoryEnd();
+  }
+
+  /* 足迹分页：先拿最新一页（附带已播索引），往下翻再拿更早的 */
   async function loadHistory() {
     try {
-      const data = await (await fetch("/api/history")).json();
+      const data = await (await fetch(`/api/history?limit=${HISTORY_PAGE}&offset=0`)).json();
       const items = data.items || [];
       state.history = items;
+      state.historyTotal = Number(data.total) || items.length;
       if (data.played && typeof data.played === "object") {
         Object.keys(data.played).forEach((emo) => rememberPlayedKeys(emo, data.played[emo]));
       }
-      renderTrail(items);
-      const box = $("#history-list");
-      if (!items.length) {
-        box.innerHTML = `<p class="meta">还没有记录。</p>`;
-        return;
-      }
-      box.innerHTML = items
-        .map((it) => {
-          const e = it.emotion || {};
-          const id = e.id || "idle";
-          const t = new Date((it.ts || 0) * 1000).toLocaleString("zh-CN", { hour12: false });
-          const src = SOURCE_ZH[it.source] || "";
-          const ms = it.elapsed_ms ? `${Math.round(it.elapsed_ms)} 毫秒` : "";
-          const crop = faceCropSrc(it.face);
-          const mirror = isCameraSource(it.source) ? " is-mirror" : "";
-          const nm = esc(e.name || (EMO_META[id] || {}).name || "");
-          const faceInner = crop
-            ? `<img src="${crop}" alt="用于判断${nm}的人脸">`
-            : `<span class="history-face-empty">无人脸</span>`;
-          const songs = songsLine(it, 4).replace("trail-songs", "history-songs");
-          return `<button type="button" class="history-item has-face" data-id="${esc(it.id)}" data-emo="${esc(id)}">
-            <span class="history-pair">
-              <span class="history-col">
-                <span class="history-face${mirror}">${faceInner}</span>
-                <span class="history-col-cap">识别人脸</span>
-              </span>
-              <span class="history-col">
-                <span class="history-icon">${faceSvg(id, 124)}</span>
-                <span class="history-col-cap">判断情绪</span>
-              </span>
-            </span>
-            <span class="history-meta">
-              <b>${esc(e.zh || "")}</b>${esc(e.name || "")}${src ? " · " + src : ""}
-              <span>${esc(t)}${ms ? " · " + ms : ""}</span>
-              ${songs}
-            </span>
-          </button>`;
-        })
-        .join("");
-      $$(".history-item", box).forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const it = state.history.find((x) => x.id === btn.dataset.id);
-          if (it) applyHistoryItem(it);
-        });
-      });
+      paintHistoryLists(items, false);
     } catch {
       /* ignore */
     }
+  }
+
+  async function loadMoreHistory() {
+    if (state.historyLoading) return;
+    const have = (state.history || []).length;
+    if (have >= (state.historyTotal || 0)) return;
+    state.historyLoading = true;
+    try {
+      const data = await (await fetch(`/api/history?limit=${HISTORY_PAGE}&offset=${have}`)).json();
+      const seen = new Set((state.history || []).map((x) => x.id));
+      const items = (data.items || []).filter((x) => !seen.has(x.id));
+      state.historyTotal = Number(data.total) || state.historyTotal;
+      state.history = (state.history || []).concat(items);
+      paintHistoryLists(items, true);
+    } catch {
+      /* 下次再试 */
+    } finally {
+      state.historyLoading = false;
+    }
+  }
+
+  function watchHistoryEnd() {
+    if (!("IntersectionObserver" in window)) return;
+    if (!state.historyObserver) {
+      state.historyObserver = new IntersectionObserver((rows) => {
+        if (rows.some((r) => r.isIntersecting)) loadMoreHistory();
+      }, { rootMargin: "200px" });
+    }
+    state.historyObserver.disconnect();
+    $$(".history-more").forEach((b) => state.historyObserver.observe(b));
   }
 
   async function loadDemo() {
@@ -3971,7 +4226,56 @@
   }
 
   function bind() {
+    const demoTog = $("#demo-mode-toggle");
+    if (demoTog) {
+      demoTog.checked = state.demoMode;
+      demoTog.addEventListener("change", () => {
+        state.demoMode = demoTog.checked;
+        localStorage.setItem("emotune-demo-mode", state.demoMode ? "1" : "0");
+        syncDemoBadge();
+        toast(
+          state.demoMode
+            ? "已打开课堂演示模式：惊讶更容易认出，喜悦要真的笑开才算，抿嘴微笑算平静。"
+            : "已关闭课堂演示模式，恢复标准识别。"
+        );
+      });
+    }
+    syncDemoBadge();
+    const skipTog = $("#skip-played-toggle");
+    if (skipTog) {
+      skipTog.checked = state.skipPlayed;
+      skipTog.addEventListener("change", () => {
+        state.skipPlayed = skipTog.checked;
+        localStorage.setItem("emotune-skip-played", state.skipPlayed ? "1" : "0");
+        toast(state.skipPlayed ? "已打开排除已播：听过的歌排到后面。" : "已关闭排除已播：按匹配度排，听过的也照常靠前。");
+      });
+    }
+    const rot = $("#pin-rotate");
+    if (rot) {
+      rot.value = String(state.pinRotate);
+      rot.addEventListener("change", () => {
+        state.pinRotate = rot.value === "0" ? 0 : Math.max(1, Math.min(6, Number(rot.value) || 3));
+        localStorage.setItem("emotune-pin-rotate", String(state.pinRotate));
+        localStorage.removeItem("emotune-pin-cursor");
+        const label =
+          state.pinRotate === 0 ? "歌单全部歌曲轮换" : state.pinRotate === 1 ? "只播第 1 首代表曲" : `前 ${state.pinRotate} 首代表曲轮换`;
+        toast(`已改为${label}。`);
+      });
+    }
     $$("[data-viz-size]").forEach((b) => b.addEventListener("click", () => setVizSize(b.dataset.vizSize)));
+    $$("[data-player-mode]").forEach((b) => b.addEventListener("click", () => setPlayerMode(b.dataset.playerMode)));
+    const unfold = $("#btn-player-unfold");
+    if (unfold) unfold.addEventListener("click", () => setPlayerMode("mini"));
+    setPlayerMode(localStorage.getItem("emotune-player-mode") || "mini");
+    setInterval(sampleTimeline, 250);
+    const projBtn = $("#btn-projector");
+    if (projBtn) projBtn.addEventListener("click", () => setProjector(!state.projector));
+    document.addEventListener("fullscreenchange", () => {
+      if (!document.fullscreenElement && state.projector) setProjector(false);
+    });
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && state.projector) setProjector(false);
+    });
     setVizSize(localStorage.getItem("emotune-viz-size") || "compact");
     const hintBtn = $("#live-hint-btn");
     const hintBox = $("#live-hint");
@@ -4045,14 +4349,37 @@
         updateHoldUi(false);
         syncLiveHudDot();
         toast("实时捕捉已打开：平静、喜悦、悲伤会稳住再换歌；惊讶、恐惧、愤怒、厌恶认到就锁反差歌，松开也不会马上换。");
+        if (state.liveTimer) clearInterval(state.liveTimer); // 重复打开时不叠两个计时器
         state.liveTimer = setInterval(async () => {
           if (!isLiveMode() || state.recognizing || !frameReady()) return;
-          const blob = await captureBlob(0.92, 1280);
+          const blob = await captureBlob(0.9, 720);
           if (blob) recognize(blob, liveSource());
         }, LIVE_TICK_MS);
       } else stopLive();
     });
 
+    const historyBox = $("#history-list");
+    [ui.trail, historyBox].forEach((host) => {
+      if (!host) return;
+      host.addEventListener("click", (e) => {
+        if (e.target.closest(".history-more")) {
+          loadMoreHistory();
+          return;
+        }
+        const item = e.target.closest(".history-item");
+        if (!item) return;
+        const it = (state.history || []).find((x) => x.id === item.dataset.id);
+        if (it) applyHistoryItem(it);
+      });
+    });
+    if (ui.trail) {
+      ui.trail.addEventListener("click", (e) => {
+        const btn = e.target.closest(".trail-chip");
+        if (!btn) return;
+        const it = (state.history || []).find((x) => x.id === btn.dataset.id);
+        if (it) applyHistoryItem(it);
+      });
+    }
     ui.file.addEventListener("change", () => {
       const f = ui.file.files[0];
       if (f) useFile(f);
@@ -4125,10 +4452,14 @@
       playNext();
     });
     audio.addEventListener("play", () => {
+      ui.player.classList.add("is-playing");
       $("#btn-play").textContent = "❚❚";
       startVizLoop();
     });
-    audio.addEventListener("pause", () => ($("#btn-play").textContent = "▶"));
+    audio.addEventListener("pause", () => {
+      ui.player.classList.remove("is-playing");
+      $("#btn-play").textContent = "▶";
+    });
     audio.addEventListener("ended", () => {
       if (isSilentOrEmpty()) return;
       playNext();
@@ -4138,6 +4469,7 @@
       const song = state.songs[state.index];
       if (isOnlineSong(song)) noteOnlinePlayOk();
       notePlayed(song);
+      scheduleTrailRefresh(1500);
     });
     audio.addEventListener("error", () => {
       if (isSilentOrEmpty()) return;
@@ -4168,7 +4500,7 @@
 
     $("#btn-history").addEventListener("click", () => {
       $("#history-drawer").hidden = !$("#history-drawer").hidden;
-      loadHistory();
+      if (!state.history) loadHistory();
     });
     $("#btn-close-history").addEventListener("click", () => ($("#history-drawer").hidden = true));
     $("#btn-clear-history").addEventListener("click", async () => {

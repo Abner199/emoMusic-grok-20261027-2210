@@ -120,7 +120,7 @@ def main() -> int:
                 arg=emo_id,
                 timeout=8000,
             )
-            page.wait_for_timeout(280)
+            page.wait_for_timeout(700)  # 边框颜色有 280ms 渐变，等它走完再读
             info = page.evaluate(
                 """(expected) => {
                   const [r, g, b] = expected;

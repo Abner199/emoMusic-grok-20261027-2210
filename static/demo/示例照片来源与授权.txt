@@ -1,0 +1,53 @@
+示例照片来源与授权
+
+01–21（A、B、C 三组，文件名无后缀 / -b / -c）
+  合成肖像，供演示用（见 命名说明.txt）。
+
+22–42（文件名带 -d / -e / -f）：真人照片，共 21 张（每类 3 张）
+  来源：Wikimedia Commons（各张授权见下，CC BY / CC BY-SA / 公有领域）与 Unsplash（Unsplash License）
+  改动：以人脸为中心裁成正方形，缩放到 1024×1024，重新压缩为 JPEG（tools/build_real_demo.py）。
+  CC BY-SA 照片裁剪后的版本同样以 CC BY-SA 授权提供。
+  每张都经本系统识别为对应表情后再人工挑选。
+
+  22-喜-喜悦-happy-d.jpg（本系统识别为喜悦 100%）
+      happy_1_喜.jpg ← Wikimedia Commons：The smiling asian princess.jpg | CC BY-SA 2.0 | alex yosifov | https://commons.wikimedia.org/wiki/File:The_smiling_asian_princess.jpg
+  23-怒-愤怒-angry-d.jpg（本系统识别为愤怒 93%）
+      angry_1_怒.jpg ← Wikimedia Commons：Angry woman.jpg | CC BY 2.0 | Lara604 | https://commons.wikimedia.org/wiki/File:Angry_woman.jpg
+  24-哀-悲伤-sad-d.jpg（本系统识别为悲伤 100%）
+      sad_1_哀.jpg ← Wikimedia Commons：Cry baby girl 04 (cropped).jpg | CC BY-SA 4.0 | Mostafameraji | https://commons.wikimedia.org/wiki/File:%DA%AF%D8%B1%DB%8C%D9%87_%DA%A9%D8%B1%D8%AF%D9%86_%D8%AF%D8%AE%D8%AA%D8%B1_%D8%A8%DA%86%D9%87_Cry_baby_girl_04_(cropped).jpg
+  25-惧-恐惧-fear-d.jpg（本系统识别为恐惧 70%）
+      Unsplash（Unsplash License）：https://images.unsplash.com/photo-1758273706205-de3e2f5f5c18
+  26-惊-惊讶-surprise-d.jpg（本系统识别为惊讶 98%）
+      surprised_1_惊.jpg ← Wikimedia Commons：Kinda Surprised (2417839929).jpg | CC BY-SA 2.0 | Helgi Halldórsson | https://commons.wikimedia.org/wiki/File:Kinda_Surprised_(2417839929).jpg
+  27-厌-厌恶-disgust-d.jpg（本系统识别为厌恶 89%）
+      Unsplash（Unsplash License）：https://images.unsplash.com/photo-1601412436518-3c690b92b43f
+  28-中性-平静-neutral-d.jpg（本系统识别为平静 86%）
+      Unsplash（Unsplash License）：https://images.unsplash.com/photo-1542909168-82c3e7fdca5c
+  29-喜-喜悦-happy-e.jpg（本系统识别为喜悦 100%）
+      happy_3_喜.jpg ← Wikimedia Commons：Girl with red envelopes in Chiayi, Taiwan.jpg | CC BY 2.0 | 總統府 | https://commons.wikimedia.org/wiki/File:Girl_with_red_envelopes_in_Chiayi,_Taiwan.jpg
+  30-怒-愤怒-angry-e.jpg（本系统识别为愤怒 100%）
+      Unsplash（Unsplash License）：https://images.unsplash.com/photo-1611689037241-d8dfe4280f2e
+  31-哀-悲伤-sad-e.jpg（本系统识别为悲伤 98%）
+      sad_2_哀.jpg ← Wikimedia Commons：Cry baby girl 01.jpg | CC BY-SA 4.0 | Mostafameraji | https://commons.wikimedia.org/wiki/File:%DA%AF%D8%B1%DB%8C%D9%87_%DA%A9%D8%B1%D8%AF%D9%86_%D8%AF%D8%AE%D8%AA%D8%B1_%D8%A8%DA%86%D9%87_Cry_baby_girl_01.jpg
+  32-惧-恐惧-fear-e.jpg（本系统识别为恐惧 50%）
+      Wikimedia Commons：Scared Girl.jpg | CC BY 2.0 | Victor Bezrukov | https://commons.wikimedia.org/wiki/File:Scared_Girl.jpg
+  33-惊-惊讶-surprise-e.jpg（本系统识别为惊讶 51%）
+      surprised_2_惊.jpg ← Wikimedia Commons：Surprise (42495212).jpeg | CC BY 3.0 | Gigiextremeno | https://commons.wikimedia.org/wiki/File:Surprise_(42495212).jpeg
+  34-厌-厌恶-disgust-e.jpg（本系统识别为厌恶 84%）
+      Unsplash（Unsplash License）：https://images.unsplash.com/photo-1525527834147-0f4ff3097029
+  35-中性-平静-neutral-e.jpg（本系统识别为平静 79%）
+      Unsplash（Unsplash License）：https://images.unsplash.com/photo-1628501023521-48cece9a6909
+  36-喜-喜悦-happy-f.jpg（本系统识别为喜悦 96%）
+      happy_2_喜.jpg ← Wikimedia Commons：Harvest (20181109-FPAC-LSC-1380).jpg | Public domain | USDAgov | https://commons.wikimedia.org/wiki/File:Harvest_(20181109-FPAC-LSC-1380).jpg
+  37-怒-愤怒-angry-f.jpg（本系统识别为愤怒 99%）
+      Unsplash（Unsplash License）：https://images.unsplash.com/photo-1584970658864-242327da66dc
+  38-哀-悲伤-sad-f.jpg（本系统识别为悲伤 93%）
+      Unsplash（Unsplash License）：https://images.unsplash.com/photo-1758600588872-3d340e69650f
+  39-惧-恐惧-fear-f.jpg（本系统识别为恐惧 49%）
+      Unsplash（Unsplash License）：https://images.unsplash.com/photo-1669627961474-7bff53c5dcb5
+  40-惊-惊讶-surprise-f.jpg（本系统识别为惊讶 95%）
+      Unsplash（Unsplash License）：https://images.unsplash.com/photo-1780548705016-3bc8f90dbb93
+  41-厌-厌恶-disgust-f.jpg（本系统识别为厌恶 88%）
+      Unsplash（Unsplash License）：https://images.unsplash.com/photo-1758600588802-3da6e4f457e6
+  42-中性-平静-neutral-f.jpg（本系统识别为平静 90%）
+      Unsplash（Unsplash License）：https://images.unsplash.com/photo-1593260853607-d0e0f639bdab

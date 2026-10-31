@@ -265,6 +265,8 @@ def main() -> int:
         chk("播放器出现", page.locator("#player").is_visible())
         player_emo = page.locator("#player-emo")
         chk("播放器歌名旁有情绪标签", player_emo.is_visible() and player_emo.locator("b").inner_text().strip() in {"喜", "怒", "哀", "惧", "惊", "厌", "中"})
+        page.locator('[data-player-mode="full"]').click()  # 播放器默认迷你，展开后才有波形
+        page.wait_for_timeout(300)
         chk(
             "播放时显示波形频率",
             page.locator("#audio-viz").is_visible()
@@ -353,7 +355,7 @@ def main() -> int:
 
         page.locator("#btn-about").click()
         about = page.locator("#about-dialog").inner_text()
-        chk("关于含本地模型与锁定说明", "88.27%" in about and "不会立刻换歌" in about)
+        chk("关于含本地模型与锁定说明", "88.27%" in about and "6 秒内继续播" in about)
         chk("关于含足迹全部保存", "全部保存" in about and "没听过的歌" in about)
         chk("关于含三套算法", "YuNet" in about and "Thayer" in about and "余弦" in about)
         chk("关于含多人多数票", "人数最多" in about)
@@ -365,6 +367,7 @@ def main() -> int:
         policy = page.evaluate(
             """() => {
               const d = window.__emotune.decideLiveAction;
+              window.__emotune.setLockForTest('surprise', 0); // 锁定期约 6 秒，从“刚锁定”算
               return [d('surprise','neutral',false).action, d('fear','',false).action, d('surprise','happy',false).action];
             }"""
         )

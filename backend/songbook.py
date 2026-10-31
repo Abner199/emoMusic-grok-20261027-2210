@@ -693,10 +693,18 @@ _NON_CN_ARTIST_MARKS = (
     "rockwell",
 )
 _CN_LATIN_ARTISTS = ("s.h.e", "she", "beyond")
-_PIN_FRONT = {
-    "happy": title_key("小苹果"),
-    "sad": title_key("后来"),
+# 每类情绪的代表曲：一听就知道是什么情绪，按顺序排在歌单最前面，历史已播也不往后挪
+_PIN_FRONT_TITLES = {
+    "happy": ("小苹果", "热爱105°C的你", "你笑起来真好看", "快乐崇拜", "学猫叫", "恋爱ing"),
+    "sad": ("后来", "十年", "可惜不是你", "匆匆那年", "体面", "说好不哭"),
+    "neutral": ("同桌的你", "平凡之路", "稻香", "晴天", "成都", "童年"),
+    "surprise": ("最炫民族风", "卡路里", "野狼disco", "本草纲目", "达拉崩吧", "我的滑板鞋"),
+    "angry": ("怒放的生命", "双截棍", "死了都要爱", "征服", "精忠报国", "男儿当自强"),
+    "fear": ("夜曲", "以父之名", "威廉古堡", "夜半歌声", "倩女幽魂", "夜的第七章"),
+    "disgust": ("丑八怪", "演员", "你还要我怎样", "算什么男人", "你不是真正的快乐", "浮夸"),
 }
+_PIN_FRONT_LIST = {eid: [title_key(t) for t in titles] for eid, titles in _PIN_FRONT_TITLES.items()}
+_PIN_FRONT = {eid: keys[0] for eid, keys in _PIN_FRONT_LIST.items()}
 _VIRAL_EN_KEYS = {
     title_key(name)
     for name in (
@@ -763,14 +771,15 @@ def is_chinese_song(title: str = "", artist: str = "") -> bool:
 
 def front_pin_keys() -> set[str]:
     """喜悦小苹果、悲伤后来：历史已播也不从置顶位拿掉。"""
-    return {key for key in _PIN_FRONT.values() if key}
+    return {key for keys in _PIN_FRONT_LIST.values() for key in keys if key}
 
 
 def play_priority(title: str = "", artist: str = "", emotion: str = "") -> int:
     """越大越先播：置顶中文热歌 > 中文 > 特别网红英文/亚洲热歌 > 其余。"""
     key = title_key(title or "")
-    if emotion and key == _PIN_FRONT.get(emotion):
-        return 3
+    pins = _PIN_FRONT_LIST.get(emotion) or []
+    if key in pins:
+        return 100 - pins.index(key)  # 代表曲按清单顺序最先播
     if is_chinese_song(title, artist):
         return 2
     if key in _VIRAL_EN_KEYS or key in _VIRAL_ASIA_KEYS:
@@ -786,9 +795,9 @@ def _prefer_chinese_book(book: list[dict]) -> list[dict]:
     out: list[dict] = []
     for eid in order:
         songs = groups.get(eid) or []
-        pin = _PIN_FRONT.get(eid)
-        pinned = [spec for spec in songs if pin and title_key(spec["title"]) == pin]
-        rest = [spec for spec in songs if not (pin and title_key(spec["title"]) == pin)]
+        pins = _PIN_FRONT_LIST.get(eid) or []
+        pinned = sorted((spec for spec in songs if title_key(spec["title"]) in pins), key=lambda spec: pins.index(title_key(spec["title"])))
+        rest = [spec for spec in songs if title_key(spec["title"]) not in pins]
         rest.sort(key=lambda spec: -play_priority(spec["title"], spec["artist"], eid))
         out.extend(pinned + rest)
     return out

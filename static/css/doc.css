@@ -1,0 +1,133 @@
+/* ===== 文档页：极光背景 · 毛玻璃 · 公式（说明 /guide、表情教程 /pose、关于弹窗） ===== */
+.doc-page { background: #07080d; min-height: 100vh; }
+.aurora { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+.aurora i {
+  position: absolute; width: 46vmax; height: 46vmax; border-radius: 50%;
+  filter: blur(70px); opacity: 0.42; mix-blend-mode: screen;
+  animation: aurora-drift 26s ease-in-out infinite alternate;
+}
+.aurora i:nth-child(1) { background: radial-gradient(circle, #ffb347, transparent 65%); left: -10vmax; top: -12vmax; }
+.aurora i:nth-child(2) { background: radial-gradient(circle, #ff5fa2, transparent 65%); right: -14vmax; top: 10vh; animation-duration: 32s; animation-delay: -6s; }
+.aurora i:nth-child(3) { background: radial-gradient(circle, #4f8cff, transparent 65%); left: 20vw; bottom: -20vmax; animation-duration: 38s; animation-delay: -12s; }
+.aurora i:nth-child(4) { background: radial-gradient(circle, #34e0b4, transparent 65%); right: 10vw; bottom: -8vmax; opacity: 0.28; animation-duration: 44s; }
+@keyframes aurora-drift {
+  0% { transform: translate(0, 0) scale(1) rotate(0deg); }
+  50% { transform: translate(6vw, 4vh) scale(1.12) rotate(20deg); }
+  100% { transform: translate(-4vw, 8vh) scale(0.94) rotate(-12deg); }
+}
+@media (prefers-reduced-motion: reduce) { .aurora i { animation: none; } }
+
+.glass {
+  position: relative;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 22px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+.doc-page .top {
+  background: rgba(14, 16, 24, 0.55); backdrop-filter: blur(18px) saturate(150%);
+  border-color: rgba(255, 255, 255, 0.12); position: sticky; top: 10px; z-index: 20;
+}
+.doc-layout { position: relative; z-index: 1; display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 18px; max-width: 1240px; margin: 0 auto; }
+.doc-toc { position: sticky; top: 92px; align-self: start; padding: 14px 10px; display: grid; gap: 2px; }
+.doc-toc-title { margin: 0 8px 6px; font-size: 11px; letter-spacing: 0.3em; color: rgba(255, 255, 255, 0.5); }
+.doc-toc a {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px;
+  color: rgba(255, 255, 255, 0.78); text-decoration: none; font-size: 13.5px; transition: background 200ms, color 200ms;
+}
+.doc-toc a svg { width: 18px; height: 18px; flex: 0 0 auto; }
+.doc-toc a:hover, .doc-toc a.is-on { background: rgba(255, 255, 255, 0.10); color: #fff; }
+.doc-toc a.is-on { box-shadow: inset 3px 0 0 #ffc46b; }
+.doc-page .doc-ic, .doc-toc svg { fill: none; stroke: url(#ig); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.doc-page symbol .fill { fill: url(#ig); stroke: none; }
+.doc-main { display: grid; gap: 18px; min-width: 0; }
+.doc-hero { padding: 30px 32px; }
+.doc-kicker { margin: 0 0 6px; font-size: 12px; letter-spacing: 0.24em; color: #ffcf8a; }
+.doc-hero h1 { margin: 0 0 12px; font-family: var(--font-display); font-size: clamp(26px, 3.4vw, 40px); line-height: 1.25; color: #fff; }
+.grad { background: linear-gradient(90deg, #ffd27a, #ff8ad8 55%, #8ab4ff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.doc-hero > p { margin: 0; max-width: 46em; color: rgba(255, 255, 255, 0.72); line-height: 1.8; }
+.doc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 20px; }
+.doc-stats div { padding: 12px 14px; border-radius: 16px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.10); }
+.doc-stats b { display: block; font-family: var(--font-en); font-size: 22px; color: #fff; }
+.doc-stats span { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
+.doc-sec { padding: 24px 26px; scroll-margin-top: 92px; color: rgba(255, 255, 255, 0.84); }
+.doc-sec h2 { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; font-family: var(--font-display); font-size: 24px; color: #fff; }
+.doc-sec h2 small { font-family: var(--font-ui); font-size: 12px; font-weight: 500; color: rgba(255, 255, 255, 0.55); letter-spacing: 0.04em; }
+.doc-ic { width: 30px; height: 30px; padding: 6px; border-radius: 10px; background: rgba(255, 255, 255, 0.08); box-sizing: content-box; }
+.doc-sec p { line-height: 1.8; }
+.doc-classic { font-size: 13px; color: rgba(255, 255, 255, 0.62); padding: 8px 12px; border-left: 2px solid #ffc46b; background: rgba(255, 196, 107, 0.06); border-radius: 0 10px 10px 0; }
+.doc-note { font-size: 13px; color: rgba(255, 255, 255, 0.6); }
+.doc-note a { color: #ffcf8a; }
+.doc-grid, .doc-formula-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.doc-formula-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.doc-card {
+  padding: 14px 16px; border-radius: 16px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.09);
+  transition: transform 260ms cubic-bezier(.22, 1, .36, 1), border-color 260ms, background 260ms;
+}
+.doc-card:hover { transform: translateY(-3px); border-color: rgba(255, 210, 122, 0.4); background: rgba(255, 255, 255, 0.08); }
+.doc-card h3 { margin: 0 0 6px; font-size: 15px; color: #fff; }
+.doc-card p { margin: 0 0 4px; font-size: 13.5px; line-height: 1.7; }
+.doc-step { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 14px; padding: 14px 0; border-top: 1px solid rgba(255, 255, 255, 0.07); }
+.doc-classic + .doc-step { border-top: 0; }
+.doc-step h3 { margin: 4px 0 6px; font-size: 16px; color: #fff; }
+.doc-n {
+  width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font: 700 15px/1 var(--font-en); color: #1a1208;
+  background: linear-gradient(135deg, #ffd27a, #ff8ad8); box-shadow: 0 6px 18px rgba(255, 138, 216, 0.35);
+}
+.doc-page math[display="block"] {
+  display: block; margin: 12px 0; padding: 14px 18px; overflow-x: auto; border-radius: 14px; font-size: 1.15em; color: #fff;
+  background: rgba(10, 12, 22, 0.55); border: 1px solid rgba(138, 180, 255, 0.22); box-shadow: inset 0 0 30px rgba(79, 140, 255, 0.10);
+}
+.doc-page code { background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 6px; padding: 1px 6px; color: #ffe1a8; }
+.doc-flow { width: 100%; height: auto; }
+.doc-flow .fl-node rect { fill: rgba(255, 255, 255, 0.07); stroke: url(#fl); stroke-width: 1.4; }
+.doc-flow .fl-node rect.hl { fill: rgba(255, 196, 107, 0.10); }
+.doc-flow text { fill: #fff; font: 600 14px var(--font-ui); text-anchor: middle; }
+.doc-flow text.s { fill: rgba(255, 255, 255, 0.6); font-size: 11px; font-weight: 500; }
+.doc-flow .fl-line path { fill: none; stroke: #9fb3d9; stroke-width: 1.6; stroke-dasharray: 5 6; marker-end: url(#ar); animation: flow-dash 1.2s linear infinite; }
+@keyframes flow-dash { to { stroke-dashoffset: -22; } }
+.doc-sub { margin: 18px 0 8px; font-size: 16px; color: #fff; }
+.doc-page .guide-strats { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-top: 12px; }
+.doc-page .guide-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; border-radius: 14px; overflow: hidden; }
+.doc-page .guide-table th { background: rgba(255, 210, 122, 0.12); color: #ffe1a8; }
+.doc-page .guide-table th, .doc-page .guide-table td { padding: 8px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.07); text-align: center; }
+.doc-page .guide-table tr:hover td { background: rgba(255, 255, 255, 0.04); }
+.doc-refs { font-size: 13px; color: rgba(255, 255, 255, 0.6); line-height: 1.9; }
+@media (max-width: 900px) {
+  .doc-layout { grid-template-columns: 1fr; }
+  .doc-toc { position: static; display: flex; flex-wrap: wrap; }
+  .doc-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* 教程页沿用同一套极光 + 毛玻璃 */
+.pose-page.doc-page .pose-hero,
+.pose-page.doc-page .pose-card {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03));
+  backdrop-filter: blur(22px) saturate(150%);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.pose-page.doc-page .pose-card { border-color: color-mix(in srgb, var(--emo) 45%, rgba(255, 255, 255, 0.14)); }
+.pose-page.doc-page .pose-shell { position: relative; z-index: 1; }
+
+/* 关于弹窗：毛玻璃 + 图标卡片 */
+#about-dialog {
+  max-width: 760px; border-radius: 24px; padding: 26px 28px; color: rgba(255, 255, 255, 0.86);
+  background: linear-gradient(135deg, rgba(30, 32, 46, 0.86), rgba(18, 20, 30, 0.78));
+  border: 1px solid rgba(255, 255, 255, 0.16); backdrop-filter: blur(24px) saturate(150%);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+#about-dialog::backdrop { background: rgba(5, 6, 10, 0.55); backdrop-filter: blur(6px); }
+#about-dialog h2 { margin: 0 0 6px; font-family: var(--font-display); font-size: 24px; color: #fff; }
+#about-dialog > p { margin: 0; color: rgba(255, 255, 255, 0.7); }
+#about-dialog .about-grid { list-style: none; padding: 0; margin: 16px 0 18px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+#about-dialog .about-grid li { display: grid; grid-template-columns: 34px 1fr; gap: 10px; padding: 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.09); font-size: 13px; line-height: 1.65; }
+#about-dialog .about-grid svg { width: 26px; height: 26px; fill: none; stroke: url(#aboutg); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+#about-dialog .about-grid b { display: block; color: #fff; font-size: 14px; margin-bottom: 2px; }
+#about-dialog a { color: #ffcf8a; }
+@media (max-width: 640px) { #about-dialog .about-grid { grid-template-columns: 1fr; } }
+
+/* 分段公式：条件左对齐（Chrome MathML 不支持 columnalign） */
+.doc-page mtd { text-align: left; padding: 2px 12px 2px 4px; }

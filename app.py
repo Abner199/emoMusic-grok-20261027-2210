@@ -8,6 +8,7 @@ from __future__ import annotations
 import base64
 import logging
 import sys
+import threading
 import time
 
 from flask import (
@@ -84,6 +85,23 @@ def lecture_preflight():
     if request.method == "OPTIONS" and request.path.startswith("/api/"):
         return app.make_response(("", 204))
     return None
+
+
+@app.before_request
+def classroom_demo_mode():
+    """网页设置「课堂演示模式」时，这次识别按演示规则校正（见 backend.emotion._demo_adjust）。"""
+    from backend.emotion import DEMO_MODE
+
+    DEMO_MODE.set((request.headers.get("X-Emo-Demo") or request.args.get("demo") or "0").strip() == "1")
+
+
+@app.before_request
+def live_fast_mode():
+    """实时识别（摄像头 / 视频 / 屏幕的 -live 来源）走快速路径；识别此刻、上传照片仍用完整精度。"""
+    from backend.emotion import FAST_MODE
+
+    src = (request.headers.get("X-Emo-Source") or request.args.get("source") or "").strip()
+    FAST_MODE.set(src.endswith("-live"))
 
 
 def _b64_to_bytes(raw: str) -> bytes:
@@ -170,6 +188,15 @@ def guide():
     return render_template("guide.html", emotions=EMOTIONS, strategies=public_catalog())
 
 
+@app.route("/pose")
+def pose():
+    """表情演示教程：学生怎么扮出系统认得出的七类表情。"""
+    from backend.pose_guide import NEUTRAL, POSES, TIPS, demo_photos
+
+    _session_id()
+    return render_template("pose.html", poses=POSES, neutral=NEUTRAL, tips=TIPS, photos=demo_photos())
+
+
 @app.route("/api/health")
 def health():
     from config import DEFAULT_FACE_MODE, FER_FILE, MODEL_DIR, ONLINE_APIS, YUNET_FILE
@@ -218,6 +245,11 @@ def emotions_api():
     return jsonify({"ok": True, "emotions": items})
 
 
+LIVE_SAVE_GAP_S = 30.0
+_LIVE_SAVE: dict[str, dict] = {}
+_LIVE_SAVE_LOCK = threading.Lock()
+
+
 @app.route("/api/recognize", methods=["POST"])
 def recognize():
     t0 = time.perf_counter()
@@ -247,15 +279,20 @@ def recognize():
     )
     strategy = (request.args.get("strategy") or request.headers.get("X-Emo-Strategy") or DEFAULT_STRATEGY).strip()
     played = history.played_keys(emotion_id)
-    exclude = _history_exclude(emotion_id)
+    fresh = (request.args.get("fresh") or request.headers.get("X-Emo-Fresh") or "1").strip() == "1"
+    exclude = _history_exclude(emotion_id) if fresh else []
+    # 两段式：先用本地曲库立刻出歌单开播，在线热歌由网页随后在后台补进来（网络慢也不耽误换歌）
+    two_phase = want_online and (request.args.get("two_phase") or request.headers.get("X-Emo-Two-Phase") or "1").strip() == "1"
     recs = recommend(
         emotion_id,
-        want_online=want_online,
+        want_online=want_online and not two_phase,
         exclude=exclude,
+        skip_played=fresh,
         face_scores=(result.get("emotion") or {}).get("scores"),
         strategy=strategy,
     )
     result["recommendations"] = recs
+    result["online_pending"] = bool(two_phase)
     result["algorithms"] = {
         "face": "YuNet + MobileFaceNet FER",
         "music": recs.get("strategy", {}).get("music"),
@@ -267,6 +304,15 @@ def recognize():
     total_ms = (time.perf_counter() - t0) * 1000.0
     result["total_ms"] = round(total_ms, 1)
 
+    # 实时识别每 1.4 秒一帧：同一情绪 30 秒内只记一条，情绪变了才新记，免得足迹被重复记录淹没
+    if source.endswith("-live"):
+        with _LIVE_SAVE_LOCK:
+            last = _LIVE_SAVE.get(source) or {}
+            same = last.get("emo") == emotion_id and time.time() - float(last.get("ts") or 0) < LIVE_SAVE_GAP_S
+            if same and last.get("id"):
+                result["history_id"] = last["id"]
+                result["history_saved"] = False
+                return jsonify(result)
     try:
         item = history.add_record(
             _session_id(),
@@ -279,6 +325,10 @@ def recognize():
             },
         )
         result["history_id"] = item.get("id")
+        result["history_saved"] = True
+        if source.endswith("-live"):
+            with _LIVE_SAVE_LOCK:
+                _LIVE_SAVE[source] = {"emo": emotion_id, "ts": time.time(), "id": item.get("id")}
     except Exception:
         logger.exception("写入识别历史失败")
     return jsonify(result)
@@ -305,8 +355,9 @@ def recommend_api():
     want_online = request.args.get("online", "1") == "1"
     strategy = (request.args.get("strategy") or DEFAULT_STRATEGY).strip()
     played = history.played_keys(emotion)
-    exclude = _history_exclude(emotion)
-    data = recommend(emotion, want_online=want_online, exclude=exclude, strategy=strategy)
+    fresh = (request.args.get("fresh") or "1").strip() == "1"
+    exclude = _history_exclude(emotion) if fresh else []
+    data = recommend(emotion, want_online=want_online, exclude=exclude, strategy=strategy, skip_played=fresh)
     data["played_keys"] = played
     return jsonify({"ok": True, **data})
 
@@ -434,12 +485,24 @@ def lyrics_api(song_id: str):
 @app.route("/api/history")
 def history_list():
     items = history.list_records()
+    total = len(items)
+    try:
+        limit = int(request.args.get("limit") or 0)
+        offset = max(0, int(request.args.get("offset") or 0))
+    except ValueError:
+        limit, offset = 0, 0
+    if limit > 0:
+        # 分页（按时间倒序）：网页先拿最新一页，往下翻再拿更早的；第一页附带已播索引
+        body = {"ok": True, "items": items[offset : offset + limit], "persistent": True, "total": total, "offset": offset}
+        if offset == 0 and request.args.get("played", "1") == "1":
+            body["played"] = history.played_map()
+        return jsonify(body)
     return jsonify(
         {
             "ok": True,
             "items": items,
             "persistent": True,
-            "total": len(items),
+            "total": total,
             "played": history.played_map(),
         }
     )
@@ -486,6 +549,14 @@ DEMO_PACK = [
     ("disgust", "20-厌-厌恶-disgust-c.jpg", "20 厌"),
     ("neutral", "21-中性-平静-neutral-c.jpg", "21 中性"),
 ]
+# 第 4、5、6 组：真人照片，每类 3 张（Wikimedia Commons / Unsplash，见 static/demo/示例照片来源与授权.txt）
+for _suffix, _start in (("d", 22), ("e", 29), ("f", 36)):
+    for _i, (_eid, _zh, _name) in enumerate(
+        (("happy", "喜", "喜悦"), ("angry", "怒", "愤怒"), ("sad", "哀", "悲伤"), ("fear", "惧", "恐惧"),
+         ("surprise", "惊", "惊讶"), ("disgust", "厌", "厌恶"), ("neutral", "中性", "平静"))
+    ):
+        _n = _start + _i
+        DEMO_PACK.append((_eid, f"{_n:02d}-{_zh}-{_name}-{_eid}-{_suffix}.jpg", f"{_n:02d} {_zh} · 真人"))
 
 
 @app.route("/api/demo")

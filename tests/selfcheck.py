@@ -210,7 +210,8 @@ def main() -> int:
         "特别网红英文高于普通英文",
         play_priority("Butter", "BTS", "happy") > play_priority("Paper Rings", "Taylor Swift", "happy"),
     )
-    happy_top = recs["songs"][:8]
+    # 只验证“中文优先”的排序规则，不让历史已播把中文歌挪到后面
+    happy_top = recommend("happy", want_online=False, skip_played=False)["songs"][:8]
     fails += not _ok(
         "喜悦前8首中文",
         all(is_chinese_song(s.get("title") or "", s.get("artist") or "") for s in happy_top),
@@ -338,7 +339,7 @@ def main() -> int:
     fails += not _ok("说明页写明多种推荐", "先同频再修复" in guide and "环面" in guide and "降唤醒" in guide)
     strat_api = client.get("/api/strategies").get_json()
     fails += not _ok("GET /api/strategies", strat_api and strat_api.get("ok") and len(strat_api.get("strategies") or []) >= 8)
-    fails += not _ok("首页提示短暂表情会锁定歌单", "不会立刻换歌" in home and "惊讶、恐惧" in home)
+    fails += not _ok("首页提示短暂表情会锁定歌单", "6 秒内不换歌" in home and "惊讶、恐惧" in home)
     fails += not _ok("实时捕捉旁有保持播放说明", "脸松开也不会换歌" in home)
     fails += not _ok("识别此刻会关闭实时捕捉", "自动关闭实时捕捉" in home)
     fails += not _ok("界面含人脸框画布", "id=\"face-overlay\"" in home)
@@ -401,7 +402,8 @@ def main() -> int:
         ("歌曲隐藏", "id=\"btn-hide-recs\""),
     ]:
         fails += not _ok(f"界面含{label}", needle in home)
-    js = (ROOT / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    # app.js 拆出了 core.js（常量与纯工具），一起检查
+    js = (ROOT / "static" / "js" / "app.js").read_text(encoding="utf-8") + (ROOT / "static" / "js" / "core.js").read_text(encoding="utf-8")
     fails += not _ok("实时捕捉锁定短暂表情", "TRANSIENT_EMO" in js and "decideLiveAction" in js)
     fails += not _ok("持续平静可切中性歌单", "pending-neutral" in js and "LIVE_NEUTRAL_HITS" in js)
     fails += not _ok("声纹情绪标签与人脸同步", "displayEmotionId" in js and "paintUiEmotion" in js and "同一标签" in js)
@@ -472,7 +474,20 @@ def main() -> int:
         p for p in DEMO_DIR.iterdir()
         if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"} and p.stem[:2].isdigit()
     ]
-    fails += not _ok("示例图已按中文命名 21 张", len(named_demo) >= 21, str(len(named_demo)))
+    fails += not _ok("示例图已按中文命名 42 张", len(named_demo) >= 42, str(len(named_demo)))
+    real_demo = [p for p in named_demo if p.stem.endswith(("-d", "-e", "-f"))]
+    fails += not _ok("真人示例 21 张（每类 3 张）", len(real_demo) == 21, str(len(real_demo)))
+    fails += not _ok("真人示例注明来源与授权", (DEMO_DIR / "示例照片来源与授权.txt").exists())
+    demo_api = client.get("/api/demo").get_json()
+    fails += not _ok("示例列表 42 张", demo_api and len(demo_api.get("items") or []) == 42, str(len((demo_api or {}).get("items") or [])))
+    pose_page = client.get("/pose")
+    pose_html = pose_page.get_data(as_text=True)
+    fails += not _ok(
+        "表情教程页七类齐全",
+        pose_page.status_code == 200 and pose_html.count('class="pose-card"') == 7
+        and all(w in pose_html for w in ("嘴巴张大", "别笑", "Unsplash")),
+    )
+    fails += not _ok("首页有表情教程入口", 'href="/pose"' in home)
     emo = client.get("/api/emotions").get_json()
     fails += not _ok("GET /api/emotions 七类", emo and len(emo.get("emotions", [])) == 7)
 
@@ -527,8 +542,10 @@ def main() -> int:
             online_rec = (online_body or {}).get("recommendations") or {}
             fails += not _ok(
                 "打开在线时优先在线或本地兜底",
-                online_rec.get("mode") in ("online", "local-fallback") and len(online_rec.get("songs") or []) == 24,
-                str(online_rec.get("mode")),
+                # 两段式：先返回本地歌单并标记 online_pending，在线热歌由网页随后补；也接受直接含在线
+                (online_rec.get("mode") in ("online", "local-fallback") or (online_body or {}).get("online_pending") is True)
+                and len(online_rec.get("songs") or []) == 24,
+                f"{online_rec.get('mode')} pending={(online_body or {}).get('online_pending')}",
             )
             crop = ((body.get("face") or {}).get("crop") or "")
             fails += not _ok(

@@ -1,0 +1,119 @@
+/* ===== 播放器三档：展开 / 迷你 / 折叠 ===== */
+.player-modes { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--chip); border: 1px solid var(--line); flex: 0 0 auto; }
+.player-modes button {
+  border: 0; border-radius: 999px; padding: 4px 10px; background: transparent; color: var(--muted);
+  font: 600 12px/1.4 var(--font-ui); cursor: pointer;
+}
+.player-modes button.is-on { background: color-mix(in srgb, var(--accent) 85%, white 8%); color: var(--on-accent); }
+.player-unfold { display: none; }
+.mini-lyric { display: none; }
+
+/* 迷你：只留一行 */
+.player[data-mode="mini"] .audio-viz,
+.player[data-mode="mini"] .nowplay { display: none !important; }
+.player[data-mode="mini"] { padding: 8px 12px; }
+.player[data-mode="mini"] .player-bar { grid-template-columns: 44px minmax(120px, 0.9fr) minmax(0, 1.2fr) minmax(260px, 1.6fr) auto auto; gap: 12px; align-items: center; }
+.player[data-mode="mini"] #player-cover { width: 44px; height: 44px; border-radius: 10px; display: block !important; }
+.player[data-mode="mini"] .mini-lyric {
+  display: block; margin: 0; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  font-size: 14px; font-weight: 600; color: var(--accent); text-align: center;
+}
+.player[data-mode="mini"] .player-extra #btn-download,
+.player[data-mode="mini"] .player-extra #btn-open { display: none; }
+body[data-player="mini"]:has(#player:not([hidden])) { padding-bottom: 96px !important; }
+
+/* 折叠：右下角小胶囊 */
+.player[data-mode="fold"] {
+  left: auto !important; right: 16px; bottom: 16px; width: auto; padding: 6px 8px 6px 6px; border-radius: 999px;
+}
+.player[data-mode="fold"] .audio-viz,
+.player[data-mode="fold"] .nowplay,
+.player[data-mode="fold"] .player-info,
+.player[data-mode="fold"] #btn-prev,
+.player[data-mode="fold"] #btn-next,
+.player[data-mode="fold"] #btn-stop,
+.player[data-mode="fold"] #seek,
+.player[data-mode="fold"] .time,
+.player[data-mode="fold"] .player-extra,
+.player[data-mode="fold"] .player-modes,
+.player[data-mode="fold"] .mini-lyric { display: none !important; }
+.player[data-mode="fold"] .player-bar { display: flex; align-items: center; gap: 8px; }
+.player[data-mode="fold"] #player-cover { width: 40px; height: 40px; border-radius: 50%; display: block !important; animation: fold-spin 8s linear infinite; }
+.player[data-mode="fold"]:not(.is-playing) #player-cover { animation-play-state: paused; }
+.player[data-mode="fold"] .player-unfold {
+  display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--chip); color: var(--ink); cursor: pointer; font-size: 15px;
+}
+@keyframes fold-spin { to { transform: rotate(360deg); } }
+body[data-player="fold"]:has(#player:not([hidden])) { padding-bottom: 24px !important; }
+
+/* 展开时按声学分析大小留底部空白（沿用原规则） */
+@media (max-width: 980px) {
+  .player[data-mode="mini"] .player-bar { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .player[data-mode="mini"] .mini-lyric, .player[data-mode="mini"] .player-modes { grid-column: 1 / -1; }
+  body[data-player="mini"]:has(#player:not([hidden])) { padding-bottom: 170px !important; }
+}
+
+/* ===== 情绪时间线 ===== */
+.emo-timeline { margin-top: 10px; padding: 10px 12px 8px; border-radius: 16px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); background: color-mix(in srgb, var(--accent) 5%, var(--chip)); }
+.emo-timeline header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 12px; }
+.emo-timeline header b { color: var(--ink); letter-spacing: 0.06em; }
+.emo-timeline header small { color: var(--muted); }
+.emo-timeline canvas { display: block; width: 100%; height: 56px; margin-top: 6px; }
+.emo-timeline-axis { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+.player[data-mode="mini"] .time { white-space: nowrap; }
+
+/* ===== 投影大屏模式 ===== */
+body.is-projector { padding: 10px 14px 96px !important; }
+body.is-projector .trail-panel,
+body.is-projector .recs,
+body.is-projector .board-nav,
+body.is-projector .tagline,
+body.is-projector #hold-note,
+body.is-projector #emo-copy,
+body.is-projector #algo-live,
+body.is-projector .emo-readout .va-card,
+body.is-projector #btn-pose,
+body.is-projector #btn-guide,
+body.is-projector #btn-history,
+body.is-projector #btn-about { display: none !important; }
+body.is-projector .top { margin-bottom: 10px; }
+body.is-projector .layout { grid-template-columns: minmax(0, 1.35fr) minmax(0, 0.85fr); min-height: calc(100vh - 190px); }
+body.is-projector .stage:has(.stage-body[data-view="live"]:not([hidden])) { min-height: calc(100vh - 190px); }
+body.is-projector .zh { font-size: clamp(96px, 11vw, 168px); line-height: 1; }
+body.is-projector .emo-label .name { font-size: 30px; }
+body.is-projector .emo-label .conf { font-size: 18px; }
+body.is-projector .prob-row { font-size: 16px; }
+body.is-projector .prob-track { height: 14px; }
+body.is-projector .emo-readout { grid-template-columns: 1fr; }
+body.is-projector .emo-timeline canvas { height: 80px; }
+body.is-projector .player[data-mode="mini"] #player-title { font-size: 22px; }
+body.is-projector .player[data-mode="mini"] .mini-lyric { font-size: 20px; }
+body.is-projector .live-emo-hud strong { font-size: 34px; }
+body.is-projector .live-emo-hud span { font-size: 20px; }
+#btn-projector.is-on { background: color-mix(in srgb, var(--accent) 85%, white 8%); color: var(--on-accent); }
+
+/* ===== 换歌原因提示 ===== */
+.switch-reason {
+  position: absolute; left: 50%; bottom: 22px; z-index: 9; transform: translate(-50%, 16px); opacity: 0;
+  display: inline-flex; align-items: center; gap: 10px; max-width: calc(100% - 40px); padding: 10px 18px; border-radius: 999px;
+  --emo: var(--accent); color: #fff; font: 600 15px/1.3 var(--font-ui); white-space: nowrap;
+  background: color-mix(in srgb, var(--emo) 28%, rgba(10, 12, 18, 0.78)); border: 1.5px solid var(--emo);
+  backdrop-filter: blur(14px) saturate(140%); box-shadow: 0 14px 40px color-mix(in srgb, var(--emo) 30%, transparent);
+  transition: opacity 380ms ease, transform 380ms cubic-bezier(.22, 1, .36, 1); pointer-events: none;
+}
+.switch-reason.is-in { opacity: 1; transform: translate(-50%, 0); }
+.switch-reason[hidden] { display: none; }
+.switch-reason b { font-family: var(--font-display); font-size: 22px; color: var(--emo); margin-right: 6px; }
+.switch-reason i { font-style: normal; opacity: 0.6; }
+.switch-reason .sr-strat { font-size: 13px; padding: 2px 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); }
+.switch-reason .sr-song { overflow: hidden; text-overflow: ellipsis; color: #ffe7b0; }
+.switch-reason[data-emo="happy"] { --emo: var(--happy); }
+.switch-reason[data-emo="angry"] { --emo: var(--angry); }
+.switch-reason[data-emo="sad"] { --emo: var(--sad); }
+.switch-reason[data-emo="fear"] { --emo: var(--fear); }
+.switch-reason[data-emo="surprise"] { --emo: var(--surprise); }
+.switch-reason[data-emo="disgust"] { --emo: var(--disgust); }
+.switch-reason[data-emo="neutral"] { --emo: var(--neutral); }
+body.is-projector .switch-reason { font-size: 22px; padding: 14px 26px; }
+body.is-projector .switch-reason b { font-size: 32px; }

@@ -9,10 +9,10 @@
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}?v=50" />
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v=50" />
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}?v=50" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=79" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fonts.css') }}?v=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=99" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/doc.css') }}?v=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-extra.css') }}?v=4" />
 </head>
 <body data-emotion="idle">
   <div class="grain" aria-hidden="true"></div>
@@ -44,12 +44,15 @@
       </div>
       <div class="stage-ops">
         <button type="button" class="ghost" id="btn-face-pop" title="在独立窗口里看人脸检测">弹出人脸窗</button>
+        <span class="demo-badge" id="demo-badge" hidden title="课堂演示模式已打开（设置 → 检测方式）">课堂演示</span>
         <button type="button" class="ghost detect-btn" id="btn-detect" aria-pressed="false" title="开关实时检测：关掉后不再识别表情、不画人脸框，画面保留"><i aria-hidden="true"></i><span>实时检测 关</span></button>
         <button type="button" class="primary" id="btn-recognize" title="截取当前画面识别并播放，同时关闭实时捕捉">识别此刻</button>
       </div>
     </div>
     <nav class="top-actions">
       <button type="button" class="ghost" id="btn-settings" aria-controls="settings-panel" aria-expanded="false">设置</button>
+      <button type="button" class="ghost" id="btn-projector" title="投影大屏：全屏、大字、只留人脸、情绪和歌（Esc 退出）">投影</button>
+      <a class="ghost" id="btn-pose" href="/pose" title="七类表情怎么做，系统才认得出">表情教程</a>
       <a class="ghost" id="btn-guide" href="/guide">说明</a>
       <button type="button" class="ghost" id="btn-history" aria-controls="history-drawer">历史</button>
       <button type="button" class="ghost" id="btn-about" aria-controls="about-dialog">关于</button>
@@ -72,6 +75,13 @@
           <button type="button" class="strat-pick" data-face-mode="crowd" role="radio" aria-checked="false" title="多张脸与远景小脸，按人数最多的情绪">多人远场</button>
         </div>
         <p class="strat-hint" id="face-mode-hint">只取画面里最大、最稳的一张脸，检测阈值更高，不扫远景杂脸。</p>
+      </div>
+      <div class="demo-mode">
+        <label class="switch">
+          <input type="checkbox" id="demo-mode-toggle" />
+          <span>课堂演示模式</span>
+        </label>
+        <p class="strat-hint">学生上台扮表情时打开：惊讶嘴张得不太大也能认出；喜悦要真的笑开才算，紧张时抿嘴微笑算平静。成人或日常使用请关掉。<a href="/pose">表情怎么做 →</a></p>
       </div>
     </details>
 
@@ -159,6 +169,24 @@
         <a class="ghost mini" href="/guide#recommend">说明</a>
         <p class="strat-hint" id="strat-hint">贴着当前表情，播同一类最贴的歌。</p>
       </div>
+      <div class="play-order">
+        <label class="switch" title="打开：听过的歌排到后面，优先没听过的。关掉：只按匹配度排，听过的也照常排在前面。">
+          <input type="checkbox" id="skip-played-toggle" checked />
+          <span>排除已播（未播优先）</span>
+        </label>
+        <label class="pin-rotate" title="每类情绪开头都有代表曲（喜悦：小苹果…悲伤：后来…平静：同桌的你…）。同一情绪每认出一次，换下一首代表曲；这里设在前几首之间轮换。">
+          <span>代表曲轮换</span>
+          <select id="pin-rotate">
+            <option value="1">只播第 1 首</option>
+            <option value="2">前 2 首轮换</option>
+            <option value="3" selected>前 3 首轮换</option>
+            <option value="4">前 4 首轮换</option>
+            <option value="5">前 5 首轮换</option>
+            <option value="6">前 6 首轮换</option>
+            <option value="0">全部歌曲轮换</option>
+          </select>
+        </label>
+      </div>
     </details>
 
     <details class="set-block" data-set="theme">
@@ -176,6 +204,7 @@
 
   <main class="layout">
     <section class="panel stage" id="stage" aria-label="表情输入画面">
+      <div class="switch-reason" id="switch-reason" role="status" aria-live="polite" hidden></div>
       <div class="stage-body" data-view="live">
         <div class="viewport" id="viewport" data-fit="cover">
           <div class="cam-layer" id="cam-layer">
@@ -229,7 +258,7 @@
           </figure>
         </div>
         <div class="demo-row" id="demo-row" hidden>
-          <p>示例表情：单击或双击直接进入检测（01–21，每种三张）</p>
+          <p>示例表情：单击或双击直接进入检测（01–42，每种六张；22–42 为真人照片，来自 Wikimedia Commons 与 Unsplash，已裁剪，出处见 static/demo/示例照片来源与授权.txt）</p>
           <div class="demo-list" id="demo-list"></div>
         </div>
       </div>
@@ -282,9 +311,14 @@
         </div>
       </div>
       <div class="emo-tags" id="emo-tags" role="list" aria-label="七类情绪标签"></div>
+      <div class="emo-timeline" id="emo-timeline-box">
+        <header><b>情绪时间线</b><small>最近 60 秒 · 色带为此刻情绪，曲线为把握度</small></header>
+        <canvas id="emo-timeline" aria-label="最近 60 秒情绪变化"></canvas>
+        <div class="emo-timeline-axis"><span>60 秒前</span><span>30 秒</span><span>现在</span></div>
+      </div>
       <p class="copy" id="emo-copy">识别后人脸、此刻情绪、歌曲、音乐可视化和语音提示共用同一套七类标签。推荐默认同频。日常平静、喜悦、悲伤会稳住再换歌；惊讶、恐惧、愤怒、厌恶认到就锁反差歌。识别此刻或上传立刻说。</p>
       <p class="algo-live" id="algo-live">当前推荐：<strong id="strat-now">同频</strong> · <a href="/guide#recommend">算法、理论与使用说明</a></p>
-      <p class="hold-note" id="hold-note">日常最常见的是平静、喜悦、悲伤，这三类会多确认一会儿再换歌，听着稳。惊讶、恐惧、愤怒、厌恶很难长时间保持：认到后立刻锁反差歌单，脸松开也不会立刻换歌，大约十秒内方便把这首听完；持续平静几秒后会切到平静歌单，做出另一种明显表情并确认后也会切换。高潮情绪会很快语音提示；日常三类稳住约 3 秒才说。点「识别此刻」或上传会立刻说一次并关闭实时捕捉。</p>
+      <p class="hold-note" id="hold-note">日常最常见的是平静、喜悦、悲伤，这三类会多确认一会儿再换歌，听着稳。惊讶、恐惧、愤怒、厌恶很难长时间保持：认到后立刻锁反差歌单，脸松开后约 6 秒内不换歌，之后持续平静约 3 秒就换到平静歌单，做出另一种明显表情并确认后也会切换。高潮情绪会很快语音提示；日常三类稳住约 3 秒才说。点「识别此刻」或上传会立刻说一次并关闭实时捕捉。</p>
       <p class="emo-hold" id="emo-hold" hidden></p>
       <p class="genre" id="emo-genre" hidden></p>
     </section>
@@ -327,7 +361,7 @@
     </div>
   </section>
 
-  <aside class="player" id="player" hidden>
+  <aside class="player" id="player" data-mode="mini" hidden>
     <div class="audio-viz" id="audio-viz" data-emo="idle" data-size="compact">
       <header class="viz-head">
         <strong>音乐声学特征 · 实时分析</strong>
@@ -389,6 +423,13 @@
         <a class="ghost mini" id="btn-download" hidden>下载</a>
         <a class="ghost mini" id="btn-open" target="_blank" rel="noopener" hidden>打开源页</a>
       </div>
+      <p class="mini-lyric" id="mini-lyric" aria-hidden="true"></p>
+      <div class="player-modes" role="group" aria-label="播放器大小">
+        <button type="button" data-player-mode="full" title="展开：声学分析、封面与歌词">展开</button>
+        <button type="button" data-player-mode="mini" title="迷你：只留一行，最大化人脸和情绪区域">迷你</button>
+        <button type="button" data-player-mode="fold" title="折叠：缩成右下角小胶囊">折叠</button>
+      </div>
+      <button type="button" class="player-unfold" id="btn-player-unfold" title="展开播放器" aria-label="展开播放器">⤢</button>
     </div>
   </aside>
 
@@ -405,25 +446,25 @@
   </aside>
 
   <dialog id="about-dialog">
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="aboutg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd27a"/><stop offset="1" stop-color="#ff7ac8"/></linearGradient></defs></svg>
     <h2>关于当AI遇见旋律</h2>
-    <p>它用摄像头、照片、视频或屏幕画面识别七类基本情绪，再按你选的推荐方式播放歌曲。</p>
-    <ul>
-      <li>算法、理论与完整使用说明在独立页面：点顶部「说明」，或打开 <a href="/guide">/guide</a>。人脸 YuNet + MobileFaceNet FER（RAF-DB 88.27%）并在单人精检中与 HSEmotion EfficientNet-B0 融合，曲调 Thayer + Krumhansl，推荐默认同频余弦，也可选修复、先同频再修复等。</li>
-      <li>推荐方式、检测方式、画面、主题和播放开关都在顶部「设置」里，默认收起。推荐可选同频、修复、先同频再修复，以及对比、回暖、降唤醒、升效价、强化、平衡。</li>
-      <li>人脸本机识别。默认「单人精检」只取近景主脸，五点精修对齐后做翻转/微转 TTA，再与 HSEmotion 野外模型加权融合、多帧平均；「多人远场」可同时检多张脸和远景小脸，歌曲按人数最多的情绪来。可弹出人脸窗。</li>
-      <li>四种输入：摄像头（可切换设备）、照片、本地视频、屏幕分享。</li>
-      <li>本地 532 首按情绪分类的人声试听（每类 76 首），中文优先，仅特别网红英文作为例外；默认走在线热歌（苹果音乐、苹果热歌榜、苹果热播、苹果亚洲热歌、网易云热歌榜、QQ 热歌榜、网易云、咪咕、酷狗、QQ、酷我、国际曲库、Audius），可手动切本地；断网也能连播。在线长时间失败会提示并自动切本地。</li>
-      <li>播放时显示歌词、封面、波形振动、频率频谱、谱通量、色度与 V–A 声学分析，并按当前情绪上色，均可单独关闭。摄像头默认铺满左区块，可切默认尺寸并放大缩小比例。照片选好后直接在左侧大图上画人脸框与关键点。关键点可选实拍标注、线框骨架，或不显示。</li>
-      <li>日常以平静、喜悦、悲伤为主，这三类会稳住再换歌。惊讶、恐惧、愤怒、厌恶是短高潮：认到后锁反差歌，不会立刻换歌，大约十秒内松开脸也继续播；持续平静几秒后会切到平静歌单，做出另一种明显表情也会切换。点「识别此刻」会截图并关闭实时捕捉。人脸框、此刻情绪、播放器、音乐可视化和语音提示共用同一套标签；高潮情绪很快说，日常三类稳住约 3 秒才说，识别此刻或上传立刻说一次。</li>
-      <li>情绪足迹全部保存；点选可回放当时的歌。相同情绪再次识别会尽量换没听过的歌。</li>
-      <li>图像只在本机处理，不上传到云端。</li>
+    <p>用摄像头、照片、视频或屏幕识别七类基本情绪，再按你选的推荐方式播放刚好的一首歌。</p>
+    <ul class="about-grid">
+      <li><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><circle cx="8.8" cy="10" r="1.1"/><circle cx="15.2" cy="10" r="1.1"/><path d="M8 14.5c2.2 2.4 5.8 2.4 8 0"/></svg><span><b>人脸情绪</b>YuNet + MobileFaceNet FER（RAF-DB 88.27%）× HSEmotion 融合；单人精检做 TTA，实时识别走快速路径；多人远场按人数最多的情绪来；可弹出人脸窗。</span></li>
+      <li><svg viewBox="0 0 24 24"><path d="M2 12h2l2-6 3 12 3-15 3 15 3-9 2 3h2"/></svg><span><b>曲调情绪</b>Thayer 效价-唤醒 + Krumhansl–Kessler 调式 + Juslin 声学线索；播放时实时画波形振动、频率频谱、色度。</span></li>
+      <li><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="2.5"/><path d="M12 2.5a9.5 9.5 0 0 1 9.5 9.5"/></svg><span><b>推荐方式</b>同频（余弦相似度）、修复、先同频再修复、对比、回暖、降唤醒、升效价、强化、平衡；代表曲先播，可设轮换与排除已播，相同情绪尽量换没听过的歌。</span></li>
+      <li><svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><rect x="3" y="15" width="18" height="6" rx="2"/></svg><span><b>本地曲库</b>532 首按情绪分类的人声试听（每类 76 首），501 首歌词对齐；在线热歌在后台补充，断网也能连播。</span></li>
+      <li><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M7 12l3-3 2 2 4-4"/></svg><span><b>课堂好用</b>课堂演示模式、表情教程、投影大屏；语音播报完立刻换歌。惊讶等高潮表情松开脸约 6 秒内继续播反差歌，做出另一种明显表情才切换；暂停不会被自动恢复。</span></li>
+      <li><svg viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span><b>隐私与足迹</b>图像只在本机处理，不上传；情绪足迹全部保存（日期时间、人脸、听过的歌），点选可回放。</span></li>
     </ul>
+    <p class="about-links">算法原理与公式见 <a href="/guide">说明页 /guide</a>，七类表情怎么做见 <a href="/pose">表情教程 /pose</a>。</p>
     <button type="button" class="primary" id="btn-close-about">知道了</button>
   </dialog>
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="{{ url_for('static', filename='js/face-draw.js') }}?v=79"></script>
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=79"></script>
+  <script src="{{ url_for('static', filename='js/core.js') }}?v=1"></script>
+  <script src="{{ url_for('static', filename='js/face-draw.js') }}?v=99"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=99"></script>
 </body>
 </html>

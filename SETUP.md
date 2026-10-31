@@ -4,10 +4,10 @@
 
 品牌 **心弦 EmoTune**。本页写给要把**这一版原样**装到另一台 Windows 电脑、并从零跑起来的人。**从这一版起，情绪足迹（历史记录、人脸截图、播过的歌、偏好）已经直接提交进仓库**，克隆下来就和本机一模一样。固定版本、标签和如何回到某一版，见 [VERSION.md](VERSION.md)。
 
-**当前快照：2026-10-31 08:16 · 歌词对齐 501 首 + 实时检测开关 + 暂停不再自动恢复 + 人脸窗铺满**  
-标签 `snapshot-20261031-0816` · 仓库 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）
+**当前快照：2026-10-31 18:42 · 提速 10 倍 + 播放器三档 + 投影大屏 + 文档改版 + 42 张示例**  
+标签 `snapshot-20261031-1842` · 仓库 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）
 
-静态介绍页（不能跑摄像头）：https://emomusic-grok-20261031-0816.surge.sh
+静态介绍页（不能跑摄像头）：https://emomusic-grok-20261031-1842.surge.sh
 
 **运行方式：conda 新建空环境 `emotune`，Python 3.12。** 不要把依赖装进系统 Python，也不要装进已经有 `datasets` / `fastapi` / `jax` / `kaggle` 的旧环境。推理只用 **CPU 版** `onnxruntime`（pip 包名就是 `onnxruntime`）。
 
@@ -20,7 +20,7 @@
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
-git checkout snapshot-20261031-0816
+git checkout snapshot-20261031-1842
 ```
 
 双击 `tools\setup-conda.bat`，等它打印 `PASS onnxruntime CPU`。再双击 `run.bat`。
@@ -110,7 +110,7 @@ conda tos accept
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
-git checkout snapshot-20261031-0816
+git checkout snapshot-20261031-1842
 ```
 
 仓库约 700 MB，克隆要几分钟。`main` 一般已指向同一提交；用标签可以精确钉在这一版，以后 `main` 再往前走也不怕。
@@ -452,11 +452,11 @@ git push
 
 ## 10. 从固定版本恢复 / 继续开发
 
-回到**这一版**（`snapshot-20261031-0816`，仍用 conda 环境 `emotune`）：
+回到**这一版**（`snapshot-20261031-1842`，仍用 conda 环境 `emotune`）：
 
 ```bat
 git fetch --tags
-git checkout snapshot-20261031-0816
+git checkout snapshot-20261031-1842
 conda activate emotune
 python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 python tools\verify_cpu.py
@@ -512,14 +512,14 @@ git checkout snapshot-20261027-2210
 在本快照上继续改代码（不要直接改标签指向的提交）：
 
 ```bat
-git checkout -b dev/continue snapshot-20261031-0816
+git checkout -b dev/continue snapshot-20261031-1842
 conda activate emotune
 ```
 
 对比当前与本快照：
 
 ```bat
-git diff snapshot-20261031-0816
+git diff snapshot-20261031-1842
 ```
 
 更完整的标签说明见 [VERSION.md](VERSION.md)。
@@ -532,13 +532,13 @@ git diff snapshot-20261031-0816
 
 本快照的静态介绍：
 
-https://emomusic-grok-20261031-0816.surge.sh
+https://emomusic-grok-20261031-1842.surge.sh
 
-以前的介绍页仍在：https://emomusic-grok-20261030-1230.surge.sh 、https://emomusic-grok-20261028-1252.surge.sh 、https://emomusic-grok-20261028-1105.surge.sh
+以前的介绍页仍在：https://emomusic-grok-20261031-0816.surge.sh 、https://emomusic-grok-20261030-1230.surge.sh 、https://emomusic-grok-20261028-1252.surge.sh 、https://emomusic-grok-20261028-1105.surge.sh
 
 那一页不能代替 `python app.py`。真正用摄像头识曲，仍按上面第 6 步在本机、conda 环境里启动。
 
-域名规则：`emomusic-grok-版本号.surge.sh`，必须小写。本版版本号为 `20261031-0816`。重新发布：`surge deploy\surge emomusic-grok-20261031-0816.surge.sh`（`deploy\surge\CNAME` 已写好）。
+域名规则：`emomusic-grok-版本号.surge.sh`，必须小写。本版版本号为 `20261031-1842`。重新发布：`surge deploy\surge emomusic-grok-20261031-1842.surge.sh`（`deploy\surge\CNAME` 已写好）。
 
 ---
 
@@ -582,7 +582,7 @@ python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.
 关掉系统代理后再试，或关闭「在线热歌」用本地歌。讲座现场建议先关在线。
 
 **换电脑后历史是空的**  
-检出的是早于本版的旧标签（旧标签不含足迹）。`git checkout snapshot-20261031-0816` 或 `main` 即可；仍为空则按第 8 节解包。
+检出的是早于本版的旧标签（旧标签不含足迹）。`git checkout snapshot-20261031-1842` 或 `main` 即可；仍为空则按第 8 节解包。
 
 **重新对齐本地试听歌词（新增歌曲后）**  
 `pip install torch transformers av` 后依次运行 `python toolssr_previews.py`、`python toolslign_lyrics.py`。只在维护曲库时需要，正常运行不要装 torch。
@@ -591,4 +591,4 @@ python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.
 可以。项目不依赖盘符和中文路径；ONNX 已内存加载。足迹 json 里的截图是相对 `/static/history/...`，换盘符不用改。
 
 **页面是旧的标题、旧图标，或问号说明一直挡在画面上**  
-强制刷新：Ctrl+F5。本快照静态资源带 `?v=79`。
+强制刷新：Ctrl+F5。本快照静态资源带 `?v=99`。

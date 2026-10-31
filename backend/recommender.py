@@ -1597,6 +1597,8 @@ def _rank_bucket(batch: list[dict], face_vec, emotion: str) -> list[dict]:
         item["music"] = public_music(desc)
         item["match"] = match
         pri = play_priority(item.get("title") or "", item.get("artist") or "", emotion)
+        if pri >= 90:
+            item["pin"] = 100 - pri + 1  # 代表曲序号 1..N，网页在代表曲之间轮播
         scored.append((pri, match, item))
     scored.sort(key=lambda x: (-x[0], -x[1]))
     return [item for _, _, item in scored]
@@ -1627,7 +1629,9 @@ def recommend(
     exclude: Optional[list] = None,
     face_scores=None,
     strategy: str = DEFAULT_STRATEGY,
+    skip_played: bool = True,
 ) -> dict:
+    """skip_played=False：设置里关掉「排除已播」，歌单按匹配度排，不把听过的挪到后面。"""
     if emotion not in EMOTIONS:
         emotion = "neutral"
     meta = EMOTIONS[emotion]
@@ -1641,7 +1645,7 @@ def recommend(
         from backend.history import played_map
 
         pins = front_pin_keys()
-        for rows in (played_map() or {}).values():
+        for rows in (played_map() or {}).values() if skip_played else ():
             skip_src.extend(key for key in (rows or []) if key not in pins)
     except Exception:
         pass

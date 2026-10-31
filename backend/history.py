@@ -4,17 +4,90 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+import shutil
 import threading
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 from config import DATA_DIR, EMOTIONS, HISTORY_DIR, THEMES
 from backend.songbook import emotion_of_title, title_key
 
-_LOCK = threading.Lock()
-_PATH = DATA_DIR / "history.json"
-_PREFS = DATA_DIR / "prefs.json"
+# 跑测试的服务可设 EMOTUNE_HISTORY_FILE / EMOTUNE_PREFS_FILE 指到别处，不写进真实足迹
+_PATH = Path(os.environ.get("EMOTUNE_HISTORY_FILE") or DATA_DIR / "history.json")
+_BACKUP = _PATH.with_name(_PATH.name + ".bak")
+_LOCKFILE = _PATH.with_name(_PATH.stem + ".lock")
+_PREFS = Path(os.environ.get("EMOTUNE_PREFS_FILE") or DATA_DIR / "prefs.json")
+
+
+class HistoryReadError(RuntimeError):
+    """history.json 存在但读不出来：宁可这次不写，也不能当成空历史把旧记录覆盖掉。"""
+
+
+class _ProcessLock:
+    """线程锁 + 跨进程文件锁：同一份 data/ 被多个服务进程（或自检）同时读写时不会互相踩坏。"""
+
+    def __init__(self) -> None:
+        self._thread = threading.RLock()
+        self._fh = None
+        self._depth = 0
+
+    def __enter__(self):
+        self._thread.acquire()
+        self._depth += 1
+        if self._depth == 1:
+            try:
+                _LOCKFILE.parent.mkdir(parents=True, exist_ok=True)
+                self._fh = open(_LOCKFILE, "a+b")
+                if os.name == "nt":
+                    import msvcrt
+
+                    deadline = time.time() + 10
+                    while True:
+                        try:
+                            self._fh.seek(0)
+                            msvcrt.locking(self._fh.fileno(), msvcrt.LK_NBLCK, 1)
+                            break
+                        except OSError:
+                            if time.time() > deadline:
+                                raise
+                            time.sleep(0.03)
+                else:
+                    import fcntl
+
+                    fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX)
+            except Exception:
+                if self._fh:
+                    self._fh.close()
+                self._fh = None
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self._depth == 1 and self._fh:
+                try:
+                    if os.name == "nt":
+                        import msvcrt
+
+                        self._fh.seek(0)
+                        msvcrt.locking(self._fh.fileno(), msvcrt.LK_UNLCK, 1)
+                    else:
+                        import fcntl
+
+                        fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
+                finally:
+                    self._fh.close()
+                    self._fh = None
+        finally:
+            self._depth -= 1
+            self._thread.release()
+        return False
+
+
+_LOCK = _ProcessLock()
+_ALLOW_SHRINK = threading.local()
 
 _SONG_KEYS = (
     "id",
@@ -37,13 +110,38 @@ _SONG_KEYS = (
 )
 
 
+# 进程内缓存：文件大小和修改时间没变就不再解析十几 MB（每次识别原来要读写好几遍）
+_RAW_CACHE: dict = {}
+BACKUP_EVERY_S = 600.0
+
+
+def _file_sig():
+    try:
+        st = _PATH.stat()
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
+
+
 def _load_raw() -> Any:
     if not _PATH.exists():
         return []
-    try:
-        return json.loads(_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return []
+    sig = _file_sig()
+    if sig and _RAW_CACHE.get("sig") == sig:
+        return _RAW_CACHE["raw"]
+    last: Exception | None = None
+    for attempt in range(6):
+        try:
+            text = _PATH.read_text(encoding="utf-8")
+            if not text.strip():
+                raise ValueError("history.json 是空文件")
+            raw = json.loads(text)
+            _RAW_CACHE.update(sig=_file_sig(), raw=raw)
+            return raw
+        except Exception as exc:  # 可能正读到别的进程写了一半
+            last = exc
+            time.sleep(0.05 * (attempt + 1))
+    raise HistoryReadError(f"读取 {_PATH} 失败：{last}")
 
 
 def _flatten(raw: Any) -> list[dict]:
@@ -73,8 +171,9 @@ def _load_store() -> dict:
 
 
 def _save(payload: Any) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(payload, ensure_ascii=False, indent=2)
+    _PATH.parent.mkdir(parents=True, exist_ok=True)
+    _RAW_CACHE.clear()  # 写成功后再按新文件登记
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     tmp = _PATH.with_suffix(".tmp")
     last_err: Exception | None = None
     for attempt in range(8):
@@ -96,13 +195,38 @@ def _save(payload: Any) -> None:
             raise last_err
 
 
+def _disk_count() -> int:
+    try:
+        raw = _load_raw()
+    except HistoryReadError:
+        return -1
+    if isinstance(raw, dict) and isinstance(raw.get("items"), list):
+        return len(raw["items"])
+    return len(_flatten(raw))
+
+
 def _save_store(store: dict) -> None:
-    _save(
-        {
-            "items": store.get("items") or [],
-            "played": store.get("played") if isinstance(store.get("played"), dict) else {},
-        }
-    )
+    new_n = len(store.get("items") or [])
+    old_n = _disk_count()
+    if not getattr(_ALLOW_SHRINK, "on", False):
+        if old_n < 0:
+            raise HistoryReadError("旧历史读不出来，这次不写，免得覆盖")
+        if new_n < old_n - 1:
+            raise HistoryReadError(f"历史条数将从 {old_n} 降到 {new_n}，拒绝覆盖")
+    if _PATH.exists():
+        try:
+            # 覆盖前留一份完整历史；最多每 10 分钟备份一次，不必每次都整份复制
+            if not _BACKUP.exists() or time.time() - _BACKUP.stat().st_mtime > BACKUP_EVERY_S:
+                shutil.copyfile(_PATH, _BACKUP)
+        except OSError:
+            pass
+    payload = {
+        "items": store.get("items") or [],
+        "played": store.get("played") if isinstance(store.get("played"), dict) else {},
+    }
+    _save(payload)
+    _RAW_CACHE.update(sig=_file_sig(), raw=payload)
+
 
 
 def _song_emotion(song: dict) -> str:
@@ -251,7 +375,28 @@ def _decorate_played(played: dict | None) -> dict:
     return out
 
 
+_LIST_CACHE: dict = {}
+
+
 def list_records(_session_id: str | None = None) -> list[dict]:
+    # 文件没变（大小和修改时间相同）就复用上次排好序的结果，免得每次翻页都解析十几 MB
+    try:
+        st = _PATH.stat()
+        sig = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        sig = None
+    if sig and _LIST_CACHE.get("sig") == sig:
+        return list(_LIST_CACHE["items"])
+    items = _list_records_uncached()
+    try:
+        st = _PATH.stat()
+        _LIST_CACHE.update(sig=(st.st_mtime_ns, st.st_size), items=items)
+    except OSError:
+        pass
+    return list(items)
+
+
+def _list_records_uncached() -> list[dict]:
     with _LOCK:
         raw = _load_raw()
         store = _load_store()
@@ -366,7 +511,11 @@ def mark_played(emotion: str, song: dict, history_id: str | None = None) -> dict
 
 def clear_records(_session_id: str | None = None) -> None:
     with _LOCK:
-        _save_store({"items": [], "played": {}})
+        _ALLOW_SHRINK.on = True
+        try:
+            _save_store({"items": [], "played": {}})
+        finally:
+            _ALLOW_SHRINK.on = False
         if HISTORY_DIR.exists():
             for path in HISTORY_DIR.glob("*"):
                 if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:

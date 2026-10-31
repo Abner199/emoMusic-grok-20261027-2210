@@ -1,11 +1,13 @@
 # 当AI遇见旋律：换电脑完整部署说明
 
+> 只想整个文件夹拷过去直接用：看 [换电脑-整夹复制即用.md](换电脑-整夹复制即用.md)。
+
 品牌 **心弦 EmoTune**。本页写给要把**这一版原样**装到另一台 Windows 电脑、并从零跑起来的人。**从这一版起，情绪足迹（历史记录、人脸截图、播过的歌、偏好）已经直接提交进仓库**，克隆下来就和本机一模一样。固定版本、标签和如何回到某一版，见 [VERSION.md](VERSION.md)。
 
-**当前快照：2026-10-30 12:30 · 歌词语音对齐 + 顶栏一行 + 左区块铺满 + 照片直检 + 足迹入库**  
-标签 `snapshot-20261030-1230` · 仓库 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）
+**当前快照：2026-10-31 08:16 · 歌词对齐 501 首 + 实时检测开关 + 暂停不再自动恢复 + 人脸窗铺满**  
+标签 `snapshot-20261031-0816` · 仓库 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）
 
-静态介绍页（不能跑摄像头）：https://emomusic-grok-20261030-1230.surge.sh
+静态介绍页（不能跑摄像头）：https://emomusic-grok-20261031-0816.surge.sh
 
 **运行方式：conda 新建空环境 `emotune`，Python 3.12。** 不要把依赖装进系统 Python，也不要装进已经有 `datasets` / `fastapi` / `jax` / `kaggle` 的旧环境。推理只用 **CPU 版** `onnxruntime`（pip 包名就是 `onnxruntime`）。
 
@@ -18,7 +20,7 @@
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
-git checkout snapshot-20261030-1230
+git checkout snapshot-20261031-0816
 ```
 
 双击 `tools\setup-conda.bat`，等它打印 `PASS onnxruntime CPU`。再双击 `run.bat`。
@@ -40,7 +42,7 @@ git checkout snapshot-20261030-1230
 1. **识曲必须在本机跑 Flask。** Surge 只放介绍页，没有 Python、没有 ONNX、没有摄像头。
 2. **情绪足迹已进 GitHub（本版起）。** `data/history.json`、`data/prefs.json`、`static/history/*.jpg` 都提交在仓库里。注意仓库是**公开**的，这些人脸截图任何人都能看到。
 
-克隆仓库 = 代码 + 三个 ONNX + 532 首试听 + 封面 + 演示图 + 474 首对齐歌词 + **全部情绪足迹**。  
+克隆仓库 = 代码 + 三个 ONNX + 532 首试听 + 封面 + 演示图 + 501 首对齐歌词 + **全部情绪足迹**。  
 克隆后无需再解包，和旧电脑一样能认出人、能播、能看到以前的足迹。
 
 ---
@@ -108,7 +110,7 @@ conda tos accept
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
-git checkout snapshot-20261030-1230
+git checkout snapshot-20261031-0816
 ```
 
 仓库约 700 MB，克隆要几分钟。`main` 一般已指向同一提交；用标签可以精确钉在这一版，以后 `main` 再往前走也不怕。
@@ -440,7 +442,7 @@ git push
 2. 四种输入：摄像头、照片（JPG/PNG/WEBP）、本地视频、屏幕分享。
 3. 「实时捕捉」可持续识曲；「识别此刻」截一帧并关掉实时捕捉。问号上的说明要**把鼠标放到问号上**才出现。
 4. 默认在线热歌；关掉「在线热歌」只用本地 532 首。在线长时间失败会提示并自动切本地。讲座现场网络不稳时，先关掉「在线热歌」。
-5. 本地 532 首里有 474 首歌词已用语音识别对过时间轴（`data/lyrics_aligned.json`），断网也准；其余联网时用官方词按锚点对齐。
+5. 本地 532 首里有 501 首歌词已用语音识别对过时间轴（`data/lyrics_aligned.json`），断网也准；其余联网时用官方词按锚点对齐。
 8. 顶栏一行：摄像头 / 照片 / 视频 / 屏幕、弹出人脸窗、识别此刻；摄像头默认铺满左区块，右下角可切「默认尺寸」并放大缩小，设置 → 画面也能调。
 9. 照片：选图、拖入或单击/双击示例，照片直接显示在左侧检测区并画出人脸框、关键点和表情标签；双击照片重新检测。
 6. 完整算法说明：http://127.0.0.1:5000/guide
@@ -450,11 +452,11 @@ git push
 
 ## 10. 从固定版本恢复 / 继续开发
 
-回到**这一版**（`snapshot-20261030-1230`，仍用 conda 环境 `emotune`）：
+回到**这一版**（`snapshot-20261031-0816`，仍用 conda 环境 `emotune`）：
 
 ```bat
 git fetch --tags
-git checkout snapshot-20261030-1230
+git checkout snapshot-20261031-0816
 conda activate emotune
 python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 python tools\verify_cpu.py
@@ -510,14 +512,14 @@ git checkout snapshot-20261027-2210
 在本快照上继续改代码（不要直接改标签指向的提交）：
 
 ```bat
-git checkout -b dev/continue snapshot-20261030-1230
+git checkout -b dev/continue snapshot-20261031-0816
 conda activate emotune
 ```
 
 对比当前与本快照：
 
 ```bat
-git diff snapshot-20261030-1230
+git diff snapshot-20261031-0816
 ```
 
 更完整的标签说明见 [VERSION.md](VERSION.md)。
@@ -530,13 +532,13 @@ git diff snapshot-20261030-1230
 
 本快照的静态介绍：
 
-https://emomusic-grok-20261030-1230.surge.sh
+https://emomusic-grok-20261031-0816.surge.sh
 
-以前的介绍页仍在：https://emomusic-grok-20261028-1252.surge.sh 、https://emomusic-grok-20261028-1105.surge.sh
+以前的介绍页仍在：https://emomusic-grok-20261030-1230.surge.sh 、https://emomusic-grok-20261028-1252.surge.sh 、https://emomusic-grok-20261028-1105.surge.sh
 
 那一页不能代替 `python app.py`。真正用摄像头识曲，仍按上面第 6 步在本机、conda 环境里启动。
 
-域名规则：`emomusic-grok-版本号.surge.sh`，必须小写。本版版本号为 `20261030-1230`。重新发布：`surge deploy\surge emomusic-grok-20261030-1230.surge.sh`（`deploy\surge\CNAME` 已写好）。
+域名规则：`emomusic-grok-版本号.surge.sh`，必须小写。本版版本号为 `20261031-0816`。重新发布：`surge deploy\surge emomusic-grok-20261031-0816.surge.sh`（`deploy\surge\CNAME` 已写好）。
 
 ---
 
@@ -580,7 +582,7 @@ python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.
 关掉系统代理后再试，或关闭「在线热歌」用本地歌。讲座现场建议先关在线。
 
 **换电脑后历史是空的**  
-检出的是早于本版的旧标签（旧标签不含足迹）。`git checkout snapshot-20261030-1230` 或 `main` 即可；仍为空则按第 8 节解包。
+检出的是早于本版的旧标签（旧标签不含足迹）。`git checkout snapshot-20261031-0816` 或 `main` 即可；仍为空则按第 8 节解包。
 
 **重新对齐本地试听歌词（新增歌曲后）**  
 `pip install torch transformers av` 后依次运行 `python toolssr_previews.py`、`python toolslign_lyrics.py`。只在维护曲库时需要，正常运行不要装 torch。
@@ -589,4 +591,4 @@ python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.
 可以。项目不依赖盘符和中文路径；ONNX 已内存加载。足迹 json 里的截图是相对 `/static/history/...`，换盘符不用改。
 
 **页面是旧的标题、旧图标，或问号说明一直挡在画面上**  
-强制刷新：Ctrl+F5。本快照静态资源带 `?v=73`。
+强制刷新：Ctrl+F5。本快照静态资源带 `?v=79`。

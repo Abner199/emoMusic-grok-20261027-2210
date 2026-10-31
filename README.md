@@ -4,7 +4,7 @@
 
 > **当前快照** 【20261028日  小学40分钟  10月28日下午15:25-16:05】 · 标签 `snapshot-20261028-1525` · 仓库 [emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）  
 > 换电脑：conda 新建空环境 `emotune` + **Python 3.12** + **CPU 版 onnxruntime** + 足迹打包，见 [SETUP.md](SETUP.md)。固定版本与如何继续开发见 [VERSION.md](VERSION.md)。  
-> 静态介绍页：https://emomusic-grok-20261030-1230.surge.sh
+> 静态介绍页：https://emomusic-grok-20261031-0816.surge.sh
 
 本机人脸情绪识别歌曲推荐。用摄像头、照片、本地视频或屏幕画面识别七类基本情绪（喜、怒、哀、惧、惊、厌、中性），再按情绪播放匹配的华语校园热歌。
 
@@ -79,7 +79,7 @@ python app.py
 
 摄像头必须用 `http://127.0.0.1:5000`（或 localhost / HTTPS）打开。请用 Chrome 或 Edge。
 
-换一台电脑：按 [SETUP.md](SETUP.md) 克隆并检出 `snapshot-20261030-1230`，再用 conda 新建空环境 `emotune`（Python 3.12，CPU 版 onnxruntime）。示例表情、本地曲库、对齐歌词和全部情绪足迹都在仓库里，克隆即原样还原。
+换一台电脑：按 [SETUP.md](SETUP.md) 克隆并检出 `snapshot-20261031-0816`，再用 conda 新建空环境 `emotune`（Python 3.12，CPU 版 onnxruntime）。示例表情、本地曲库、对齐歌词和全部情绪足迹都在仓库里，克隆即原样还原。
 
 ## 使用
 

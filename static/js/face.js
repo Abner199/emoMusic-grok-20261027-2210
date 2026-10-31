@@ -40,7 +40,7 @@
     landmarkMode: localStorage.getItem("emotune-landmark") || "overlay",
     camZoom: 1,
     camFill: false,
-    camFit: localStorage.getItem("emotune-cam-fit") === "contain" ? "contain" : "cover",
+    camFit: "cover", // 人脸窗始终铺满整窗，不留黑边
     camId: params.get("cam") || localStorage.getItem("emotune-cam") || "",
     mirror: true,
   };
@@ -49,7 +49,7 @@
   {
     const raw = localStorage.getItem("emotune-cam-zoom");
     const z = raw == null || raw === "" ? NaN : Number(raw);
-    state.camZoom = Number.isFinite(z) ? Math.max(0.5, Math.min(2.5, z)) : 1;
+    state.camZoom = Number.isFinite(z) ? Math.max(1, Math.min(2.5, z)) : 1;
   }
   const channel = "BroadcastChannel" in window ? new BroadcastChannel(CHANNEL) : null;
   const cam = $("#cam");
@@ -270,8 +270,8 @@
 
   function setCamZoom(value, persist) {
     const n = Number(value);
-    state.camZoom = Number.isFinite(n) ? Math.max(0.5, Math.min(2.5, n)) : 1;
-    if (persist !== false) localStorage.setItem("emotune-cam-zoom", String(state.camZoom));
+    state.camZoom = Number.isFinite(n) ? Math.max(1, Math.min(2.5, n)) : 1;
+    // 人脸窗不低于 100%，缩小会在四周露出空隙；也不写回主页的比例设置
     applyCamView();
     if (persist) postCamChrome();
   }
@@ -633,7 +633,7 @@
       if (!state.trackOn) return;
       const target = state.overlayTarget || [];
       if (target.length && (state.overlaySmooth || []).length) {
-        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, 0.22);
+        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, 0.38);
       } else if (target.length) {
         state.overlaySmooth = target.map(cloneOverlayItem);
       }
@@ -720,7 +720,7 @@
         state.trackBusy = true;
         try {
           const crowd = state.faceMode === "crowd";
-          const blob = await captureBlob(crowd ? 0.8 : 0.86, crowd ? 800 : 720);
+          const blob = await captureBlob(crowd ? 0.78 : 0.8, crowd ? 800 : 640);
           if (blob && state.trackOn) {
             const fd = new FormData();
             fd.append("image", blob, "track.jpg");
@@ -737,7 +737,7 @@
             }
             const elapsed = Number((data && data.elapsed_ms) || 40);
             if (state.trackOn && cameraReady()) {
-              state.trackTimer = setTimeout(tick, Math.max(90, 200 - elapsed));
+              state.trackTimer = setTimeout(tick, Math.max(15, 90 - elapsed));
             }
             return;
           }
@@ -747,7 +747,7 @@
           state.trackBusy = false;
         }
       }
-      if (state.trackOn && cameraReady()) state.trackTimer = setTimeout(tick, 140);
+      if (state.trackOn && cameraReady()) state.trackTimer = setTimeout(tick, 60);
     };
     state.trackTimer = setTimeout(tick, 80);
   }
@@ -882,7 +882,6 @@
         if (msg.landmark) setLandmarkMode(msg.landmark, false);
         if (Number.isFinite(Number(msg.zoom))) setCamZoom(Number(msg.zoom), false);
         if (typeof msg.fill === "boolean") setCamFill(msg.fill, false);
-        if (msg.fit) setCamFit(msg.fit, false);
       }
     });
   }

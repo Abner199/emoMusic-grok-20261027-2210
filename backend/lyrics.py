@@ -5181,7 +5181,10 @@ def _search_qq(title: str, artist: str) -> str:
         if title_key(name) == want_key:
             score += 50
         else:
-            score += int(round(42 * _sim(name, title)))
+            t_sim = _sim(name, title)
+            if t_sim < 0.6:
+                continue  # 同一歌手的别的歌，歌名不像就不算
+            score += int(round(42 * t_sim))
         if _artist_hit(artist, who):
             score += 40
         elif artist:
@@ -5192,6 +5195,50 @@ def _search_qq(title: str, artist: str) -> str:
     if best_score < 40:
         return ""
     return best_mid
+
+
+def _netease_lrc(title: str, artist: str) -> str:
+    """QQ 搜不到时用网易云补：同样要求歌名相像。"""
+    title = (title or "").strip()
+    if not title:
+        return ""
+    try:
+        r = _SESSION.get(
+            "https://music.163.com/api/search/get",
+            params={"s": f"{title} {artist or ''}".strip(), "type": 1, "limit": 8},
+            headers={"Referer": "https://music.163.com/"},
+            timeout=_QQ_TIMEOUT,
+        )
+        items = (((_as_json(r.text) or {}).get("result") or {}).get("songs") or [])
+    except Exception:
+        logger.debug("网易云歌词搜索失败", exc_info=True)
+        return ""
+    want_key = title_key(title)
+    best_id, best_score = 0, -1
+    for item in items:
+        name = (item.get("name") or "").strip()
+        who = " / ".join(a.get("name") or "" for a in item.get("artists") or [])
+        if not name or _SKIP_TITLE.search(name):
+            continue
+        t_sim = 1.0 if title_key(name) == want_key else _sim(name, title)
+        if t_sim < 0.6:
+            continue
+        score = 50 * t_sim + (40 if _artist_hit(artist, who) else 0)
+        if score > best_score:
+            best_id, best_score = item.get("id") or 0, score
+    if not best_id or best_score < 50:
+        return ""
+    try:
+        r = _SESSION.get(
+            "https://music.163.com/api/song/lyric",
+            params={"id": best_id, "lv": 1},
+            headers={"Referer": "https://music.163.com/"},
+            timeout=_QQ_TIMEOUT,
+        )
+        return str((((_as_json(r.text) or {}).get("lrc") or {}).get("lyric")) or "")
+    except Exception:
+        logger.debug("网易云歌词拉取失败", exc_info=True)
+        return ""
 
 
 def _fetch_qq_lrc(mid: str) -> str:
@@ -5259,6 +5306,8 @@ def _official_lines(title: str, artist: str, mid: str = "") -> list[dict]:
     got_mid = mid or _search_qq(title, artist)
     raw = _fetch_qq_lrc(got_mid) if got_mid else ""
     lines = _parse_lrc(raw)
+    if len(lines) < 4:
+        lines = _parse_lrc(_netease_lrc(title, artist))
     filtered = [row for row in lines if not _is_heading(row["text"], title, artist)]
     with _CACHE_LOCK:
         _OFFICIAL[key] = filtered

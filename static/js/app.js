@@ -896,6 +896,7 @@
       setMirror(true);
       await attachStream(stream);
       setCamHint("点下面的按钮开启摄像头，把面部落在椭圆里");
+      setTimeout(autoLive, 0); // 等 finally 清掉 camBusy 后再开实时捕捉
       return true;
     } catch (err) {
       stopCameraStream();
@@ -911,6 +912,15 @@
         btn.textContent = "开启摄像头";
       }
     }
+  }
+
+  /* 摄像头一开就默认实时捕捉：持续识别表情并自动连播 */
+  function autoLive() {
+    const tog = $("#live-toggle");
+    if (!tog || tog.checked || state.live || state.facePopActive) return;
+    if (localStorage.getItem("emotune-auto-live") === "0") return;
+    tog.checked = true;
+    tog.dispatchEvent(new Event("change", { bubbles: true }));
   }
 
   async function startScreen() {
@@ -1028,8 +1038,8 @@
   const LIVE_MIN_PROB = 0.52;
   const LIVE_FIRST_PROB = { surprise: 0.7, happy: 0.6, fear: 0.64, angry: 0.58, disgust: 0.6, sad: 0.52 };
   const LIVE_TICK_MS = 1400;
-  const TRACK_PERIOD_MS = 200;
-  const TRACK_RETRY_MS = 140;
+  const TRACK_PERIOD_MS = 90; // 框与关键点约 10 帧/秒取样，网页 60fps 插值
+  const TRACK_RETRY_MS = 60;
   const TRACK_KICK_OTHER_MS = 1000;
   const TRACK_KICK_SPIKE_MS = 480;
   const TRACK_KICK_NEUTRAL_MS = 1200;
@@ -1171,6 +1181,37 @@
     stopHoldTick();
     updateHoldUi(false);
     syncLiveHudDot();
+    syncDetectBtn();
+  }
+
+  function syncDetectBtn() {
+    const btn = $("#btn-detect");
+    if (!btn) return;
+    const on = !!state.live && !state.detectOff;
+    btn.classList.toggle("is-on", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.querySelector("span").textContent = on ? "实时检测 开" : "实时检测 关";
+  }
+
+  /* 顶栏开关：关 = 停实时识别 + 停人脸框跟踪（画面保留）；开 = 一起恢复 */
+  function setDetect(on) {
+    const tog = $("#live-toggle");
+    if (on) {
+      state.detectOff = false;
+      startTrackLoop();
+      if (tog && !tog.checked) {
+        tog.checked = true;
+        tog.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    } else {
+      state.detectOff = true;
+      stopLive();
+      stopTrackLoop();
+      clearFaceOverlay();
+      const hud = $("#live-emo-hud");
+      if (hud) hud.hidden = true;
+    }
+    syncDetectBtn();
   }
 
   function syncLiveHudDot() {
@@ -1728,7 +1769,7 @@
       if (!state.trackOn) return;
       const target = state.overlayTarget || [];
       if (target.length && (state.overlaySmooth || []).length) {
-        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, 0.22);
+        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, 0.38);
       } else if (target.length) {
         state.overlaySmooth = target.map(cloneOverlayItem);
       }
@@ -1783,6 +1824,7 @@
 
   function startTrackLoop() {
     if (state.facePopActive) return;
+    if (state.detectOff) return; // 用户关掉了实时检测
     if (state.trackOn) return;
     state.trackOn = true;
     ensureOverlayPump();
@@ -1801,7 +1843,7 @@
         state.trackBusy = true;
         try {
           const crowd = state.faceMode === "crowd";
-          const blob = await captureBlob(crowd ? 0.8 : 0.86, crowd ? 800 : 720);
+          const blob = await captureBlob(crowd ? 0.78 : 0.8, crowd ? 800 : 640);
           if (blob && state.trackOn && isLiveMode()) {
             const fd = new FormData();
             fd.append("image", blob, "track.jpg");
@@ -1814,7 +1856,7 @@
             if (state.trackOn && isLiveMode()) drawFaceOverlay(data);
             const elapsed = Number((data && data.elapsed_ms) || 40);
             if (state.trackOn && isLiveMode() && frameReady()) {
-              state.trackTimer = setTimeout(tick, Math.max(90, TRACK_PERIOD_MS - elapsed));
+              state.trackTimer = setTimeout(tick, Math.max(15, TRACK_PERIOD_MS - elapsed));
             }
             return;
           }
@@ -2261,6 +2303,7 @@
     clearTimeout(state.playWatch);
     if (!isOnlineSong(song) || !state.onlineOn) return;
     state.playWatch = setTimeout(() => {
+      if (state.userPaused) return;
       if (!sameAudio(song.audio)) return;
       if (audio.readyState >= 3 && audio.currentTime >= 0.2) return;
       state.failed.add(songKey(song));
@@ -2285,6 +2328,15 @@
     ui.player.classList.toggle("is-lyrics-off", !state.lyricsOn);
     ui.player.classList.toggle("is-cover-off", !state.coverOn);
     ui.player.classList.toggle("is-viz-off", !state.vizOn);
+  }
+
+  /* 声学分析三档：展开 / 缩小（默认）/ 折叠，记在本机 */
+  function setVizSize(size) {
+    const next = ["full", "compact", "fold"].includes(size) ? size : "compact";
+    localStorage.setItem("emotune-viz-size", next);
+    const box = $("#audio-viz");
+    if (box) box.dataset.size = next;
+    $$("[data-viz-size]").forEach((b) => b.classList.toggle("is-on", b.dataset.vizSize === next));
   }
 
   function postCamChrome() {
@@ -3445,6 +3497,11 @@
   }
 
   function autoPlayList(force, fromHistory) {
+    /* 用户按了暂停 / 停止：识别照常更新歌单，但不再自动出声，直到用户自己点播放 */
+    if (state.userPaused) {
+      syncPlayingHighlight();
+      return;
+    }
     const i = fromHistory ? firstPlayable(0) : firstFreshPlayable();
     if (i < 0) {
       if (force) toast("这次没有可自动播放的歌曲。");
@@ -3631,6 +3688,7 @@
     }
     unlockAudio();
     stopLive();
+    state.userPaused = false;
     state.lastFile = file;
     showPanel("upload");
     const url = URL.createObjectURL(file);
@@ -3658,6 +3716,7 @@
 
   function applyHistoryItem(it) {
     unlockAudio();
+    state.userPaused = false;
     state.replayHistory = true;
     state.historyId = it.id || "";
     if (it.emotion) {
@@ -3853,7 +3912,7 @@
     if (state.camId) params.set("cam", state.camId);
     const qs = params.toString();
     const url = `/face${qs ? `?${qs}` : ""}`;
-    const win = window.open(url, "emotune-face", "popup=yes,width=1100,height=820,left=48,top=48");
+    const win = window.open(url, "emotune-face", "popup=yes,width=1024,height=600,left=48,top=48");
     if (!win) {
       state.facePopActive = false;
       toast("浏览器拦住了弹出窗口，请允许本站弹出窗口后再试。", "err");
@@ -3891,6 +3950,7 @@
       } else if (msg.type === "live") {
         if (msg.on) {
           state.live = true;
+          syncDetectBtn();
           state.lastSpokenEmo = "";
           hushVoice();
           startHoldTick();
@@ -3911,6 +3971,8 @@
   }
 
   function bind() {
+    $$("[data-viz-size]").forEach((b) => b.addEventListener("click", () => setVizSize(b.dataset.vizSize)));
+    setVizSize(localStorage.getItem("emotune-viz-size") || "compact");
     const hintBtn = $("#live-hint-btn");
     const hintBox = $("#live-hint");
     if (hintBtn && hintBox) {
@@ -3961,16 +4023,22 @@
         listCameras();
       });
     }
-    $("#btn-recognize").addEventListener("click", recognizeNow);
+    $("#btn-recognize").addEventListener("click", () => {
+      state.userPaused = false;
+      recognizeNow();
+    });
     $("#live-toggle").addEventListener("change", async (e) => {
       if (e.target.checked) {
         unlockAudio();
+        state.userPaused = false;
+        state.detectOff = false;
         const ok = await ensureLiveSource();
         if (!ok) {
           e.target.checked = false;
           return;
         }
         state.live = true;
+        syncDetectBtn();
         state.lastSpokenEmo = "";
         hushVoice();
         startHoldTick();
@@ -4013,6 +4081,7 @@
     ui.songs.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-play]");
       const card = e.target.closest(".song");
+      if (btn || card) state.userPaused = false;
       if (btn) playAt(Number(btn.dataset.play));
       else if (card) playAt(Number(card.dataset.idx));
     });
@@ -4024,16 +4093,37 @@
         if (i >= 0) playAt(i);
         return;
       }
-      if (audio.paused) audio.play().catch(() => toast("请再点一次播放。", "err"));
-      else audio.pause();
+      if (audio.paused) {
+        state.userPaused = false;
+        audio.play().catch(() => toast("请再点一次播放。", "err"));
+      } else {
+        state.userPaused = true;
+        audio.pause();
+      }
+    });
+    $("#btn-stop").addEventListener("click", () => {
+      state.userPaused = true;
+      clearTimeout(state.playWatch);
+      audio.pause();
+      setDetect(false);
+      toast("已停止播放并关闭实时检测。点 ▶ 继续听歌，点顶栏「实时检测」恢复识别。");
+    });
+    $("#btn-detect").addEventListener("click", () => {
+      const on = !!state.live && !state.detectOff;
+      setDetect(!on);
+      if (on) toast("已关闭实时检测：不再识别表情、不画人脸框。需要时点「识别此刻」或重新打开。");
     });
     $("#btn-prev").addEventListener("click", () => {
       const n = state.songs.length;
       if (!n) return;
       const prev = firstPlayable(state.index - 1, -1);
+      state.userPaused = false;
       if (prev >= 0) playAt(prev);
     });
-    $("#btn-next").addEventListener("click", playNext);
+    $("#btn-next").addEventListener("click", () => {
+      state.userPaused = false;
+      playNext();
+    });
     audio.addEventListener("play", () => {
       $("#btn-play").textContent = "❚❚";
       startVizLoop();

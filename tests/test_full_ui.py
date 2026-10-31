@@ -38,7 +38,7 @@ def main() -> int:
             data='{"face_mode":"solo","strategy":"iso"}',
         )
         page = context.new_page()
-        page.add_init_script("localStorage.setItem('emotune-voice','0'); localStorage.setItem('emotune-face-mode','solo');")
+        page.add_init_script("localStorage.setItem('emotune-voice','0'); localStorage.setItem('emotune-face-mode','solo'); localStorage.setItem('emotune-auto-live','0');")
         page.goto(BASE, wait_until="domcontentloaded", timeout=20000)
         page.wait_for_selector("#emo-tags")
         page.wait_for_function("() => window.__emotune && window.__emotune.getState && window.__emotune.getState().faceMode")
@@ -378,8 +378,20 @@ def main() -> int:
 
         face_page = context.new_page()
         face_page.goto(BASE + "/face", wait_until="domcontentloaded", timeout=20000)
-        face_txt = face_page.locator("body").inner_text()
-        chk("人脸窗可打开", "人脸窗" in face_txt and "多数" in face_txt)
+        face_page.wait_for_timeout(800)
+        clean = face_page.evaluate(
+            """() => ({
+              top: getComputedStyle(document.querySelector('.face-top')).display,
+              hud: getComputedStyle(document.querySelector('#live-emo-hud')).display,
+              vp: (() => { const r = document.querySelector('#viewport').getBoundingClientRect();
+                return [r.left, r.top, Math.round(r.width - innerWidth), Math.round(r.height - innerHeight)]; })(),
+            })"""
+        )
+        chk(
+            "人脸窗只留画面且铺满",
+            clean["top"] == "none" and clean["hud"] == "none" and clean["vp"] == [0, 0, 0, 0],
+            str(clean),
+        )
         chk("人脸窗有画布", face_page.locator("#face-overlay").count() == 1)
         chk("人脸窗有检测方式", face_page.locator("[data-face-mode]").count() >= 2)
         chk("人脸窗有摄像头选择", face_page.locator("#cam-select").count() == 1)

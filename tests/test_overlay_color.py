@@ -81,7 +81,7 @@ def main() -> int:
         )
         context = browser.new_context(viewport={"width": 1280, "height": 900}, locale="zh-CN")
         page = context.new_page()
-        page.add_init_script("localStorage.setItem('emotune-voice','0');")
+        page.add_init_script("localStorage.setItem('emotune-voice','0'); localStorage.setItem('emotune-auto-live','0');")
 
         def handle_track(route):
             emo = queue[0] if queue else "neutral"

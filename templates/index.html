@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Syne:wght@600;700;800&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=73" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=79" />
 </head>
 <body data-emotion="idle">
   <div class="grain" aria-hidden="true"></div>
@@ -44,6 +44,7 @@
       </div>
       <div class="stage-ops">
         <button type="button" class="ghost" id="btn-face-pop" title="在独立窗口里看人脸检测">弹出人脸窗</button>
+        <button type="button" class="ghost detect-btn" id="btn-detect" aria-pressed="false" title="开关实时检测：关掉后不再识别表情、不画人脸框，画面保留"><i aria-hidden="true"></i><span>实时检测 关</span></button>
         <button type="button" class="primary" id="btn-recognize" title="截取当前画面识别并播放，同时关闭实时捕捉">识别此刻</button>
       </div>
     </div>
@@ -327,10 +328,15 @@
   </section>
 
   <aside class="player" id="player" hidden>
-    <div class="audio-viz" id="audio-viz" data-emo="idle" aria-hidden="true">
+    <div class="audio-viz" id="audio-viz" data-emo="idle" data-size="compact">
       <header class="viz-head">
         <strong>音乐声学特征 · 实时分析</strong>
         <span>颜色跟人脸此刻同一标签 · STFT · Krumhansl · Thayer V·A</span>
+        <div class="viz-tools" role="group" aria-label="声学分析大小">
+          <button type="button" data-viz-size="full" title="完整显示">展开</button>
+          <button type="button" data-viz-size="compact" title="缩小成一行小图">缩小</button>
+          <button type="button" data-viz-size="fold" title="折叠，只留播放条，不挡人脸">折叠</button>
+        </div>
       </header>
       <div class="viz-grid">
         <figure class="viz-cell viz-wave">
@@ -374,6 +380,7 @@
         <button type="button" class="icon" id="btn-prev" aria-label="上一首">⏮</button>
         <button type="button" class="icon play" id="btn-play" aria-label="播放">▶</button>
         <button type="button" class="icon" id="btn-next" aria-label="下一首">⏭</button>
+        <button type="button" class="icon stop" id="btn-stop" aria-label="停止" title="停止播放并关闭实时捕捉">■</button>
         <input type="range" id="seek" min="0" max="1000" value="0" aria-label="进度" />
         <span class="time" id="time">0:00 / 0:00</span>
       </div>
@@ -416,7 +423,7 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <script src="{{ url_for('static', filename='js/face-draw.js') }}?v=73"></script>
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=73"></script>
+  <script src="{{ url_for('static', filename='js/face-draw.js') }}?v=79"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=79"></script>
 </body>
 </html>

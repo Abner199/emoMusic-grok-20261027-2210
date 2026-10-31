@@ -2367,3 +2367,104 @@ body:not(.is-block-fill) .stage-body[data-view="live"] .viewport {
 .trail-chip { width: auto; padding: 10px; border-radius: 20px; }
 .board-nav { gap: 12px; margin-bottom: 14px; }
 .trail-panel, .recs { margin-bottom: 14px; }
+
+/* ===== v74 情绪概率整行 · 坐标并排 ===== */
+.emo-hero { grid-template-columns: auto minmax(0, 1fr); }
+.emo-readout {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) clamp(150px, 34%, 210px);
+  gap: 10px;
+}
+.prob-card header { flex-wrap: nowrap; white-space: nowrap; }
+.prob-bars { gap: 6px; margin-top: 10px; }
+.prob-row { grid-template-columns: 2.6em minmax(60px, 1fr) 3.4em; font-size: 12.5px; }
+.prob-track { height: 10px; }
+.va-card { padding: 8px; gap: 4px; }
+.va-card small { white-space: normal; text-align: center; justify-content: center; font-size: 11px; }
+@container result (max-width: 460px) {
+  .emo-readout { grid-template-columns: 1fr; }
+  .va-card #va-map { max-width: 200px; }
+}
+
+/* ===== v74 声学分析：可折叠 / 缩小 ===== */
+.viz-head { align-items: center; }
+.viz-tools { display: inline-flex; gap: 4px; margin-left: auto; }
+.viz-tools button {
+  border: 1px solid color-mix(in srgb, var(--viz) 30%, var(--line));
+  background: transparent;
+  color: color-mix(in srgb, var(--viz) 80%, #fff);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font: 600 11px/1.6 var(--font-ui);
+  cursor: pointer;
+}
+.viz-tools button.is-on { background: color-mix(in srgb, var(--viz) 70%, transparent); color: #111; }
+.audio-viz[data-size="compact"] .viz-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.audio-viz[data-size="compact"] canvas { height: 46px !important; }
+.audio-viz[data-size="compact"] .viz-readout,
+.audio-viz[data-size="compact"] .viz-note,
+.audio-viz[data-size="compact"] .viz-head > span { display: none; }
+.audio-viz[data-size="fold"] { gap: 0; padding: 6px 12px; }
+.audio-viz[data-size="fold"] > :not(.viz-head) { display: none; }
+.audio-viz[data-size="fold"] .viz-head > span { display: none; }
+.player:has(.audio-viz[data-size="fold"]) .nowplay { display: none; }
+body:has(#player:not([hidden]):not(.is-viz-off) .audio-viz[data-size="fold"]) { padding-bottom: 150px; }
+body:has(#player:not([hidden]):not(.is-viz-off) .audio-viz[data-size="compact"]) { padding-bottom: 330px; }
+
+/* ===== v74 人脸窗：只留实时视频与人脸检测，干净无外框 ===== */
+html:has(body.face-page), body.face-page {
+  margin: 0;
+  padding: 0 !important;
+  overflow: hidden;
+  background: #000;
+}
+body.face-page .grain,
+body.face-page .glow,
+body.face-page .face-top,
+body.face-page .face-mode-bar,
+body.face-page .cam-dock,
+body.face-page #face-hint,
+body.face-page .vote-bar { display: none !important; }
+body.face-page .face-shell { margin: 0; padding: 0; border: 0; background: none; box-shadow: none; }
+body.face-page .face-viewport,
+body.face-page .viewport {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+  min-height: 0;
+  max-height: none;
+  aspect-ratio: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none !important;
+  background: #000;
+}
+body.face-page .viewport::after { display: none; }
+body.face-page .guide { display: none; }
+body.face-page .cam-empty { background: #000; }
+.player:has(.audio-viz[data-size="compact"]) .nowplay { grid-template-columns: 64px 1fr; min-height: 0; }
+.player:has(.audio-viz[data-size="compact"]) #nowplay-cover { width: 64px; height: 64px; }
+.player:has(.audio-viz[data-size="compact"]) .lyric-prev,
+.player:has(.audio-viz[data-size="compact"]) .lyric-next { display: none; }
+/* 人脸窗：去掉左上角情绪文字，画面铺满无间隙 */
+body.face-page .live-emo-hud { display: none !important; }
+body.face-page .face-viewport .cam-layer { inset: 0; border-radius: 0; }
+body.face-page #cam { object-fit: cover; }
+/* 顶栏实时检测开关 */
+.detect-btn { gap: 7px; }
+.detect-btn i {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+.detect-btn.is-on {
+  border-color: color-mix(in srgb, #3ddc84 60%, transparent);
+  color: #7af0ae;
+  background: color-mix(in srgb, #3ddc84 12%, transparent);
+}
+.detect-btn.is-on i { background: #3ddc84; animation: detect-pulse 1.4s ease-out infinite; }
+@keyframes detect-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(61, 220, 132, 0.6); }
+  100% { box-shadow: 0 0 0 8px rgba(61, 220, 132, 0); }
+}
+.icon.stop { font-size: 13px; }

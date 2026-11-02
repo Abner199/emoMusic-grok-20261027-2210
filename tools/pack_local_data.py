@@ -24,7 +24,20 @@ def _rel(path: Path) -> str:
     return path.relative_to(ROOT).as_posix()
 
 
+def _export_latest() -> None:
+    """足迹主存储在 data/history.db（SQLite），打包前先导出成最新的 history.json。"""
+    sys.path.insert(0, str(ROOT))
+    try:
+        from backend import history
+
+        history.ensure_persistent()
+        history.export_json(True)
+    except Exception as exc:  # 数据库不可用时照样打包现有 JSON
+        print(f"导出最新足迹失败，按现有 history.json 打包：{exc}")
+
+
 def pack(out: Path) -> Path:
+    _export_latest()
     out = out.resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
     n_json = 0
@@ -70,6 +83,12 @@ def unpack(src: Path) -> None:
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(zf.read(name))
             n += 1
+    # 删掉本机旧的 SQLite 足迹库，下次启动按刚解出的 history.json 重建
+    for name in ("history.db", "history.db-wal", "history.db-shm"):
+        try:
+            (DATA / name).unlink()
+        except OSError:
+            pass
     print(f"已解到项目根目录 {ROOT}，写入 {n} 个文件")
     print("请重新打开页面或刷新「历史」，足迹应能看到。")
 

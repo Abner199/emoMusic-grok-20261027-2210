@@ -117,3 +117,94 @@ body.is-projector .live-emo-hud span { font-size: 20px; }
 .switch-reason[data-emo="neutral"] { --emo: var(--neutral); }
 body.is-projector .switch-reason { font-size: 22px; padding: 14px 26px; }
 body.is-projector .switch-reason b { font-size: 32px; }
+
+/* ===== 多人远场：人数分布 ===== */
+.crowd-stats {
+  position: absolute; top: 12px; right: 12px; z-index: 6; min-width: 190px; padding: 10px 12px; border-radius: 16px;
+  background: rgba(10, 12, 18, 0.62); border: 1px solid rgba(255, 255, 255, 0.16); backdrop-filter: blur(12px);
+  color: #fff; font-size: 12px; pointer-events: none;
+}
+.crowd-stats[hidden] { display: none; }
+.crowd-stats header { margin-bottom: 6px; font-size: 13px; }
+.crowd-stats header b { font-family: var(--font-en); font-size: 22px; margin-right: 2px; }
+.crowd-stats header em { font-style: normal; font-weight: 700; color: var(--emo, #fff); }
+.crowd-stats .cs-row { display: grid; grid-template-columns: 18px 1fr 34px; gap: 6px; align-items: center; margin-top: 4px; --emo: var(--accent); }
+.crowd-stats .cs-row span { font-weight: 700; color: var(--emo); }
+.crowd-stats .cs-row i { height: 8px; border-radius: 999px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.crowd-stats .cs-row s { display: block; height: 100%; background: var(--emo); border-radius: inherit; transition: width 300ms ease; }
+.crowd-stats .cs-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.crowd-stats [data-emo="happy"] { --emo: var(--happy); }
+.crowd-stats [data-emo="angry"] { --emo: var(--angry); }
+.crowd-stats [data-emo="sad"] { --emo: var(--sad); }
+.crowd-stats [data-emo="fear"] { --emo: var(--fear); }
+.crowd-stats [data-emo="surprise"] { --emo: var(--surprise); }
+.crowd-stats [data-emo="disgust"] { --emo: var(--disgust); }
+.crowd-stats [data-emo="neutral"] { --emo: var(--neutral); }
+body.is-projector .crowd-stats { font-size: 16px; min-width: 260px; }
+body.is-projector .crowd-stats header b { font-size: 34px; }
+
+/* 多人远场不需要"把脸放进椭圆"的引导圈 */
+body[data-face-mode="crowd"] .guide { display: none; }
+
+/* 情绪轨迹：当前点外圈呼吸光 */
+.va-now-glow { fill: none; stroke: var(--accent); stroke-width: 1.5; opacity: 0.5; transform-box: fill-box; transform-origin: center; animation: va-breathe 1.6s ease-out infinite; }
+@keyframes va-breathe { 0% { transform: scale(0.6); opacity: 0.7; } 100% { transform: scale(1.6); opacity: 0; } }
+
+/* ===== 课堂情绪统计看板 ===== */
+.stats-dialog {
+  width: min(880px, 94vw); border-radius: 24px; padding: 22px 24px; color: rgba(255, 255, 255, 0.88);
+  background: linear-gradient(135deg, rgba(30, 32, 46, 0.9), rgba(16, 18, 28, 0.84));
+  border: 1px solid rgba(255, 255, 255, 0.16); backdrop-filter: blur(24px) saturate(150%);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+.stats-dialog::backdrop { background: rgba(5, 6, 10, 0.55); backdrop-filter: blur(6px); }
+.st-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.st-head h2 { margin: 0; font-family: var(--font-display); font-size: 24px; color: #fff; }
+.st-range { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); }
+.st-range button { border: 0; border-radius: 999px; padding: 5px 14px; background: transparent; color: rgba(255, 255, 255, 0.7); font: 600 13px var(--font-ui); cursor: pointer; }
+.st-range button.is-on { background: linear-gradient(135deg, #ffd27a, #ff8ad8); color: #1a1208; }
+.st-body h3 { margin: 18px 0 8px; font-size: 14px; color: #fff; letter-spacing: 0.06em; }
+.st-empty { color: rgba(255, 255, 255, 0.6); padding: 30px 0; text-align: center; }
+.st-hero { display: grid; grid-template-columns: 220px 1fr; gap: 20px; align-items: center; margin-top: 14px; }
+.st-donut-wrap { position: relative; width: 200px; height: 200px; }
+.st-donut { width: 100%; height: 100%; }
+.st-donut circle { transition: stroke-dasharray 600ms ease; }
+.st-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.st-center b { font-family: var(--font-display); font-size: 48px; line-height: 1; }
+.st-center span { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
+.st-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.st-kpis > div { padding: 12px 14px; border-radius: 16px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.10); }
+.st-kpis b { display: block; font-family: var(--font-en); font-size: 26px; color: #fff; }
+.st-kpis span { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
+.st-kpis .st-span { grid-column: 1 / -1; font-size: 12px; color: rgba(255, 255, 255, 0.55); background: none; border: 0; padding: 0 4px; }
+.st-rows { display: grid; gap: 8px; }
+.st-row { display: grid; grid-template-columns: 26px 3em 1fr 3.4em 7em; gap: 10px; align-items: center; font-size: 13px; }
+.st-row b { color: var(--emo); font-family: var(--font-display); font-size: 18px; }
+.st-row i { height: 12px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.st-row s { display: block; height: 100%; background: var(--emo); border-radius: inherit; }
+.st-row em { font-style: normal; text-align: right; font-variant-numeric: tabular-nums; }
+.st-row small { color: rgba(255, 255, 255, 0.55); }
+.st-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; }
+.st-songs { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.st-songs li { display: grid; grid-template-columns: 22px 1fr auto auto; gap: 8px; align-items: baseline; font-size: 13px; padding: 6px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); }
+.st-songs li b { color: #ffd27a; }
+.st-songs li small { color: rgba(255, 255, 255, 0.5); }
+.st-songs li em { font-style: normal; color: rgba(255, 255, 255, 0.7); }
+.st-sources { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.st-sources span { padding: 5px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); font-size: 13px; }
+.st-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+@media (max-width: 720px) { .st-hero, .st-grid { grid-template-columns: 1fr; } .st-kpis { grid-template-columns: 1fr 1fr; } }
+@media print {
+  body > *:not(#stats-dialog) { display: none !important; }
+  .stats-dialog { position: static; box-shadow: none; background: #fff; color: #111; border: 0; width: 100%; }
+  .stats-dialog * { color: #111 !important; }
+  .st-foot, .st-range { display: none; }
+}
+
+/* 场地选择与指南链接 */
+.venue-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.venue-bar[hidden] { display: none; }
+.guide-link { font-size: 12.5px; color: var(--accent); text-decoration: none; }
+.guide-link:hover { text-decoration: underline; }
+.cam-guide-link { font-size: 13px; color: var(--accent); text-decoration: none; opacity: 0.9; }
+.cam-guide-link:hover { text-decoration: underline; }

@@ -18,6 +18,7 @@ from typing import Optional
 
 import cv2
 import contextvars
+import queue
 
 import numpy as np
 
@@ -232,6 +233,10 @@ def landmark_cues(landmarks5, box=None) -> dict:
 
 # 课堂演示模式（网页设置里打开，按请求传入）：孩子扮表情时惊讶张口不够大、平静时忍不住笑
 DEMO_MODE: contextvars.ContextVar[bool] = contextvars.ContextVar("emotune_demo_mode", default=False)
+# 多人远场的场地（网页设置，按请求传入）：small 小教室只整图检测；medium 中会堂分块放大 1.3；large 大会堂分块放大 1.6
+VENUE: contextvars.ContextVar[str] = contextvars.ContextVar("emotune_venue", default="large")
+VENUE_UP = {"medium": (1.3, 1.15), "large": (1.6, 1.3)}  # (精检放大倍数, 实时框放大倍数)
+
 # 实时识别快速模式（来源带 -live 时由 app 设置）：单次前向 + HSEmotion 单裁剪，不做 4 向 TTA
 FAST_MODE: contextvars.ContextVar[bool] = contextvars.ContextVar("emotune_fast_mode", default=False)
 # 由 static/demo 21 张示例量出：喜悦嘴宽 0.89–0.91，平静 0.84–0.87；惊讶张口 0.58–0.69，平静 ≤0.47
@@ -446,15 +451,18 @@ class EmotionRecognizer:
         if not fer_path.exists():
             raise FileNotFoundError(f"缺少表情识别模型: {fer_path}")
 
-        # 给 OpenCV 留 2 线程，其余给 onnxruntime，避免 CPU 抢核卡顿
+        # OpenCV 线程按核数给（最多 8）：大会堂分块检测和批量分类都靠它；HSEmotion 另有自己的线程
         try:
-            cv2.setNumThreads(2)
+            cv2.setNumThreads(int(min(8, max(2, (os.cpu_count() or 4) // 2))))
         except Exception:
             pass
         # Windows 下 OpenCV C++ 读盘不支持中文路径，改为内存加载
         yunet_bytes = yunet_path.read_bytes()
         yunet_buf = np.frombuffer(yunet_bytes, dtype=np.uint8).copy()
         tracker_buf = np.frombuffer(yunet_bytes, dtype=np.uint8).copy()
+        self._yunet_bytes = yunet_bytes
+        self._tile_pool: "queue.Queue | None" = None
+        self._tile_exec = None
         fer_buf = np.frombuffer(fer_path.read_bytes(), dtype=np.uint8).copy()
         self.detector = cv2.FaceDetectorYN.create(
             "onnx",
@@ -565,8 +573,121 @@ class EmotionRecognizer:
         _, faces = self.detector.detect(img)
         return self._parse_yunet(faces, inv, score_min, min_side)
 
+    def _nms_faces(self, faces: list[dict], iou: float = 0.35) -> list[dict]:
+        """跨块合并：同一张脸在重叠区被检到多次时，留分数高、框完整的那个。"""
+        faces = sorted(faces, key=lambda f: float(f.get("score") or 0.0), reverse=True)
+        kept: list[dict] = []
+        for f in faces:
+            fb = f["box"]
+            dup = False
+            for k in kept:
+                kb = k["box"]
+                if self._box_iou(fb, kb) > iou:
+                    dup = True
+                    break
+                # 小框几乎整个落在大框里（块边缘切到半张脸）也算重复
+                ix = max(0.0, min(fb[0] + fb[2], kb[0] + kb[2]) - max(fb[0], kb[0]))
+                iy = max(0.0, min(fb[1] + fb[3], kb[1] + kb[3]) - max(fb[1], kb[1]))
+                small = min(fb[2] * fb[3], kb[2] * kb[3]) or 1.0
+                if ix * iy / small > 0.7:
+                    dup = True
+                    break
+            if not dup:
+                kept.append(f)
+        return kept
+
+    def _tile_detector(self):
+        """分块检测用的 YuNet 池：4 个检测器并行跑不同小块（OpenCV 推理时释放 GIL）。"""
+        if self._tile_pool is None:
+            pool: queue.Queue = queue.Queue()
+            for _ in range(4):
+                buf = np.frombuffer(self._yunet_bytes, dtype=np.uint8).copy()
+                pool.put(cv2.FaceDetectorYN.create("onnx", buf, np.array([], dtype=np.uint8), (640, 640), 0.4, 0.3, 500))
+            self._tile_pool = pool
+            from concurrent.futures import ThreadPoolExecutor
+
+            self._tile_exec = ThreadPoolExecutor(max_workers=4, thread_name_prefix="yunet-tile")
+        return self._tile_pool
+
+    def _detect_one_tile(self, crop: np.ndarray, x0: int, y0: int, up: float, score: float, score_min: float, min_face: float) -> list[dict]:
+        pool = self._tile_detector()
+        det = pool.get()
+        try:
+            det.setScoreThreshold(float(score))
+            det.setNMSThreshold(0.3)
+            if hasattr(det, "setTopK"):
+                det.setTopK(500)
+            det.setInputSize((crop.shape[1], crop.shape[0]))
+            _, raw = det.detect(crop)
+        finally:
+            pool.put(det)
+        out = []
+        for f in self._parse_yunet(raw, 1.0 / up, score_min, min_face):
+            f["box"][0] += x0
+            f["box"][1] += y0
+            if f.get("landmarks"):
+                f["landmarks"] = [[px + x0, py + y0] for px, py in f["landmarks"]]
+            out.append(f)
+        return out
+
+    def _detect_tiled(self, image_bgr: np.ndarray, net, cfg: dict, score_min: float, min_face: float, fast: bool = False) -> list[dict]:
+        """大会堂：整图缩小检一遍抓近处大脸，再按原分辨率切成重叠小块、放大后逐块检，抓后排小脸。"""
+        h, w = image_bgr.shape[:2]
+        long_side = max(h, w)
+        found: list[dict] = []
+        # 1) 整图（缩到 1280）——近排大脸
+        img, scale = resize_for_detect(image_bgr, 1280)
+        ih, iw = img.shape[:2]
+        net.setInputSize((iw, ih))
+        _, raw = net.detect(img)
+        found += self._parse_yunet(raw, 1.0 / scale if scale else 1.0, score_min, min_face)
+        # 2) 原分辨率分块——远排小脸。小教室不分块；4K 原图本身脸已够大，少放大；1080p 按场地放大
+        venue = VENUE.get()
+        if venue == "small":
+            merged = self._nms_faces(found)
+            merged.sort(key=lambda f: (f["area"], f["score"]), reverse=True)
+            return merged[: int(cfg.get("face_max") or FACE_MAX)]
+        up_full, up_fast = VENUE_UP.get(venue, VENUE_UP["large"])
+        if fast:
+            up = 1.0 if long_side >= 2500 else up_fast
+        else:
+            up = 1.0 if long_side >= 3000 else up_full
+        tile = int(cfg.get("tile") or 640)
+        if long_side >= 3000:
+            tile = int(tile * 1.5)
+        step = max(64, int(tile * (1.0 - float(cfg.get("tile_overlap") or 0.25))))
+        if long_side > tile * 1.15 or up > 1.0:
+            ys = list(range(0, max(1, h - tile), step)) + [max(0, h - tile)]
+            xs = list(range(0, max(1, w - tile), step)) + [max(0, w - tile)]
+            jobs = []
+            for y0 in sorted(set(ys)):
+                for x0 in sorted(set(xs)):
+                    crop = image_bgr[y0 : y0 + tile, x0 : x0 + tile]
+                    ch, cw = crop.shape[:2]
+                    if ch < 24 or cw < 24:
+                        continue
+                    if up != 1.0:
+                        crop = cv2.resize(crop, (int(cw * up), int(ch * up)), interpolation=cv2.INTER_LINEAR)
+                    jobs.append((crop, x0, y0))
+            score = 0.38 if fast else float(cfg.get("score") or 0.42)
+            self._tile_detector()
+            futures = [self._tile_exec.submit(self._detect_one_tile, c, x0, y0, up, score, score_min, min_face) for c, x0, y0 in jobs]
+            for fut in futures:
+                found.extend(fut.result())
+        merged = self._nms_faces(found)
+        merged.sort(key=lambda f: (f["area"], f["score"]), reverse=True)
+        return merged[: int(cfg.get("face_max") or FACE_MAX)]
+
     def detect_faces(self, image_bgr: np.ndarray, mode: str | None = None) -> list[dict]:
         cfg = face_mode_cfg(mode)
+        if cfg.get("tile"):
+            self._apply_detector(cfg)
+            faces = self._detect_tiled(
+                image_bgr, self.detector, cfg,
+                float(cfg.get("score_min") or FACE_SCORE_MIN), float(cfg.get("min_face") or 10),
+            )
+            if faces:
+                return faces
         img, scale = resize_for_detect(image_bgr, int(cfg.get("max_side") or MAX_IMAGE_SIDE))
         inv = 1.0 / scale if scale else 1.0
         score_min = float(cfg.get("score_min") or FACE_SCORE_MIN)
@@ -842,20 +963,22 @@ class EmotionRecognizer:
             aligned = crop_face(image_bgr, face["box"])
         if precision and FAST_MODE.get():
             aligned = self._auto_light(aligned)
-            p = _softmax(self._mbf_logits(aligned), temperature=1.55)
-            if self.hse is not None:
+            hse_job = None
+            if self.hse is not None:  # HSEmotion 与 MobileFaceNet 同时跑（两边推理都释放 GIL）
                 crop = self._auto_light(crop_face(image_bgr, face["box"], size=224, margin=0.28))
-                p_hse = self._hse_probs7(crop)
-                if p_hse is not None:
-                    p = self._fuse_probs(p, p_hse)
+                hse_job = self._side_pool().submit(self._hse_probs7, crop)
+            p = _softmax(self._mbf_logits(aligned), temperature=1.55)
+            p_hse = hse_job.result() if hse_job else None
+            if p_hse is not None:
+                p = self._fuse_probs(p, p_hse)
         elif precision:
             aligned = self._auto_light(aligned)
+            hse_job = self._side_pool().submit(self._hse_ensemble_probs, image_bgr, face) if self.hse is not None else None
             p_mbf = _softmax(self._mbf_tta_logits(aligned), temperature=1.55)
             p = p_mbf
-            if self.hse is not None:
-                p_hse = self._hse_ensemble_probs(image_bgr, face)
-                if p_hse is not None:
-                    p = self._fuse_probs(p_mbf, p_hse)
+            p_hse = hse_job.result() if hse_job else None
+            if p_hse is not None:
+                p = self._fuse_probs(p_mbf, p_hse)
             if face.get("landmarks"):
                 order = np.argsort(p)
                 margin = float(p[order[-1]] - p[order[-2]])
@@ -876,6 +999,48 @@ class EmotionRecognizer:
             if margin < 0.10:
                 emo["low_confidence"] = True
         return emo
+
+    def _side_pool(self):
+        """精检时让 HSEmotion 在旁路线程跑，和 MobileFaceNet 的 TTA 并行。"""
+        pool = getattr(self, "_side_exec", None)
+        if pool is None:
+            from concurrent.futures import ThreadPoolExecutor
+
+            pool = self._side_exec = ThreadPoolExecutor(max_workers=2, thread_name_prefix="hse-side")
+        return pool
+
+    def classify_faces_batch(self, image_bgr: np.ndarray, faces: list[dict]) -> list[dict]:
+        """多人远场：几十上百张脸拼成一批，MobileFaceNet 只前向一次；再逐张做几何校正。"""
+        if not faces:
+            return []
+        blobs = []
+        for face in faces:
+            if face.get("landmarks"):
+                aligned = align_face(image_bgr, np.array(face["landmarks"], dtype=np.float64))
+            else:
+                aligned = crop_face(image_bgr, face["box"])
+            blobs.append(self._fer_blob(aligned))
+        out = []
+        for i in range(0, len(blobs), 64):
+            batch = np.concatenate(blobs[i : i + 64], axis=0)
+            self.net.setInput(batch, "data")
+            try:
+                logits = self.net.forward("label")
+            except cv2.error:
+                logits = self.net.forward()
+            logits = np.asarray(logits, dtype=np.float64).reshape(batch.shape[0], -1)
+            for row in logits:
+                out.append(self._pad7(row))
+        results = []
+        for face, logit in zip(faces, out):
+            p = _softmax(logit)
+            metrics = {}
+            if face.get("landmarks"):
+                metrics = landmark_cues(face["landmarks"], face.get("box")).get("metrics") or {}
+            p = calibrate_live_vec(p, metrics)
+            scores = self._scores_from_vec(p)
+            results.append(self._emotion_from_id(scores[0]["id"], scores))
+        return results
 
     def _ema_track_vec(self, face: dict, p: np.ndarray) -> np.ndarray:
         """实时框跨帧平滑七类概率，减少摄像头微抖换标签。"""
@@ -953,6 +1118,9 @@ class EmotionRecognizer:
         return out
 
     def _majority(self, classified: list[dict]) -> tuple[dict, dict, dict]:
+        voters = [f for f in classified if not (f.get("emotion") or {}).get("pending")]
+        if voters:
+            classified = voters
         counts: dict[str, int] = defaultdict(int)
         areas: dict[str, float] = defaultdict(float)
         probs: dict[str, float] = defaultdict(float)
@@ -1050,9 +1218,14 @@ class EmotionRecognizer:
                 "face_mode": cfg["id"],
             }
         classified = []
-        limit = int(cfg.get("face_max") or FACE_MAX)
+        limit = int(cfg.get("classify_max") or cfg.get("face_max") or FACE_MAX)
         precision = cfg["id"] == "solo"
-        for face in faces[:limit]:
+        extra_boxes = [list(map(float, f["box"])) for f in faces[limit:]]
+        crowd_big = len(faces) > 12
+        if crowd_big:  # 几十上百张脸：不逐张二次检测，批量分类
+            for face, emo in zip(faces[:limit], self.classify_faces_batch(image_bgr, faces[:limit])):
+                classified.append({**face, "emotion": emo})
+        for face in ([] if crowd_big else faces[:limit]):
             chosen = face
             refined = self._refine_face(image_bgr, face)
             if precision:
@@ -1097,6 +1270,8 @@ class EmotionRecognizer:
                 "crop": crop,
             },
             "faces": boxes,
+            "extra_boxes": [[round(v, 1) for v in b] for b in extra_boxes],
+            "face_total": len(classified) + len(extra_boxes),
             "face_count": len(classified),
             "face_mode": cfg["id"],
             "elapsed_ms": round(elapsed, 1),
@@ -1106,6 +1281,12 @@ class EmotionRecognizer:
         """实时框：缩小图、单次 YuNet，不做精检双阈值 / Haar / 远景放大。"""
         cfg = face_mode_cfg(mode)
         solo = cfg["id"] == "solo"
+        if not solo and cfg.get("tile"):
+            self.tracker.setScoreThreshold(0.38)
+            self.tracker.setNMSThreshold(0.3)
+            if hasattr(self.tracker, "setTopK"):
+                self.tracker.setTopK(int(cfg.get("top_k") or 500))
+            return self._detect_tiled(image_bgr, self.tracker, cfg, 0.30, float(cfg.get("min_face") or 10), fast=True)
         max_side = 640 if solo else 800
         img, scale = resize_for_detect(image_bgr, max_side)
         inv = 1.0 / scale if scale else 1.0
@@ -1126,6 +1307,19 @@ class EmotionRecognizer:
         results.sort(key=lambda f: (f["area"], f["score"]), reverse=True)
         limit = 1 if solo else int(cfg.get("face_max") or FACE_MAX)
         return self._prune_faces(results, min_face)[:limit]
+
+    def _reuse_track_match(self, face: dict) -> Optional[dict]:
+        """人多时只按位置匹配上一帧同一张脸（不退回“唯一一张脸”的兜底）。"""
+        best = None
+        best_iou = 0.3
+        for prev in self._last_track_faces:
+            v = self._box_iou(face["box"], prev.get("box") or [0, 0, 0, 0])
+            if v > best_iou:
+                best_iou = v
+                best = prev
+        if best and best.get("emotion") and not best["emotion"].get("pending"):
+            return dict(best["emotion"])
+        return None
 
     def _reuse_track_emotion(self, face: dict) -> Optional[dict]:
         best = None
@@ -1180,8 +1374,22 @@ class EmotionRecognizer:
         try:
             now = time.perf_counter()
             ema = self._track_ema
-            for face in faces:
-                reuse = self._reuse_track_emotion(face)
+            crowd_many = len(faces) > 12
+            fresh: dict[int, dict] = {}
+            if crowd_many and got_fer:
+                # 人多时：沿用上一帧同位置的结果，没有结果的新脸每帧最多批量分类 40 张
+                need = [i for i, f in enumerate(faces) if self._reuse_track_match(f) is None][:40]
+                for i, emo in zip(need, self.classify_faces_batch(image_bgr, [faces[i] for i in need])):
+                    fresh[i] = emo
+            for idx, face in enumerate(faces):
+                reuse = self._reuse_track_emotion(face) if not crowd_many else self._reuse_track_match(face)
+                if crowd_many:
+                    emo = fresh.get(idx) or reuse
+                    if emo is None:
+                        meta = EMOTIONS["neutral"]
+                        emo = {"id": "neutral", "zh": meta["zh"], "name": meta["name"], "prob": 0.0, "color": meta["color"], "pending": True}
+                    classified.append({**face, "emotion": emo})
+                    continue
                 stable = False
                 if reuse and ema is not None:
                     iou_e = self._box_iou(face["box"], ema.get("box") or [0, 0, 0, 0])
@@ -1239,6 +1447,7 @@ class EmotionRecognizer:
                 "crop": "",
             },
             "faces": boxes,
+            "face_total": len(classified),
             "face_count": len(classified),
             "face_mode": cfg["id"],
             "elapsed_ms": round(elapsed, 1),

@@ -307,6 +307,11 @@
     if (changed && persist && !silent) {
       /* 主页会 toast；弹窗只改说明 */
     }
+    if (changed && cameraReady()) {
+      // 换检测方式就按新分辨率重开（多人远场要 4K）
+      stopCamera();
+      startCamera();
+    }
   }
 
   function cameraReady() {
@@ -354,10 +359,14 @@
     const picked = ($("#cam-select") && $("#cam-select").value) || state.camId || "";
     const byId = (id, extra) => ({ video: Object.assign({ deviceId: { exact: id } }, extra || {}), audio: false });
     const attempts = [];
+    // 多人远场且场地为大会堂时优先 4K：后排小脸靠分辨率
+    const crowd = state.faceMode === "crowd" && (localStorage.getItem("emotune-venue") || "large") === "large";
     if (picked) {
+      if (crowd) attempts.push(byId(picked, { width: { ideal: 3840 }, height: { ideal: 2160 } }));
       attempts.push(byId(picked, { width: { ideal: 1920 }, height: { ideal: 1080 } }));
       attempts.push(byId(picked));
     }
+    if (crowd) attempts.push({ video: { width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false });
     attempts.push(
       { video: { facingMode: { ideal: "user" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
       { video: { facingMode: { ideal: "user" } }, audio: false },
@@ -705,6 +714,7 @@
       "X-Emo-Online": state.onlineOn ? "1" : "0",
       "X-Emo-Face-Mode": state.faceMode || "solo",
       "X-Emo-Demo": localStorage.getItem("emotune-demo-mode") === "1" ? "1" : "0",
+      "X-Emo-Venue": localStorage.getItem("emotune-venue") || "large",
     };
     if (extra) Object.assign(headers, extra);
     return headers;
@@ -721,7 +731,7 @@
         state.trackBusy = true;
         try {
           const crowd = state.faceMode === "crowd";
-          const blob = await captureBlob(crowd ? 0.78 : 0.8, crowd ? 800 : 640);
+          const blob = await captureBlob(0.8, crowd ? 1920 : 640);
           if (blob && state.trackOn) {
             const fd = new FormData();
             fd.append("image", blob, "track.jpg");
@@ -760,7 +770,8 @@
       const burst = [];
       const n = source === "camera-live" ? 1 : 3;
       for (let i = 0; i < n; i += 1) {
-        const blob = await captureBlob(0.94, source === "camera-live" ? 720 : 1280);
+        const crowdCap = state.faceMode === "crowd";
+        const blob = await captureBlob(crowdCap ? 0.88 : 0.94, crowdCap ? 3840 : source === "camera-live" ? 720 : 1280);
         if (blob) burst.push(blob);
         if (i < n - 1) await new Promise((r) => setTimeout(r, 80));
       }

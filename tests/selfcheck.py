@@ -488,6 +488,43 @@ def main() -> int:
         and all(w in pose_html for w in ("嘴巴张大", "别笑", "Unsplash")),
     )
     fails += not _ok("首页有表情教程入口", 'href="/pose"' in home)
+    cam_page = client.get("/camera")
+    cam_html = cam_page.get_data(as_text=True)
+    fails += not _ok(
+        "摄像头使用指南页",
+        cam_page.status_code == 200 and all(w in cam_html for w in ("先选检测方式", "大会堂", "3840", "15–20", "最优使用流程")),
+    )
+    fails += not _ok("三处入口指向摄像头指南", home.count('href="/camera"') >= 2 and 'href="/camera"' in client.get("/guide").get_data(as_text=True))
+    # 大会堂多人远场：示例脸缩小拼成 1080p“礼堂”（6 排 × 10 人，越后排越小，最小约 25 像素），
+    # 改造前最多只能出 16 张；现在按原分辨率分块检测，要求精检和实时框都至少 50 张
+    try:
+        import cv2 as _cv2
+        from backend.emotion import get_recognizer as _get_rec
+
+        _faces = [
+            _cv2.imdecode(np.fromfile(str(p), np.uint8), 1)
+            for p in sorted(DEMO_DIR.glob("*.jpg"))
+            if p.stem[:2].isdigit()
+        ]
+        hall = np.full((1080, 1920, 3), 40, np.uint8)
+        k = 0
+        for y, side in ((40, 180), (240, 150), (410, 120), (550, 96), (670, 80), (770, 64)):
+            gap = 1920 // 10
+            for i in range(10):
+                f = _cv2.resize(_faces[k % len(_faces)], (side, side))
+                k += 1
+                x = i * gap + (gap - side) // 2
+                hall[y : y + side, x : x + side] = f
+        _rec = _get_rec()
+        full = _rec.predict_bgr(hall, want_crop=False, mode="crowd")
+        track = _rec.predict_track_bgr(hall, mode="crowd")
+        fails += not _ok(
+            "大会堂多人远场检出 ≥50 张（合成礼堂 60 人）",
+            (full.get("face_total") or 0) >= 50 and (track.get("face_total") or 0) >= 50,
+            f"精检 {full.get('face_total')} · 实时 {track.get('face_total')}",
+        )
+    except Exception as exc:
+        fails += not _ok("大会堂多人远场检出", False, str(exc))
     emo = client.get("/api/emotions").get_json()
     fails += not _ok("GET /api/emotions 七类", emo and len(emo.get("emotions", [])) == 7)
 

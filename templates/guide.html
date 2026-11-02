@@ -44,6 +44,7 @@
     </a>
     <p class="tagline">从一张脸，到一首刚好的歌</p>
     <nav class="top-actions">
+      <a class="ghost" href="/camera">摄像头指南</a>
       <a class="ghost" href="/pose">表情教程</a>
       <a class="primary" href="/">回到识曲</a>
     </nav>
@@ -56,6 +57,8 @@
       <a href="#pipeline"><svg><use href="#i-flow"/></svg>系统总览</a>
       <a href="#face"><svg><use href="#i-face"/></svg>人脸情绪识别</a>
       <a href="#live"><svg><use href="#i-target"/></svg>实时判断与换歌</a>
+      <a href="/camera"><svg><use href="#i-target"/></svg>摄像头与场地</a>
+      <a href="#crowd"><svg><use href="#i-face"/></svg>大会堂多人检测</a>
       <a href="#classroom"><svg><use href="#i-class"/></svg>课堂演示模式</a>
       <a href="#music"><svg><use href="#i-wave"/></svg>旋律曲调情绪</a>
       <a href="#recommend"><svg><use href="#i-disc"/></svg>推荐策略与理论</a>
@@ -85,6 +88,7 @@
           <div class="doc-card"><h3>实时检测</h3><p>摄像头一开即实时检测并自动连播；顶栏「实时检测 开/关」随时停。<strong>识别此刻</strong>截一帧精检并播放。</p></div>
           <div class="doc-card"><h3>播放控制</h3><p>暂停后不会被自动恢复；<strong>■ 停止</strong>同时停歌并关实时检测。播放器可展开、迷你一行或折叠。</p></div>
           <div class="doc-card"><h3>足迹与历史</h3><p>每次情绪变化都留下人脸、图标、时间和听过的歌，实时出现在「情绪足迹」，点选可回放。</p></div>
+          <div class="doc-card"><h3>统计与主题</h3><p>顶栏「统计」看本节课各情绪占比、时长与热门歌曲，可导出图片 / PDF；设置里 10 个主题（新增极光、曜石香槟、冰川、敦煌）与「随情绪变色」。</p></div>
         </div>
       </section>
 
@@ -168,6 +172,19 @@
         </div>
       </section>
 
+      <section class="doc-sec glass" id="crowd">
+        <h2><svg class="doc-ic"><use href="#i-face"/></svg>大会堂多人检测 <small>多人远场 · 原分辨率分块</small></h2>
+        <p>千人会堂里后排学生的脸在 1080p 画面中只有 10–20 像素，整张图缩小后再检测会全部丢失。多人远场改为两遍检测：</p>
+        <math display="block"><mrow><mi>𝓕</mi><mo>=</mo><mtext>NMS</mtext><mo>(</mo><mspace width="0.2em"/><msub><mi>𝓓</mi><mtext>整图↓1280</mtext></msub><mo>∪</mo><munder><mo>⋃</mo><mrow><mi>k</mi></mrow></munder><msub><mi>𝓓</mi><mrow><mtext>块</mtext><mi>k</mi><mo>↑</mo><mn>1.6</mn></mrow></msub><mspace width="0.2em"/><mo>)</mo></mrow></math>
+        <p class="doc-note">整图缩小检一遍抓近排大脸；再按原分辨率切成 640 像素、重叠 25% 的小块，每块放大 1.6 倍（4K 原图不放大）由 4 个 YuNet 并行检测，最后跨块去重。实测公开礼堂照片 15 张 → 119 张，合成礼堂 60 人全部检出。几十上百张脸批量送 MobileFaceNet 一次分类（最多 150 张），实时框每帧只给新出现的脸分类、其余沿用上次结果；画面上每张脸一个小彩框，右上角显示各情绪人数，歌曲按多数票。</p>
+        <div class="doc-grid">
+          <div class="doc-card"><h3>摄像头</h3><p>用 4K 或至少 1080p 摄像头，多人远场会自动请求最高分辨率。</p></div>
+          <div class="doc-card"><h3>位置</h3><p>放在讲台中间、略高于观众头顶，正对观众；不要太偏，侧脸难认。</p></div>
+          <div class="doc-card"><h3>灯光</h3><p>观众席保持一定亮度，全黑只开舞台灯时脸会糊。</p></div>
+          <div class="doc-card"><h3>大屏</h3><p>配合「投影」模式，学生能实时看到自己被框出、人数分布在变化。</p></div>
+        </div>
+      </section>
+
       <section class="doc-sec glass" id="classroom">
         <h2><svg class="doc-ic"><use href="#i-class"/></svg>课堂演示模式</h2>
         <p>学生扮表情时惊讶往往张口不够大、扮平静又忍不住笑。设置 → 检测方式里打开后，几何规则按示例照片量出的边界调整：</p>
@@ -248,6 +265,7 @@
           <div class="doc-card"><h3>在线热歌</h3><p>先用本地歌立刻开播，在线热歌（苹果音乐、网易云、QQ、酷狗等）在后台补进歌单；网络差也不耽误换歌。</p></div>
           <div class="doc-card"><h3>换电脑</h3><p>整个文件夹复制过去，双击 <code>tools\setup-conda.bat</code> 再双击 <code>run.bat</code>。情绪足迹在 <code>data/history.json</code> 与 <code>static/history/</code>，随文件夹带走。详见 <code>换电脑-整夹复制即用.md</code>。</p></div>
           <div class="doc-card"><h3>隐私</h3><p>模型是本机 ONNX，图像不上传；字体、歌词对齐结果都在本地，断网可用。</p></div>
+          <div class="doc-card"><h3>足迹存储</h3><p>主存储 <code>data/history.db</code>（SQLite，新增一条约 0.4 ms），并每 10 分钟导出 <code>data/history.json</code> 备份；新电脑只有 JSON 时首次启动自动重建。</p></div>
         </div>
       </section>
 

@@ -69,6 +69,7 @@
     voiceOn: localStorage.getItem("emotune-voice") !== "0",
     skipPlayed: localStorage.getItem("emotune-skip-played") !== "0",
     demoMode: localStorage.getItem("emotune-demo-mode") === "1",
+    venue: ["small", "medium", "large"].includes(localStorage.getItem("emotune-venue")) ? localStorage.getItem("emotune-venue") : "large",
     // 1–6：在前 N 首代表曲之间轮换；0：歌单里全部歌曲轮流当第一首
     pinRotate: (() => {
       const raw = localStorage.getItem("emotune-pin-rotate");
@@ -116,7 +117,16 @@
     zhVoice: null,
   };
   const lyricCache = new Map();
-  const THEMES = ["night", "paper", "ink", "rouge", "celadon", "moon"];
+  const THEMES = ["night", "paper", "ink", "rouge", "celadon", "moon", "aurora", "obsidian", "glacier", "dunhuang"];
+
+  /* 随情绪变色：整页主色与背景光晕跟着识别到的情绪缓慢过渡，叠加在任何主题上 */
+  function setMoodTint(on) {
+    state.moodTint = !!on;
+    document.documentElement.classList.toggle("mood-tint", state.moodTint);
+    localStorage.setItem("emotune-mood-tint", state.moodTint ? "1" : "0");
+    const tog = $("#mood-tint-toggle");
+    if (tog) tog.checked = state.moodTint;
+  }
   const LANDMARK_MODES = ["overlay", "mesh", "off"];
   if (!LANDMARK_MODES.includes(state.landmarkMode)) state.landmarkMode = "overlay";
   {
@@ -352,7 +362,7 @@
       return;
     }
     if (!state.recognizing && frameReady()) {
-      captureBlob(0.9, 720).then((blob) => {
+      liveFrameBlob().then((blob) => {
         if (blob && state.live) recognize(blob, liveSource());
       });
     }
@@ -514,6 +524,7 @@
       "X-Emo-Face-Mode": state.faceMode || "solo",
       "X-Emo-Fresh": state.skipPlayed ? "1" : "0",
       "X-Emo-Demo": state.demoMode ? "1" : "0",
+      "X-Emo-Venue": state.venue || "large",
     };
     if (extra) Object.assign(headers, extra);
     return headers;
@@ -534,6 +545,9 @@
     const meta = FACE_MODE_META[id] || FACE_MODE_META.solo;
     const changed = state.faceMode !== meta.id;
     state.faceMode = meta.id;
+    document.body.dataset.faceMode = state.faceMode;
+    const venueBar = $("#venue-bar");
+    if (venueBar) venueBar.hidden = state.faceMode !== "crowd";
     localStorage.setItem("emotune-face-mode", state.faceMode);
     paintFaceMode();
     if (persist) {
@@ -550,8 +564,15 @@
         /* ignore */
       }
     }
+    if (changed && state.mode === "camera" && cameraReady() && !state.facePopActive) {
+      const wasLive = state.live;
+      stopCameraStream();
+      startCamera().then((ok) => {
+        if (ok && wasLive && !state.live) autoLive();
+      });
+    }
     if (changed && persist) {
-      toast(meta.id === "crowd" ? "已切到多人远场：可检多张脸和远景小脸。" : "已切到单人精检：只认近景主脸。");
+      toast(meta.id === "crowd" ? "已切到多人远场：按原分辨率分块检测，大会堂几百人也能框出来。" : "已切到单人精检：只认近景主脸。");
     }
   }
 
@@ -654,6 +675,47 @@
     v.controls = false;
   }
 
+  /* 单人实时识别：人脸框刚跟踪到脸（0.6 秒内）就只裁脸部一块送去，不传整帧、服务器也不必整图找脸 */
+  function captureRoiBlob() {
+    const t = state.lastTrackFace;
+    const v = ui.cam;
+    if (!t || Date.now() - t.at > 600 || !v || !v.videoWidth) return null;
+    const sx = v.videoWidth / t.size[0];
+    const sy = v.videoHeight / t.size[1];
+    let [x, y, w, h] = t.box;
+    x *= sx; y *= sy; w *= sx; h *= sy;
+    const side = Math.max(w, h) * 2.0; // 留足额头和下巴，给对齐与 HSEmotion 裁剪余量
+    const cx = x + w / 2;
+    const cy = y + h * 0.55;
+    const x0 = Math.max(0, Math.round(cx - side / 2));
+    const y0 = Math.max(0, Math.round(cy - side / 2));
+    const sw = Math.min(v.videoWidth - x0, Math.round(side));
+    const sh = Math.min(v.videoHeight - y0, Math.round(side));
+    if (sw < 48 || sh < 48) return null;
+    const out = Math.min(480, Math.max(sw, sh));
+    const c = state.roiCanvas || (state.roiCanvas = document.createElement("canvas"));
+    c.width = Math.round((sw / Math.max(sw, sh)) * out);
+    c.height = Math.round((sh / Math.max(sw, sh)) * out);
+    c.getContext("2d").drawImage(v, x0, y0, sw, sh, 0, 0, c.width, c.height);
+    return new Promise((resolve) => c.toBlob((b) => resolve(b), "image/jpeg", 0.92));
+  }
+
+  async function liveFrameBlob() {
+    if (state.faceMode !== "crowd" && state.mode === "camera") {
+      const roi = captureRoiBlob();
+      if (roi) {
+        const b = await roi;
+        if (b) return b;
+      }
+    }
+    return captureBlob(...liveCapture());
+  }
+
+  /* 实时识别截帧尺寸：多人远场要原分辨率（最高 4K）才看得清后排小脸；单人 720 就够 */
+  function liveCapture() {
+    return state.faceMode === "crowd" ? [0.88, 3840] : [0.9, 720];
+  }
+
   function captureBlob(quality = 0.92, maxSide = 1280) {
     const video = ui.cam;
     if (!video.videoWidth) return Promise.resolve(null);
@@ -713,10 +775,13 @@
     const picked = ($("#cam-select") && $("#cam-select").value) || state.camId || "";
     const byId = (id, extra) => ({ video: Object.assign({ deviceId: { exact: id } }, extra || {}), audio: false });
     const attempts = [];
+    const crowd = state.faceMode === "crowd" && state.venue === "large";
     if (picked) {
+      if (crowd) attempts.push(byId(picked, { width: { ideal: 3840 }, height: { ideal: 2160 } }));
       attempts.push(byId(picked, { width: { ideal: 1920 }, height: { ideal: 1080 } }));
       attempts.push(byId(picked));
     }
+    if (crowd) attempts.push({ video: { width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false });
     attempts.push(
       { video: { facingMode: { ideal: "user" }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false },
       { video: { facingMode: { ideal: "user" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
@@ -1373,7 +1438,7 @@
     const now = Date.now();
     if (now - (state.liveKickAt || 0) < TRACK_KICK_GAP_MS) return;
     state.liveKickAt = now;
-    const blob = await captureBlob(0.9, 720);
+    const blob = await liveFrameBlob();
     if (blob && state.live) recognize(blob, liveSource());
   }
 
@@ -1401,8 +1466,34 @@
     }
   }
 
+  /* 多人远场：右上角显示检测到多少张脸、各情绪多少人 */
+  function paintCrowdStats(data) {
+    const box = $("#crowd-stats");
+    if (!box) return;
+    const vote = (data && data.ok && data.vote) || null;
+    const total = Number((data && (data.face_total || data.face_count)) || 0);
+    if (state.faceMode !== "crowd" || !vote || total < 2) {
+      box.hidden = true;
+      return;
+    }
+    const counts = vote.counts || {};
+    const voted = Object.values(counts).reduce((a, b) => a + Number(b || 0), 0) || 1;
+    const rows = EMO_ORDER.filter((id) => counts[id]).sort((a, b) => counts[b] - counts[a]);
+    box.hidden = false;
+    box.innerHTML =
+      `<header><b>${total}</b> 张脸 · 多数：<em data-emo="${esc(vote.id)}">${esc((EMO_META[vote.id] || {}).name || "")}</em></header>` +
+      rows
+        .map((id) => {
+          const n = Number(counts[id]);
+          const pct = Math.round((n / voted) * 100);
+          return `<div class="cs-row" data-emo="${id}"><span>${EMO_META[id].zh}</span><i><s style="width:${pct}%"></s></i><b>${n}</b></div>`;
+        })
+        .join("");
+  }
+
   function updateLiveHud(data) {
     noteTrackEmotion(data);
+    paintCrowdStats(data);
     if (data && data.ok && data.emotion) {
       state.uiEmoAt = Date.now(); // 时间线：有人脸就持续记录
       const sc = (data.emotion.scores || []).find((x) => x && x.id === state.uiEmo);
@@ -1479,6 +1570,7 @@
       box: item.box ? { x: item.box.x, y: item.box.y, w: item.box.w, h: item.box.h } : item.box,
       primary: item.primary,
       emo: item.emo,
+      pending: item.pending,
       points: (item.points || []).map(clonePoint),
       cues: item.cues || [],
     };
@@ -1521,6 +1613,7 @@
           box: lerpBox(old.box, item.box, t),
           primary: item.primary,
           emo: item.emo,
+          pending: item.pending,
           points: lerpPoints(old.points, item.points, t),
           cues: item.cues || [],
         };
@@ -1612,9 +1705,14 @@
         box,
         primary: !!f.primary,
         emo: f.emotion || data.emotion || {},
+        pending: !!(f.emotion && f.emotion.pending),
         points,
         cues: f.cues || [],
       });
+    });
+    (data.extra_boxes || []).forEach((b) => {
+      const box = mapBoxToCanvas(b, imageSize, !!state.mirror);
+      if (box) mapped.push({ box, primary: false, emo: {}, pending: true, points: [], cues: [] });
     });
     return mapped;
   }
@@ -1721,6 +1819,9 @@
 
   function drawFaceOverlay(data) {
     updateLiveHud(data);
+    if (data && data.ok && data.face && data.face.box && data.face.image_size) {
+      state.lastTrackFace = { box: data.face.box.slice(), size: data.face.image_size.slice(), at: Date.now() };
+    }
     if (!data || !data.ok) {
       state.overlayMiss += 1;
       if (state.overlayMiss >= 4) {
@@ -1771,6 +1872,11 @@
     const tick = async () => {
       state.trackTimer = 0;
       if (!state.trackOn) return;
+      if (document.hidden) {
+        state.trackPausedHidden = true;
+        stopTrackLoop();
+        return;
+      }
       const liveOk = isLiveMode() && frameReady() && !(ui.empty && !ui.empty.hidden);
       if (!liveOk) {
         clearFaceOverlay();
@@ -1783,7 +1889,7 @@
         state.trackBusy = true;
         try {
           const crowd = state.faceMode === "crowd";
-          const blob = await captureBlob(crowd ? 0.78 : 0.8, crowd ? 800 : 640);
+          const blob = await captureBlob(crowd ? 0.8 : 0.8, crowd ? 1920 : 640);
           if (blob && state.trackOn && isLiveMode()) {
             const fd = new FormData();
             fd.append("image", blob, "track.jpg");
@@ -2335,7 +2441,7 @@
     const id = fresh && state.uiEmo && EMO_META[state.uiEmo] && state.uiEmo !== "idle" ? state.uiEmo : "";
     list.push({ t: now, id, p: id ? Number(state.uiEmoProb || 0) : 0 });
     while (list.length && now - list[0].t > TIMELINE_MS + 1000) list.shift();
-    drawTimeline();
+    if (!document.hidden) drawTimeline();
   }
 
   function drawTimeline() {
@@ -2757,6 +2863,24 @@
     });
     const nowVa = w > 0.04 ? [wv / w, wa / w] : THAYER_VA[currentId] || [0, 0];
     const now = toXY(nowVa);
+    /* 情绪轨迹：记最近 30 秒在效价-唤醒平面上的位置，画成彗星拖尾（越旧越淡越细） */
+    const tNow = Date.now();
+    const trail = (state.vaTrail = (state.vaTrail || []).filter((p) => tNow - p.t < 30000));
+    const lastPt = trail[trail.length - 1];
+    if (!lastPt || Math.hypot(lastPt.x - now[0], lastPt.y - now[1]) > 0.6 || tNow - lastPt.t > 1000) {
+      trail.push({ x: now[0], y: now[1], t: tNow, c: (EMO_META[currentId] || EMO_META.neutral).color });
+    }
+    let comet = "";
+    for (let i = 1; i < trail.length; i += 1) {
+      const a = trail[i - 1];
+      const b = trail[i];
+      const age = 1 - (tNow - b.t) / 30000;
+      comet += `<line x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}" stroke="${b.c}" stroke-width="${(0.8 + age * 3.4).toFixed(2)}" stroke-linecap="round" opacity="${(0.12 + age * 0.75).toFixed(2)}"/>`;
+    }
+    trail.slice(-12).forEach((p, k, arr) => {
+      const age = (k + 1) / arr.length;
+      comet += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${(1 + age * 2.2).toFixed(2)}" fill="${p.c}" opacity="${(0.15 + age * 0.6).toFixed(2)}"/>`;
+    });
     const dots = EMO_ORDER.map((id) => {
       const va = THAYER_VA[id];
       const meta = EMO_META[id];
@@ -2773,7 +2897,9 @@
       <text class="va-label" x="14" y="104">V−</text>
       <text class="va-label" x="116" y="210">A−</text>
       ${dots}
+      <g class="va-trail">${comet}</g>
       <circle class="va-now" cx="${now[0].toFixed(1)}" cy="${now[1].toFixed(1)}" r="7.4"/>
+      <circle class="va-now-glow" cx="${now[0].toFixed(1)}" cy="${now[1].toFixed(1)}" r="12"/>
     `;
   }
 
@@ -3043,6 +3169,7 @@
 
   function drawVizFrame() {
     state.vizRaf = 0;
+    if (document.hidden) return;
     const analyser = state.analyser;
     const wave = $("#viz-wave");
     const freq = $("#viz-freq");
@@ -3800,7 +3927,7 @@
       if (!ok) return;
       const burst = [];
       for (let i = 0; i < 4; i += 1) {
-        const blob = await captureBlob(0.94, 1280);
+        const blob = await captureBlob(0.94, state.faceMode === "crowd" ? 3840 : 1280);
         if (blob) burst.push(blob);
         if (i < 3) await new Promise((r) => setTimeout(r, 70));
       }
@@ -4225,7 +4352,43 @@
     });
   }
 
+  /* 多人远场的场地：小教室只整图检测（最快）；中会堂分块；大会堂分块放大并优先 4K */
+  const VENUE_HINT = {
+    small: "约 50 人内：整图检测就能看清每张脸，最快；1080p 摄像头即可。",
+    medium: "约 50–300 人：分块检测，1080p 即可，有 4K 更好。",
+    large: "300–1000 人以上：按原分辨率分块放大检测，优先请求 4K 摄像头。",
+  };
+  function setVenue(id, persist) {
+    const next = ["small", "medium", "large"].includes(id) ? id : "large";
+    const changed = state.venue !== next;
+    state.venue = next;
+    localStorage.setItem("emotune-venue", next);
+    document.querySelectorAll("#venue-picks [data-venue]").forEach((b) => {
+      const on = b.dataset.venue === next;
+      b.classList.toggle("is-on", on);
+      b.setAttribute("aria-checked", on ? "true" : "false");
+    });
+    const hint = $("#venue-hint");
+    if (hint) hint.textContent = VENUE_HINT[next];
+    const bar = $("#venue-bar");
+    if (bar) bar.hidden = state.faceMode !== "crowd";
+    // 换到 / 换出大会堂时按新分辨率重开摄像头
+    if (changed && persist && state.faceMode === "crowd" && state.mode === "camera" && cameraReady() && !state.facePopActive) {
+      const wasLive = state.live;
+      stopCameraStream();
+      startCamera().then((ok) => {
+        if (ok && wasLive && !state.live) autoLive();
+      });
+    }
+    if (changed && persist) toast(`场地：${{ small: "小教室", medium: "中会堂", large: "大会堂" }[next]}。${VENUE_HINT[next]}`);
+  }
+
   function bind() {
+    document.querySelectorAll("#venue-picks [data-venue]").forEach((b) => b.addEventListener("click", () => setVenue(b.dataset.venue, true)));
+    setVenue(state.venue, false);
+    const moodTog = $("#mood-tint-toggle");
+    if (moodTog) moodTog.addEventListener("change", () => setMoodTint(moodTog.checked));
+    setMoodTint(localStorage.getItem("emotune-mood-tint") === "1");
     const demoTog = $("#demo-mode-toggle");
     if (demoTog) {
       demoTog.checked = state.demoMode;
@@ -4268,6 +4431,16 @@
     if (unfold) unfold.addEventListener("click", () => setPlayerMode("mini"));
     setPlayerMode(localStorage.getItem("emotune-player-mode") || "mini");
     setInterval(sampleTimeline, 250);
+    /* 页面切到后台：暂停人脸框、实时识别、声学动画与时间线绘制，省电省 CPU；切回来自动恢复，音乐照常播 */
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) return;
+      if (state.trackPausedHidden) {
+        state.trackPausedHidden = false;
+        if (isLiveMode() && frameReady()) startTrackLoop();
+      }
+      if (!audio.paused) startVizLoop();
+      drawTimeline();
+    });
     const projBtn = $("#btn-projector");
     if (projBtn) projBtn.addEventListener("click", () => setProjector(!state.projector));
     document.addEventListener("fullscreenchange", () => {
@@ -4351,8 +4524,8 @@
         toast("实时捕捉已打开：平静、喜悦、悲伤会稳住再换歌；惊讶、恐惧、愤怒、厌恶认到就锁反差歌，松开也不会马上换。");
         if (state.liveTimer) clearInterval(state.liveTimer); // 重复打开时不叠两个计时器
         state.liveTimer = setInterval(async () => {
-          if (!isLiveMode() || state.recognizing || !frameReady()) return;
-          const blob = await captureBlob(0.9, 720);
+          if (document.hidden || !isLiveMode() || state.recognizing || !frameReady()) return;
+          const blob = await liveFrameBlob();
           if (blob) recognize(blob, liveSource());
         }, LIVE_TICK_MS);
       } else stopLive();

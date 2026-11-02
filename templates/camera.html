@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="night">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>当AI遇见旋律：摄像头与检测方式使用指南</title>
+  <meta name="description" content="选哪种检测方式、摄像头分辨率怎么选、怎么摆放，以及讲座时的最优使用流程。" />
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}?v=50" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/fonts.css') }}?v=1" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=101" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/doc.css') }}?v=2" />
+</head>
+<body class="doc-page camera-page">
+  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="ig" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd27a"/><stop offset="1" stop-color="#ff7ac8"/></linearGradient>
+    </defs>
+    <symbol id="i-mode" viewBox="0 0 24 24"><circle cx="8" cy="9" r="3"/><circle cx="16" cy="9" r="3"/><path d="M2.5 19c.8-3 3-4.5 5.5-4.5S12.7 16 13.5 19M10.5 19c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5"/></symbol>
+    <symbol id="i-res" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="13" rx="2"/><path d="M7 9.5v4M7 11.5h3M10 9.5v4M14 9.5v4h1.5a2 2 0 0 0 0-4z"/></symbol>
+    <symbol id="i-cam" viewBox="0 0 24 24"><rect x="2.5" y="7" width="14" height="10" rx="2"/><path d="M16.5 10.5l5-3v9l-5-3"/><circle cx="9.5" cy="12" r="2.5"/></symbol>
+    <symbol id="i-flow" viewBox="0 0 24 24"><circle cx="5" cy="6" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="18" r="2.2"/><path d="M6.8 7.4l3.4 3.2M13.8 13.4l3.4 3.2"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24"><path d="M12 3l9.5 17h-19z"/><path d="M12 10v4.5M12 17.5v.5"/></symbol>
+  </svg>
+
+  <header class="top doc-top">
+    <a class="brand" href="/" aria-label="当AI遇见旋律首页">
+      <span class="mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="30" height="30" fill="none">
+          <rect x="2.2" y="2.2" width="43.6" height="43.6" rx="11.5" stroke="currentColor" stroke-width="1.35" opacity=".5"/>
+          <path d="M15.2 13.2c-1.3 7.6-1.2 15.2 3 20.4 2.1 2.6 6.3 3.8 8.6 1.7 4.3-3.9 5.5-12.1 4.5-22.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+          <ellipse cx="24" cy="25.2" rx="3.7" ry="4.4" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+      </span>
+      <span class="brand-text"><strong>当AI遇见旋律</strong><em>摄像头指南</em></span>
+    </a>
+    <p class="tagline">选对检测方式和摄像头，效果差别很大</p>
+    <nav class="top-actions">
+      <a class="ghost" href="/guide">说明</a>
+      <a class="ghost" href="/pose">表情教程</a>
+      <a class="primary" href="/">回到识曲</a>
+    </nav>
+  </header>
+
+  <div class="doc-layout">
+    <nav class="doc-toc glass" aria-label="本页目录">
+      <p class="doc-toc-title">目录</p>
+      <a href="#mode"><svg><use href="#i-mode"/></svg>先选检测方式</a>
+      <a href="#res"><svg><use href="#i-res"/></svg>分辨率怎么选</a>
+      <a href="#place"><svg><use href="#i-cam"/></svg>摆放与环境</a>
+      <a href="#flow"><svg><use href="#i-flow"/></svg>讲座最优流程</a>
+      <a href="#trouble"><svg><use href="#i-warn"/></svg>常见问题</a>
+    </nav>
+
+    <main class="doc-main">
+      <section class="doc-hero glass">
+        <p class="doc-kicker">当AI遇见旋律 · 摄像头与检测方式使用指南</p>
+        <h1>一个人、一间教室、一座千人会堂，<span class="grad">用法各不相同</span></h1>
+        <p>检测方式和场地都在「设置 → 检测方式」里。一个人用「单人精检」；多人入镜用「多人远场」，再按场地选小教室 / 中会堂 / 大会堂。浏览器地址必须是 <code>http://127.0.0.1:5000</code>，摄像头才能打开。</p>
+        <div class="doc-stats">
+          <div><b>15–20 px</b><span>脸至少这么高才能稳定检出</span></div>
+          <div><b>40 px+</b><span>才能可靠判断表情</span></div>
+          <div><b>4K</b><span>大会堂推荐分辨率</span></div>
+          <div><b>500</b><span>多人远场最多检测张数</span></div>
+        </div>
+      </section>
+
+      <section class="doc-sec glass" id="mode">
+        <h2><svg class="doc-ic"><use href="#i-mode"/></svg>1. 先选检测方式</h2>
+        <div class="guide-table-wrap">
+          <table class="guide-table cam-table">
+            <thead><tr><th>场景</th><th>选哪个</th><th>原因</th></tr></thead>
+            <tbody>
+              <tr><td>一个人对着电脑、自拍、学生上台演示</td><td><b>单人精检</b></td><td>只认最近最大的一张脸，最准、最快</td></tr>
+              <tr><td>小教室、合影、多人同时入镜</td><td><b>多人远场</b> · 场地「小教室」</td><td>同时框出多张脸，歌曲按人数最多的情绪来；整图检测，最快</td></tr>
+              <tr><td>中等会堂，约 50–300 人</td><td><b>多人远场</b> · 场地「中会堂」</td><td>分块检测，远处的脸也能框出</td></tr>
+              <tr><td>讲座时摄像头对着台下观众（300–1000 人以上）</td><td><b>多人远场</b> · 场地「大会堂」</td><td>按原分辨率分块放大检测，并优先请求 4K，后排小脸也能检出</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="doc-note">学生上台扮表情时，可再打开「课堂演示模式」：惊讶嘴张得不太大也能认出，抿嘴微笑算平静。<a href="/pose">七类表情怎么做 →</a></p>
+      </section>
+
+      <section class="doc-sec glass" id="res">
+        <h2><svg class="doc-ic"><use href="#i-res"/></svg>2. 摄像头分辨率怎么选</h2>
+        <div class="guide-table-wrap">
+          <table class="guide-table cam-table">
+            <thead><tr><th>用途</th><th>推荐分辨率</th><th>说明</th></tr></thead>
+            <tbody>
+              <tr><td>单人精检</td><td>720p 即可，1080p 更好</td><td>脸离镜头近，分辨率够用；系统实时识别按 720 像素处理，又快又准</td></tr>
+              <tr><td>小教室多人（约 50 人内）</td><td>1080p</td><td>整图检测就能看清每张脸</td></tr>
+              <tr><td>中会堂（约 50–300 人）</td><td>1080p，有 4K 更好</td><td>分成几块检测</td></tr>
+              <tr><td>大会堂（300–1000 人以上）</td><td><b>4K（3840×2160）</b></td><td>后排学生的脸在 1080p 画面里可能只有几像素，任何算法都检不出；4K 才有足够细节</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cam-rule">
+          <svg viewBox="0 0 520 120" role="img" aria-label="脸部像素高度与检测效果">
+            <defs><linearGradient id="rg" x1="0" x2="1"><stop offset="0" stop-color="#ff6b6b"/><stop offset="0.35" stop-color="#ffd27a"/><stop offset="1" stop-color="#34e0b4"/></linearGradient></defs>
+            <rect x="20" y="48" width="480" height="14" rx="7" fill="url(#rg)"/>
+            <g font-size="12" fill="#fff" text-anchor="middle">
+              <line x1="20" y1="40" x2="20" y2="70" stroke="#fff" opacity=".5"/><text x="20" y="88">0</text>
+              <line x1="140" y1="40" x2="140" y2="70" stroke="#fff"/><text x="140" y="88">15–20 px</text><text x="140" y="30" fill="#ffd27a">开始能检出</text>
+              <line x1="300" y1="40" x2="300" y2="70" stroke="#fff"/><text x="300" y="88">40 px</text><text x="300" y="30" fill="#34e0b4">表情可靠</text>
+              <text x="440" y="88">80 px+（近景）</text><text x="440" y="30" fill="#8ab4ff">单人精检最佳</text>
+            </g>
+          </svg>
+          <p class="doc-note">经验规则：一张脸在画面里至少要有 15–20 像素高才能稳定检出，40 像素以上才能可靠判断表情。</p>
+        </div>
+      </section>
+
+      <section class="doc-sec glass" id="place">
+        <h2><svg class="doc-ic"><use href="#i-cam"/></svg>3. 摆放与环境</h2>
+        <div class="doc-grid">
+          <div class="doc-card"><h3>单人</h3><p>摄像头和眼睛大致等高，脸占画面约 1/3；正面有光，不要背对窗户。</p></div>
+          <div class="doc-card"><h3>多人</h3><p>摄像头架高，放在讲台正前方，略向下对着观众席中部，让多数人正面入镜。</p></div>
+          <div class="doc-card"><h3>大会堂</h3><p>用 4K 广角或可变焦摄像头，尽量用三脚架固定；观众席灯光尽量打亮；讲座前先在空礼堂试拍一次，看后排能不能框出来。</p></div>
+          <div class="doc-card"><h3>浏览器</h3><p>地址必须是 <code>http://127.0.0.1:5000</code>（不要用局域网 IP），允许浏览器使用摄像头，关掉会议软件等占用摄像头的程序。</p></div>
+        </div>
+        <svg class="cam-scene" viewBox="0 0 760 210" role="img" aria-label="大会堂摄像头摆放示意：讲台正中、略高于观众头顶、正对观众席中部">
+          <defs><linearGradient id="beam" x1="0" x2="1"><stop offset="0" stop-color="#ffd27a" stop-opacity=".45"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></linearGradient></defs>
+          <rect x="20" y="150" width="120" height="40" rx="8" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.25)"/>
+          <text x="80" y="176" fill="#fff" font-size="13" text-anchor="middle">讲台</text>
+          <line x1="80" y1="150" x2="80" y2="74" stroke="#ffd27a" stroke-width="2"/>
+          <rect x="62" y="58" width="36" height="20" rx="5" fill="#ffd27a"/><circle cx="80" cy="68" r="5" fill="#1a1208"/>
+          <text x="80" y="46" fill="#ffd27a" font-size="12" text-anchor="middle">4K 摄像头 · 三脚架</text>
+          <path d="M98 68 L740 40 L740 200 L98 72 Z" fill="url(#beam)"/>
+          <g fill="rgba(138,180,255,0.75)">
+            <circle cx="260" cy="165" r="9"/><circle cx="290" cy="165" r="9"/><circle cx="320" cy="165" r="9"/>
+            <circle cx="380" cy="150" r="8"/><circle cx="406" cy="150" r="8"/><circle cx="432" cy="150" r="8"/><circle cx="458" cy="150" r="8"/>
+            <circle cx="520" cy="134" r="7"/><circle cx="542" cy="134" r="7"/><circle cx="564" cy="134" r="7"/><circle cx="586" cy="134" r="7"/>
+            <circle cx="640" cy="118" r="6"/><circle cx="658" cy="118" r="6"/><circle cx="676" cy="118" r="6"/><circle cx="694" cy="118" r="6"/><circle cx="712" cy="118" r="6"/>
+          </g>
+          <text x="480" y="196" fill="rgba(255,255,255,0.7)" font-size="12" text-anchor="middle">观众席（越往后脸越小 → 需要更高分辨率）</text>
+        </svg>
+      </section>
+
+      <section class="doc-sec glass" id="flow">
+        <h2><svg class="doc-ic"><use href="#i-flow"/></svg>4. 最优使用流程（讲座）</h2>
+        <div class="doc-step"><span class="doc-n">1</span><div><h3>提前一天：试拍</h3><p>在空礼堂架好摄像头，设置里选「多人远场 · 大会堂」，开摄像头看后排位置能否框出（可请几位同学坐到后排）。框不出就把摄像头架高、调近焦距，或换 4K。</p></div></div>
+        <div class="doc-step"><span class="doc-n">2</span><div><h3>开场前 15 分钟：准备</h3><p>运行 <code>run.bat</code>，浏览器打开 <code>http://127.0.0.1:5000</code>；网络不稳时在设置里关掉「在线热歌」，只用本地 532 首；选好主题（投影推荐「冰川」或「极光」），可打开「随情绪变色」。</p></div></div>
+        <div class="doc-step"><span class="doc-n">3</span><div><h3>上大屏：投影模式</h3><p>点顶栏「投影」全屏；或点「弹出人脸窗」把只有画面和人脸框的窗口拖到第二块屏幕。学生能看到自己被框出、右上角人数分布在变。</p></div></div>
+        <div class="doc-step"><span class="doc-n">4</span><div><h3>互动：一起做表情</h3><p>请全场一起「笑开」「张嘴惊讶」「皱眉」——多数票变了，语音播报后立刻换歌，反差最明显。学生单独上台时切回「单人精检」，并打开「课堂演示模式」。</p></div></div>
+        <div class="doc-step"><span class="doc-n">5</span><div><h3>结束：留存统计</h3><p>顶栏「统计」→「本节课」，导出情绪统计图片或存为 PDF；情绪足迹自动保存在本机，换电脑整夹复制即可带走。</p></div></div>
+      </section>
+
+      <section class="doc-sec glass" id="trouble">
+        <h2><svg class="doc-ic"><use href="#i-warn"/></svg>常见问题</h2>
+        <div class="doc-grid">
+          <div class="doc-card"><h3>后排一张都框不出</h3><p>检查场地是否选了「大会堂」；用 4K 摄像头；摄像头再架高、正对观众席中部；观众席开灯。</p></div>
+          <div class="doc-card"><h3>大多判成平静</h3><p>观众多在侧脸看台上时正常。请大家看向摄像头并把表情做夸张些。</p></div>
+          <div class="doc-card"><h3>画面卡顿</h3><p>小场地选「小教室」（只整图检测最快）；关掉声学分析展开模式；电脑插电源、关掉其他大型软件。</p></div>
+          <div class="doc-card"><h3>摄像头打不开</h3><p>地址必须是 127.0.0.1；浏览器允许摄像头；在「设置 → 输入与捕捉」里换一个摄像头试试。</p></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      const links = [...document.querySelectorAll(".doc-toc a")];
+      const io = new IntersectionObserver((rows) => {
+        rows.forEach((r) => {
+          if (!r.isIntersecting) return;
+          links.forEach((a) => a.classList.toggle("is-on", a.getAttribute("href") === "#" + r.target.id));
+        });
+      }, { rootMargin: "-40% 0px -55% 0px" });
+      document.querySelectorAll(".doc-sec").forEach((s) => io.observe(s));
+    })();
+  </script>
+</body>
+</html>

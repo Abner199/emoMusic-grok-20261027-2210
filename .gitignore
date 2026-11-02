@@ -17,3 +17,7 @@ Thumbs.db
 *.log
 data/history.json.bak
 data/history.lock
+data/history.db-wal
+data/history.db-shm
+data/history.db
+data/server.log

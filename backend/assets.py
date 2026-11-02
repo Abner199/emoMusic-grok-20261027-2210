@@ -132,15 +132,6 @@ def _osc(freq: float, n: int, sr: int, kind: str, phase: float = 0.0) -> np.ndar
     return np.sin(ph).astype(np.float32)
 
 
-def _lowpass(x: np.ndarray, alpha: float = 0.18) -> np.ndarray:
-    y = np.zeros_like(x)
-    acc = 0.0
-    for i, v in enumerate(x):
-        acc = acc + alpha * (float(v) - acc)
-        y[i] = acc
-    return y
-
-
 def _place(buf: np.ndarray, start: int, wave: np.ndarray) -> None:
     if start >= len(buf):
         return

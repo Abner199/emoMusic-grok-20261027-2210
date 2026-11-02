@@ -10,13 +10,15 @@
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v=50" />
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}?v=50" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/fonts.css') }}?v=1" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=99" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=102" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/doc.css') }}?v=1" />
   <link rel="stylesheet" href="{{ url_for('static', filename='css/ui-extra.css') }}?v=4" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/themes.css') }}?v=1" />
 </head>
 <body data-emotion="idle">
   <div class="grain" aria-hidden="true"></div>
   <div class="glow" aria-hidden="true"></div>
+  <div class="mood-wash" aria-hidden="true"></div>
 
   <header class="top">
     <a class="brand" href="/" aria-label="当AI遇见旋律首页">
@@ -51,6 +53,7 @@
     </div>
     <nav class="top-actions">
       <button type="button" class="ghost" id="btn-settings" aria-controls="settings-panel" aria-expanded="false">设置</button>
+      <button type="button" class="ghost" id="btn-stats" title="课堂情绪统计：各情绪占比、时长、热门歌曲，可导出图片 / PDF">统计</button>
       <button type="button" class="ghost" id="btn-projector" title="投影大屏：全屏、大字、只留人脸、情绪和歌（Esc 退出）">投影</button>
       <a class="ghost" id="btn-pose" href="/pose" title="七类表情怎么做，系统才认得出">表情教程</a>
       <a class="ghost" id="btn-guide" href="/guide">说明</a>
@@ -75,6 +78,16 @@
           <button type="button" class="strat-pick" data-face-mode="crowd" role="radio" aria-checked="false" title="多张脸与远景小脸，按人数最多的情绪">多人远场</button>
         </div>
         <p class="strat-hint" id="face-mode-hint">只取画面里最大、最稳的一张脸，检测阈值更高，不扫远景杂脸。</p>
+        <a class="guide-link" href="/camera">怎么用最好 →</a>
+      </div>
+      <div class="venue-bar" id="venue-bar">
+        <span class="strat-label">场地</span>
+        <div class="strat-picks" id="venue-picks" role="radiogroup" aria-label="多人远场的场地">
+          <button type="button" class="strat-pick" data-venue="small" role="radio" aria-checked="false" title="约 50 人内：整图检测，最快">小教室</button>
+          <button type="button" class="strat-pick" data-venue="medium" role="radio" aria-checked="false" title="约 50–300 人：分块检测">中会堂</button>
+          <button type="button" class="strat-pick is-on" data-venue="large" role="radio" aria-checked="true" title="300–1000 人以上：原分辨率分块放大检测，优先 4K 摄像头">大会堂</button>
+        </div>
+        <p class="strat-hint" id="venue-hint">300–1000 人以上：按原分辨率分块放大检测，优先请求 4K 摄像头。</p>
       </div>
       <div class="demo-mode">
         <label class="switch">
@@ -198,7 +211,15 @@
         <button type="button" class="theme-pick" data-theme="rouge" title="朱砂" aria-label="朱砂"><i></i>朱砂</button>
         <button type="button" class="theme-pick" data-theme="celadon" title="青瓷" aria-label="青瓷"><i></i>青瓷</button>
         <button type="button" class="theme-pick" data-theme="moon" title="月白" aria-label="月白"><i></i>月白</button>
+        <button type="button" class="theme-pick" data-theme="aurora" title="极光：流动极光 + 毛玻璃" aria-label="极光"><i></i>极光</button>
+        <button type="button" class="theme-pick" data-theme="obsidian" title="曜石香槟：黑曜石 + 香槟金" aria-label="曜石香槟"><i></i>曜石香槟</button>
+        <button type="button" class="theme-pick" data-theme="glacier" title="冰川：浅色磨砂玻璃，适合白天和投影" aria-label="冰川"><i></i>冰川</button>
+        <button type="button" class="theme-pick" data-theme="dunhuang" title="敦煌：赭石、石青、朱砂、金箔" aria-label="敦煌"><i></i>敦煌</button>
       </div>
+      <label class="switch mood-switch" title="整页主色和背景光晕跟着识别到的情绪缓慢变化，课堂效果最好">
+        <input type="checkbox" id="mood-tint-toggle" />
+        <span>随情绪变色</span>
+      </label>
     </details>
   </aside>
 
@@ -228,8 +249,10 @@
             <button type="button" class="vd-btn" id="btn-zoom-in" title="放大" aria-label="放大">＋</button>
           </div>
           <div class="scan" id="scan" hidden></div>
+          <div class="crowd-stats" id="crowd-stats" hidden aria-live="polite"></div>
           <div class="cam-empty" id="cam-empty">
             <p id="cam-empty-text">点下面的按钮开启摄像头，把面部落在椭圆里</p>
+            <a class="cam-guide-link" href="/camera">摄像头怎么摆、选哪种检测方式？看使用指南 →</a>
             <button type="button" class="primary" id="btn-cam">开启摄像头</button>
             <button type="button" class="primary" id="btn-screen" hidden>分享屏幕</button>
             <label class="primary" id="btn-video" hidden for="video-input">选择视频</label>
@@ -445,6 +468,23 @@
     <div class="history-list" id="history-list"></div>
   </aside>
 
+  <dialog id="stats-dialog" class="stats-dialog">
+    <header class="st-head">
+      <h2>课堂情绪统计</h2>
+      <div class="st-range" role="group" aria-label="统计范围">
+        <button type="button" data-stats-range="session" class="is-on">本节课</button>
+        <button type="button" data-stats-range="today">今天</button>
+        <button type="button" data-stats-range="all">全部</button>
+      </div>
+    </header>
+    <div id="stats-body" class="st-body"></div>
+    <footer class="st-foot">
+      <button type="button" class="ghost" id="btn-stats-png">导出图片</button>
+      <button type="button" class="ghost" id="btn-stats-print">打印 / 存为 PDF</button>
+      <button type="button" class="primary" id="btn-stats-close">关闭</button>
+    </footer>
+  </dialog>
+
   <dialog id="about-dialog">
     <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><linearGradient id="aboutg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffd27a"/><stop offset="1" stop-color="#ff7ac8"/></linearGradient></defs></svg>
     <h2>关于当AI遇见旋律</h2>
@@ -464,7 +504,8 @@
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
   <script src="{{ url_for('static', filename='js/core.js') }}?v=1"></script>
-  <script src="{{ url_for('static', filename='js/face-draw.js') }}?v=99"></script>
-  <script src="{{ url_for('static', filename='js/app.js') }}?v=99"></script>
+  <script src="{{ url_for('static', filename='js/face-draw.js') }}?v=102"></script>
+  <script src="{{ url_for('static', filename='js/app.js') }}?v=102"></script>
+  <script src="{{ url_for('static', filename='js/stats.js') }}?v=1"></script>
 </body>
 </html>

@@ -131,21 +131,6 @@ def target_vector(emotion_id: str = "neutral") -> np.ndarray:
     return vec
 
 
-def _onset_flux(y: np.ndarray, sr: int, win: int = 1024, hop: int = 256) -> np.ndarray:
-    if len(y) < win * 2:
-        return np.array([0.0], dtype=np.float64)
-    window = np.hanning(win).astype(np.float32)
-    frames = []
-    for start in range(0, len(y) - win, hop):
-        spec = np.abs(np.fft.rfft(y[start : start + win] * window))
-        frames.append(spec)
-    mag = np.stack(frames)
-    diff = np.diff(mag, axis=0)
-    flux = np.maximum(0.0, diff).sum(axis=1)
-    flux = flux - flux.mean()
-    return flux.astype(np.float64)
-
-
 def _tempo_bpm(y: np.ndarray, sr: int) -> float:
     hop = 256
     win = 1024

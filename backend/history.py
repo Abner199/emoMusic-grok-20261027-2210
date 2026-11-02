@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""全局识别历史：写入项目 data/ 与 static/history/，复制整夹部署到另一台电脑也会带着。"""
+"""全局识别历史：主存储 data/history.db（SQLite），并定期导出 data/history.json；人脸截图在 static/history/。复制整夹部署到另一台电脑也会带着。"""
 from __future__ import annotations
 
 import base64
@@ -87,7 +87,6 @@ class _ProcessLock:
 
 
 _LOCK = _ProcessLock()
-_ALLOW_SHRINK = threading.local()
 
 _SONG_KEYS = (
     "id",
@@ -110,34 +109,19 @@ _SONG_KEYS = (
 )
 
 
-# 进程内缓存：文件大小和修改时间没变就不再解析十几 MB（每次识别原来要读写好几遍）
-_RAW_CACHE: dict = {}
 BACKUP_EVERY_S = 600.0
-
-
-def _file_sig():
-    try:
-        st = _PATH.stat()
-        return (st.st_mtime_ns, st.st_size)
-    except OSError:
-        return None
 
 
 def _load_raw() -> Any:
     if not _PATH.exists():
         return []
-    sig = _file_sig()
-    if sig and _RAW_CACHE.get("sig") == sig:
-        return _RAW_CACHE["raw"]
     last: Exception | None = None
     for attempt in range(6):
         try:
             text = _PATH.read_text(encoding="utf-8")
             if not text.strip():
                 raise ValueError("history.json 是空文件")
-            raw = json.loads(text)
-            _RAW_CACHE.update(sig=_file_sig(), raw=raw)
-            return raw
+            return json.loads(text)
         except Exception as exc:  # 可能正读到别的进程写了一半
             last = exc
             time.sleep(0.05 * (attempt + 1))
@@ -172,7 +156,6 @@ def _load_store() -> dict:
 
 def _save(payload: Any) -> None:
     _PATH.parent.mkdir(parents=True, exist_ok=True)
-    _RAW_CACHE.clear()  # 写成功后再按新文件登记
     text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
     tmp = _PATH.with_suffix(".tmp")
     last_err: Exception | None = None
@@ -193,40 +176,6 @@ def _save(payload: Any) -> None:
     except OSError:
         if last_err:
             raise last_err
-
-
-def _disk_count() -> int:
-    try:
-        raw = _load_raw()
-    except HistoryReadError:
-        return -1
-    if isinstance(raw, dict) and isinstance(raw.get("items"), list):
-        return len(raw["items"])
-    return len(_flatten(raw))
-
-
-def _save_store(store: dict) -> None:
-    new_n = len(store.get("items") or [])
-    old_n = _disk_count()
-    if not getattr(_ALLOW_SHRINK, "on", False):
-        if old_n < 0:
-            raise HistoryReadError("旧历史读不出来，这次不写，免得覆盖")
-        if new_n < old_n - 1:
-            raise HistoryReadError(f"历史条数将从 {old_n} 降到 {new_n}，拒绝覆盖")
-    if _PATH.exists():
-        try:
-            # 覆盖前留一份完整历史；最多每 10 分钟备份一次，不必每次都整份复制
-            if not _BACKUP.exists() or time.time() - _BACKUP.stat().st_mtime > BACKUP_EVERY_S:
-                shutil.copyfile(_PATH, _BACKUP)
-        except OSError:
-            pass
-    payload = {
-        "items": store.get("items") or [],
-        "played": store.get("played") if isinstance(store.get("played"), dict) else {},
-    }
-    _save(payload)
-    _RAW_CACHE.update(sig=_file_sig(), raw=payload)
-
 
 
 def _song_emotion(song: dict) -> str:
@@ -345,19 +294,6 @@ def _needs_persist(raw: Any) -> bool:
     return False
 
 
-def ensure_persistent() -> int:
-    """把旧会话格式和内嵌人脸截图落到 data/history.json 与 static/history/，复制项目即可带走。"""
-    with _LOCK:
-        raw = _load_raw()
-        store = _load_store()
-        store["items"] = [_migrate_item(dict(x)) for x in store["items"]]
-        store["items"].sort(key=lambda x: int(x.get("ts") or 0), reverse=True)
-        store["played"] = _decorate_played(store.get("played"))
-        if _needs_persist(raw):
-            _save_store(store)
-        return len(store["items"])
-
-
 def _decorate_played(played: dict | None) -> dict:
     out: dict[str, list[dict]] = {}
     for emo, rows in (played or {}).items():
@@ -375,91 +311,161 @@ def _decorate_played(played: dict | None) -> dict:
     return out
 
 
-_LIST_CACHE: dict = {}
+# ===== SQLite 主存储 =====
+# 每条足迹一行（id, ts, JSON），已播索引按情绪一行。新增一条只插入一行、记一首播过的歌只改一行，
+# 不再整份重写几十 MB 的 history.json；SQLite 自己处理多进程并发。
+# history.json 仍保留为导出快照（最多每 10 分钟一次、退出时一次），GitHub 备份、整夹复制、打包工具照常可用。
+_DB_PATH = _PATH.with_suffix(".db")
+EXPORT_EVERY_S = 600.0
+_DB_STATE: dict = {"conn": None, "ver": None, "items": None, "by_id": None, "played": None, "dirty": False, "exported": 0.0}
+
+
+def _db():
+    conn = _DB_STATE["conn"]
+    if conn is not None:
+        return conn
+    import sqlite3
+
+    _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(_DB_PATH), timeout=15, check_same_thread=False, isolation_level=None)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.execute("CREATE TABLE IF NOT EXISTS items (id TEXT PRIMARY KEY, ts INTEGER NOT NULL, body TEXT NOT NULL)")
+    conn.execute("CREATE INDEX IF NOT EXISTS items_ts ON items(ts DESC)")
+    conn.execute("CREATE TABLE IF NOT EXISTS played (emo TEXT PRIMARY KEY, body TEXT NOT NULL)")
+    if not conn.execute("SELECT 1 FROM items LIMIT 1").fetchone() and _PATH.exists():
+        _import_json(conn)  # 失败会抛错，下次再试；成功后才登记连接
+    _DB_STATE["conn"] = conn
+    _DB_STATE["exported"] = time.time()  # 启动后 10 分钟内不急着导出，新增足迹只写一行
+    return conn
+
+
+def _import_json(conn) -> None:
+    """第一次启动：把 history.json 全部导入 SQLite（一条不少）；读不出来就报错，绝不当成空历史。"""
+    raw = _load_raw()
+    store = _load_store()
+    items = [_migrate_item(dict(x)) for x in store["items"]]
+    played = _decorate_played(store.get("played"))
+    conn.execute("BEGIN")
+    try:
+        conn.executemany(
+            "INSERT OR REPLACE INTO items(id, ts, body) VALUES (?, ?, ?)",
+            [(str(it.get("id") or uuid.uuid4().hex[:12]), int(it.get("ts") or 0), json.dumps(it, ensure_ascii=False)) for it in items],
+        )
+        conn.executemany(
+            "INSERT OR REPLACE INTO played(emo, body) VALUES (?, ?)",
+            [(emo, json.dumps(rows, ensure_ascii=False)) for emo, rows in played.items()],
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    if _needs_persist(raw):
+        _DB_STATE["dirty"] = True  # 旧格式已在导入时规范化，下次导出写回 JSON
+
+
+def _cache() -> dict:
+    """进程内缓存全部足迹；别的进程写过（data_version 变了）才重新读库。"""
+    conn = _db()
+    ver = conn.execute("PRAGMA data_version").fetchone()[0]
+    if _DB_STATE["items"] is None or _DB_STATE["ver"] != ver:
+        items = [json.loads(body) for (body,) in conn.execute("SELECT body FROM items ORDER BY ts DESC")]
+        _DB_STATE["items"] = items
+        _DB_STATE["by_id"] = {str(it.get("id")): it for it in items}
+        _DB_STATE["played"] = {emo: json.loads(body) for emo, body in conn.execute("SELECT emo, body FROM played")}
+        _DB_STATE["ver"] = ver
+    return _DB_STATE
+
+
+def _put_item(item: dict) -> None:
+    _db().execute(
+        "INSERT OR REPLACE INTO items(id, ts, body) VALUES (?, ?, ?)",
+        (str(item["id"]), int(item.get("ts") or 0), json.dumps(item, ensure_ascii=False)),
+    )
+    _DB_STATE["dirty"] = True
+
+
+def _put_played(emo: str, rows: list[dict]) -> None:
+    _db().execute("INSERT OR REPLACE INTO played(emo, body) VALUES (?, ?)", (emo, json.dumps(rows, ensure_ascii=False)))
+    _DB_STATE["dirty"] = True
+
+
+def export_json(force: bool = False) -> bool:
+    """把 SQLite 里的足迹导出成 history.json（给 GitHub 备份、整夹复制、打包工具用）。"""
+    if not force and (not _DB_STATE["dirty"] or time.time() - _DB_STATE["exported"] < EXPORT_EVERY_S):
+        return False
+    with _LOCK:
+        st = _cache()
+        payload = {"items": list(st["items"]), "played": dict(st["played"])}
+        if _PATH.exists():
+            try:
+                if not _BACKUP.exists() or time.time() - _BACKUP.stat().st_mtime > BACKUP_EVERY_S:
+                    shutil.copyfile(_PATH, _BACKUP)
+            except OSError:
+                pass
+        _save(payload)
+        _DB_STATE["dirty"] = False
+        _DB_STATE["exported"] = time.time()
+    return True
+
+
+def _maybe_export() -> None:
+    try:
+        export_json(False)
+    except Exception:
+        pass
+
+
+import atexit  # noqa: E402
+
+atexit.register(lambda: _DB_STATE["dirty"] and export_json(True))
+
+
+def ensure_persistent() -> int:
+    """确保足迹库就绪（首次自动从 history.json 导入），返回条数。"""
+    with _LOCK:
+        return len(_cache()["items"])
 
 
 def list_records(_session_id: str | None = None) -> list[dict]:
-    # 文件没变（大小和修改时间相同）就复用上次排好序的结果，免得每次翻页都解析十几 MB
-    try:
-        st = _PATH.stat()
-        sig = (st.st_mtime_ns, st.st_size)
-    except OSError:
-        sig = None
-    if sig and _LIST_CACHE.get("sig") == sig:
-        return list(_LIST_CACHE["items"])
-    items = _list_records_uncached()
-    try:
-        st = _PATH.stat()
-        _LIST_CACHE.update(sig=(st.st_mtime_ns, st.st_size), items=items)
-    except OSError:
-        pass
-    return list(items)
-
-
-def _list_records_uncached() -> list[dict]:
     with _LOCK:
-        raw = _load_raw()
-        store = _load_store()
-        store["items"] = [_migrate_item(dict(x)) for x in store["items"]]
-        store["items"].sort(key=lambda x: int(x.get("ts") or 0), reverse=True)
-        store["played"] = _decorate_played(store.get("played"))
-        if _needs_persist(raw):
-            _save_store(store)
-        return list(store["items"])
+        return list(_cache()["items"])
+
+
+def _keys_of(rows) -> list[str]:
+    keys, seen = [], set()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        key = row.get("key") or title_key(row.get("title") or "")
+        if key and key not in seen:
+            seen.add(key)
+            keys.append(key)
+    return keys
 
 
 def played_keys(emotion: str) -> list[str]:
     if not emotion:
         return []
     with _LOCK:
-        store = _load_store()
-        keys = []
-        seen = set()
-        for row in store.get("played", {}).get(emotion) or []:
-            if not isinstance(row, dict):
-                continue
-            key = row.get("key") or title_key(row.get("title") or "")
-            if key and key not in seen:
-                seen.add(key)
-                keys.append(key)
-        return keys
+        return _keys_of(_cache()["played"].get(emotion))
 
 
 def played_map() -> dict[str, list[str]]:
     with _LOCK:
-        store = _load_store()
-        out: dict[str, list[str]] = {}
-        for emo, rows in (store.get("played") or {}).items():
-            keys = []
-            seen = set()
-            for row in rows or []:
-                if not isinstance(row, dict):
-                    continue
-                key = row.get("key") or title_key(row.get("title") or "")
-                if key and key not in seen:
-                    seen.add(key)
-                    keys.append(key)
-            out[str(emo)] = keys
-        return out
+        return {str(emo): _keys_of(rows) for emo, rows in _cache()["played"].items()}
 
 
 def add_record(_session_id: str | None, record: dict[str, Any]) -> dict:
     source = record.get("source") or ""
     emo_id = (record.get("emotion") or {}).get("id")
     with _LOCK:
-        store = _load_store()
-        items = [_migrate_item(dict(x)) for x in store["items"]]
-        items.sort(key=lambda x: int(x.get("ts") or 0), reverse=True)
-        merge = False
-        item_id = uuid.uuid4().hex[:12]
-        if source == "camera-live" and emo_id and items:
-            last = items[0]
-            if last.get("source") == "camera-live" and (last.get("emotion") or {}).get("id") == emo_id:
-                merge = True
-                item_id = last.get("id") or item_id
-        face = _persist_face(item_id, record.get("face") if isinstance(record.get("face"), dict) else {})
+        st = _cache()
+        items = st["items"]
         now = int(time.time())
-        if merge:
+        last = items[0] if items else None
+        if source == "camera-live" and emo_id and last and last.get("source") == "camera-live" and (last.get("emotion") or {}).get("id") == emo_id:
+            face = _persist_face(last.get("id"), record.get("face") if isinstance(record.get("face"), dict) else {})
             last["ts"] = now
             last["elapsed_ms"] = record.get("elapsed_ms")
             last["emotion"] = record.get("emotion") or last.get("emotion")
@@ -467,9 +473,10 @@ def add_record(_session_id: str | None, record: dict[str, Any]) -> dict:
                 last["face"] = face
             if record.get("songs") and not last.get("songs"):
                 last["songs"] = _slim_songs(record.get("songs"))
-            store["items"] = items
-            _save_store(store)
+            _put_item(last)
+            _maybe_export()
             return last
+        item_id = uuid.uuid4().hex[:12]
         item = {
             "id": item_id,
             "ts": now,
@@ -478,11 +485,12 @@ def add_record(_session_id: str | None, record: dict[str, Any]) -> dict:
             "elapsed_ms": record.get("elapsed_ms"),
             "songs": _slim_songs(record.get("songs")),
             "played": [],
-            "face": face,
+            "face": _persist_face(item_id, record.get("face") if isinstance(record.get("face"), dict) else {}),
         }
+        _put_item(item)
         items.insert(0, item)
-        store["items"] = items
-        _save_store(store)
+        st["by_id"][item_id] = item
+        _maybe_export()
         return item
 
 
@@ -491,31 +499,79 @@ def mark_played(emotion: str, song: dict, history_id: str | None = None) -> dict
     if not row or not emotion:
         return None
     with _LOCK:
-        store = _load_store()
-        bucket = [x for x in (store["played"].get(emotion) or []) if isinstance(x, dict)]
+        st = _cache()
+        bucket = [x for x in (st["played"].get(emotion) or []) if isinstance(x, dict)]
         bucket = [x for x in bucket if (x.get("key") or title_key(x.get("title") or "")) != row["key"]]
         bucket.append(row)
-        store["played"][emotion] = bucket
-        if history_id:
-            for item in store["items"]:
-                if item.get("id") != history_id:
-                    continue
-                played = item.get("played") if isinstance(item.get("played"), list) else []
-                if not any((p.get("key") or title_key(p.get("title") or "")) == row["key"] for p in played if isinstance(p, dict)):
-                    played.append(row)
+        st["played"][emotion] = bucket
+        _put_played(emotion, bucket)
+        item = st["by_id"].get(str(history_id)) if history_id else None
+        if item is not None:
+            played = item.get("played") if isinstance(item.get("played"), list) else []
+            if not any((p.get("key") or title_key(p.get("title") or "")) == row["key"] for p in played if isinstance(p, dict)):
+                played.append(row)
                 item["played"] = played
-                break
-        _save_store(store)
+                _put_item(item)
+        _maybe_export()
     return row
+
+
+def stats(since: int = 0, until: int = 0) -> dict:
+    """课堂情绪统计：各情绪次数与累计时长、情绪变化次数、播放最多的歌、来源分布。"""
+    with _LOCK:
+        items = [it for it in _cache()["items"] if int(it.get("ts") or 0) >= since and (not until or int(it.get("ts") or 0) <= until)]
+    items = sorted(items, key=lambda x: int(x.get("ts") or 0))
+    counts: dict[str, int] = {}
+    seconds: dict[str, float] = {}
+    sources: dict[str, int] = {}
+    songs: dict[str, dict] = {}
+    switches = 0
+    last = ""
+    for i, it in enumerate(items):
+        eid = (it.get("emotion") or {}).get("id") or ""
+        if eid not in EMOTIONS:
+            continue
+        counts[eid] = counts.get(eid, 0) + 1
+        nxt = items[i + 1] if i + 1 < len(items) else None
+        span = (int(nxt.get("ts") or 0) - int(it.get("ts") or 0)) if nxt else 5
+        seconds[eid] = seconds.get(eid, 0.0) + float(max(1, min(60, span)))  # 两条之间最多算 60 秒
+        if last and eid != last:
+            switches += 1
+        last = eid
+        src = str(it.get("source") or "upload")
+        sources[src] = sources.get(src, 0) + 1
+        for p in it.get("played") or []:
+            if not isinstance(p, dict):
+                continue
+            key = p.get("key") or title_key(p.get("title") or "")
+            if not key:
+                continue
+            row = songs.setdefault(key, {"title": p.get("title") or "", "artist": p.get("artist") or "", "emotion": p.get("emotion") or eid, "n": 0})
+            row["n"] += 1
+    top = sorted(songs.values(), key=lambda r: -r["n"])[:5]
+    first = int(items[0].get("ts") or 0) if items else 0
+    final = int(items[-1].get("ts") or 0) if items else 0
+    return {
+        "total": sum(counts.values()),
+        "counts": counts,
+        "seconds": {k: round(v) for k, v in seconds.items()},
+        "switches": switches,
+        "sources": sources,
+        "top_songs": top,
+        "from": first,
+        "to": final,
+        "dominant": max(counts, key=lambda k: counts[k]) if counts else "",
+    }
 
 
 def clear_records(_session_id: str | None = None) -> None:
     with _LOCK:
-        _ALLOW_SHRINK.on = True
-        try:
-            _save_store({"items": [], "played": {}})
-        finally:
-            _ALLOW_SHRINK.on = False
+        conn = _db()
+        conn.execute("DELETE FROM items")
+        conn.execute("DELETE FROM played")
+        _DB_STATE.update(items=None, ver=None)
+        _save({"items": [], "played": {}})
+        _DB_STATE["dirty"] = False
         if HISTORY_DIR.exists():
             for path in HISTORY_DIR.glob("*"):
                 if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:

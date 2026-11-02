@@ -96,6 +96,15 @@ def classroom_demo_mode():
 
 
 @app.before_request
+def crowd_venue():
+    """多人远场的场地：小教室 / 中会堂 / 大会堂（网页设置里选，默认大会堂）。"""
+    from backend.emotion import VENUE
+
+    v = (request.headers.get("X-Emo-Venue") or request.args.get("venue") or "large").strip()
+    VENUE.set(v if v in ("small", "medium", "large") else "large")
+
+
+@app.before_request
 def live_fast_mode():
     """实时识别（摄像头 / 视频 / 屏幕的 -live 来源）走快速路径；识别此刻、上传照片仍用完整精度。"""
     from backend.emotion import FAST_MODE
@@ -186,6 +195,13 @@ def face_pop():
 def guide():
     _session_id()
     return render_template("guide.html", emotions=EMOTIONS, strategies=public_catalog())
+
+
+@app.route("/camera")
+def camera_guide():
+    """摄像头与检测方式使用指南：选哪种检测方式、分辨率、摆放与环境、讲座流程。"""
+    _session_id()
+    return render_template("camera.html")
 
 
 @app.route("/pose")
@@ -506,6 +522,17 @@ def history_list():
             "played": history.played_map(),
         }
     )
+
+
+@app.route("/api/stats")
+def stats_api():
+    """课堂情绪统计看板的数据：since / until 为秒级时间戳（0 表示不限）。"""
+    try:
+        since = int(float(request.args.get("since") or 0))
+        until = int(float(request.args.get("until") or 0))
+    except ValueError:
+        since, until = 0, 0
+    return jsonify({"ok": True, **history.stats(since, until)})
 
 
 @app.route("/api/history", methods=["DELETE"])

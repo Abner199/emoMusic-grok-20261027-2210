@@ -131,3 +131,10 @@
 
 /* 分段公式：条件左对齐（Chrome MathML 不支持 columnalign） */
 .doc-page mtd { text-align: left; padding: 2px 12px 2px 4px; }
+
+/* 摄像头指南 */
+.cam-table td:first-child { text-align: left; }
+.cam-table td:last-child { text-align: left; color: rgba(255, 255, 255, 0.75); }
+.cam-table b { color: #ffe1a8; }
+.cam-rule svg { width: 100%; max-width: 640px; height: auto; display: block; margin: 14px auto 0; }
+.cam-scene { width: 100%; height: auto; margin-top: 14px; border-radius: 16px; background: rgba(10, 12, 22, 0.45); border: 1px solid rgba(255, 255, 255, 0.08); }

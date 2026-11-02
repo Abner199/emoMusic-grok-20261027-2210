@@ -1,0 +1,163 @@
+/* 让主色可以平滑过渡（随情绪变色用） */
+@property --accent { syntax: '<color>'; inherits: true; initial-value: #c4a574; }
+/* ===== 高级主题：极光 · 曜石香槟 · 冰川 · 敦煌，以及「随情绪变色」 ===== */
+
+/* 极光：深夜底 + 流动极光 + 毛玻璃面板 */
+html[data-theme="aurora"] {
+  --bg: #06070d;
+  --bg-2: #0d1020;
+  --ink: #eef2ff;
+  --muted: #9aa3c4;
+  --line: rgba(190, 205, 255, 0.14);
+  --panel: rgba(255, 255, 255, 0.06);
+  --accent: #8ab4ff;
+  --accent-2: #ff8ad8;
+  --on-accent: #0b0d1a;
+  --stage: #04050a;
+  --drawer: #0d1020;
+  --chip: rgba(255, 255, 255, 0.07);
+  --deep: #070914;
+  --scheme: dark;
+  --shadow: 0 24px 70px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.10);
+  --grain: 0.04;
+  --panel-blur: 26px;
+}
+/* 曜石香槟：黑曜石 + 香槟金细描边 */
+html[data-theme="obsidian"] {
+  --bg: #050505;
+  --bg-2: #0e0d0b;
+  --ink: #f6efe2;
+  --muted: #a39a8a;
+  --line: rgba(232, 205, 150, 0.16);
+  --panel: rgba(255, 248, 235, 0.03);
+  --accent: #e8cd96;
+  --accent-2: #b89a62;
+  --on-accent: #1a1408;
+  --stage: #030303;
+  --drawer: #0d0c0a;
+  --chip: rgba(232, 205, 150, 0.07);
+  --deep: #070605;
+  --scheme: dark;
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+  --grain: 0.05;
+  --panel-blur: 14px;
+}
+/* 冰川：浅色磨砂玻璃 + 冰蓝点缀（白天与投影） */
+html[data-theme="glacier"] {
+  --bg: #eaf2f8;
+  --bg-2: #dbe8f2;
+  --ink: #12263a;
+  --muted: #5d7489;
+  --line: rgba(18, 38, 58, 0.12);
+  --panel: rgba(255, 255, 255, 0.55);
+  --accent: #2f8fd8;
+  --accent-2: #7cc4f2;
+  --on-accent: #ffffff;
+  --stage: #0f1c28;
+  --drawer: #f4f8fb;
+  --chip: rgba(18, 38, 58, 0.06);
+  --deep: #dfeaf3;
+  --scheme: light;
+  --shadow: 0 20px 50px rgba(40, 80, 120, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --grain: 0.02;
+  --panel-blur: 24px;
+}
+/* 敦煌：赭石、石青、朱砂、金箔 */
+html[data-theme="dunhuang"] {
+  --bg: #1d130d;
+  --bg-2: #2a1c13;
+  --ink: #f5e6cc;
+  --muted: #b89c7a;
+  --line: rgba(214, 170, 102, 0.18);
+  --panel: rgba(214, 170, 102, 0.05);
+  --accent: #d9a441;
+  --accent-2: #2e8b8b;
+  --on-accent: #22150a;
+  --stage: #120b07;
+  --drawer: #24180f;
+  --chip: rgba(214, 170, 102, 0.08);
+  --deep: #170f0a;
+  --scheme: dark;
+  --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  --grain: 0.08;
+  --panel-blur: 14px;
+}
+
+/* 主题背景：极光流动 / 曜石金线 / 冰川晨光 / 敦煌壁画色晕 */
+html[data-theme="aurora"] body,
+html[data-theme="obsidian"] body,
+html[data-theme="glacier"] body,
+html[data-theme="dunhuang"] body { background: var(--bg); }
+html[data-theme="aurora"] .glow,
+html[data-theme="obsidian"] .glow,
+html[data-theme="glacier"] .glow,
+html[data-theme="dunhuang"] .glow {
+  inset: 0; width: auto; height: auto; filter: blur(60px); opacity: 0.55; z-index: 0;
+  animation: theme-drift 30s ease-in-out infinite alternate;
+}
+html[data-theme="aurora"] .glow {
+  background:
+    radial-gradient(40vmax 30vmax at 10% 0%, rgba(255, 168, 80, 0.30), transparent 60%),
+    radial-gradient(45vmax 35vmax at 90% 20%, rgba(255, 95, 162, 0.28), transparent 60%),
+    radial-gradient(50vmax 40vmax at 40% 100%, rgba(79, 140, 255, 0.32), transparent 60%),
+    radial-gradient(35vmax 30vmax at 85% 90%, rgba(52, 224, 180, 0.20), transparent 60%);
+}
+html[data-theme="obsidian"] .glow {
+  opacity: 0.35;
+  background:
+    radial-gradient(50vmax 30vmax at 50% -10%, rgba(232, 205, 150, 0.22), transparent 60%),
+    radial-gradient(40vmax 30vmax at 100% 100%, rgba(184, 154, 98, 0.14), transparent 60%);
+}
+html[data-theme="glacier"] .glow {
+  opacity: 0.8;
+  background:
+    radial-gradient(45vmax 35vmax at 0% 0%, rgba(124, 196, 242, 0.45), transparent 60%),
+    radial-gradient(40vmax 30vmax at 100% 30%, rgba(200, 230, 255, 0.7), transparent 60%),
+    radial-gradient(50vmax 40vmax at 50% 110%, rgba(47, 143, 216, 0.25), transparent 60%);
+}
+html[data-theme="dunhuang"] .glow {
+  opacity: 0.45;
+  background:
+    radial-gradient(40vmax 30vmax at 0% 10%, rgba(217, 164, 65, 0.30), transparent 60%),
+    radial-gradient(40vmax 30vmax at 100% 30%, rgba(46, 139, 139, 0.25), transparent 60%),
+    radial-gradient(45vmax 35vmax at 50% 110%, rgba(178, 58, 42, 0.30), transparent 60%);
+}
+@keyframes theme-drift {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(-3vw, 2vh) scale(1.08); }
+}
+@media (prefers-reduced-motion: reduce) { html .glow { animation: none !important; } }
+
+/* 面板：极光 / 冰川用毛玻璃，曜石用香槟金描边，敦煌用金箔描边 */
+html[data-theme="aurora"] .panel,
+html[data-theme="glacier"] .panel {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--panel) 100%, transparent), color-mix(in srgb, var(--panel) 40%, transparent));
+  backdrop-filter: blur(var(--panel-blur)) saturate(150%);
+}
+html[data-theme="obsidian"] .panel { border-color: rgba(232, 205, 150, 0.22); box-shadow: var(--shadow), inset 0 0 0 1px rgba(232, 205, 150, 0.05); }
+html[data-theme="dunhuang"] .panel { border-color: rgba(217, 164, 65, 0.25); background-image: linear-gradient(160deg, rgba(217, 164, 65, 0.06), transparent 40%); }
+html[data-theme="glacier"] .top { background: rgba(255, 255, 255, 0.6); }
+
+/* 主题色块 */
+.theme-pick[data-theme="aurora"] i { background: linear-gradient(135deg, #8ab4ff, #ff8ad8); }
+.theme-pick[data-theme="obsidian"] i { background: linear-gradient(135deg, #111, #e8cd96); }
+.theme-pick[data-theme="glacier"] i { background: linear-gradient(135deg, #eaf2f8, #2f8fd8); }
+.theme-pick[data-theme="dunhuang"] i { background: linear-gradient(135deg, #d9a441, #2e8b8b 55%, #b23a2a); }
+
+/* ===== 随情绪变色：主色与背景光晕跟着识别到的情绪缓慢过渡 ===== */
+html.mood-tint body[data-emotion="happy"] { --accent: var(--happy); }
+html.mood-tint body[data-emotion="angry"] { --accent: var(--angry); }
+html.mood-tint body[data-emotion="sad"] { --accent: var(--sad-2); }
+html.mood-tint body[data-emotion="fear"] { --accent: #a46ad6; }
+html.mood-tint body[data-emotion="surprise"] { --accent: var(--surprise); }
+html.mood-tint body[data-emotion="disgust"] { --accent: var(--disgust-2); }
+html.mood-tint body[data-emotion="neutral"] { --accent: var(--neutral); }
+html.mood-tint body { transition: --accent 1.4s ease, background-color 1.2s ease; }
+html.mood-tint .mood-wash {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.32;
+  background: radial-gradient(60vmax 45vmax at 30% 20%, color-mix(in srgb, var(--accent) 55%, transparent), transparent 65%),
+              radial-gradient(50vmax 40vmax at 80% 90%, color-mix(in srgb, var(--accent) 35%, transparent), transparent 65%);
+  transition: background 1.6s ease, opacity 1s ease;
+}
+.mood-wash { display: none; }
+html.mood-tint .mood-wash { display: block; }

@@ -236,24 +236,9 @@ img { max-width: 100%; display: block; }
 .brand-text em { font-family: var(--font-en); font-style: normal; font-size: 11px; letter-spacing: 0.28em; color: var(--muted); text-transform: uppercase; }
 .tagline { margin: 0; color: var(--muted); font-size: 14px; letter-spacing: 0.04em; }
 .top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
-.top-toggles {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--chip) 80%, transparent);
-}
-.top-toggles .voice-switch {
-  border: 0;
-  background: transparent;
-  padding: 5px 10px;
-}
-.top-toggles .voice-switch:has(input:checked) {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-}
+
+
+
 .theme-picks {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, auto));
@@ -464,16 +449,8 @@ body.is-cam-fill .player {
   bottom: 12px;
   background: color-mix(in srgb, var(--bg-2) 94%, black);
 }
-body.is-cam-fill .settings-panel,
-body.is-cam-fill .theme-menu { display: none !important; }
-.cam-exit {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 7;
-  background: color-mix(in srgb, var(--stage) 72%, transparent);
-  backdrop-filter: blur(12px);
-}
+body.is-cam-fill .settings-panel { display: none !important; }
+
 body.is-cam-fill .live-emo-hud { z-index: 6; }
 .cam-dock {
   position: relative;
@@ -1107,55 +1084,14 @@ label.primary {
 .algo-live a { color: var(--accent); text-decoration: none; }
 .algo-live a:hover { text-decoration: underline; }
 .algo-live strong { color: var(--ink); font-weight: 700; }
-.algo-panel {
-  position: relative;
-  z-index: 1;
-  margin-bottom: 16px;
-}
-.algo-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-}
-.algo-card {
-  padding: 16px 16px 14px;
-  border-radius: 20px;
-  border: 1px solid var(--line);
-  background: var(--chip);
-  min-width: 0;
-}
-.algo-kicker {
-  margin: 0 0 6px;
-  color: var(--accent);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-}
-.algo-card h3 {
-  margin: 0 0 8px;
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.35;
-}
-.algo-classic {
-  margin: 0 0 10px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-.algo-card ol {
-  margin: 0 0 10px;
-  padding-left: 18px;
-  color: var(--ink);
-  font-size: 13px;
-  line-height: 1.65;
-}
-.algo-note {
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
+
+
+
+
+
+
+
+
 .song-algo {
   margin: 6px 0 0;
   color: var(--muted);
@@ -1589,35 +1525,10 @@ label.primary {
   line-height: 1.55;
   color: var(--muted);
 }
-.viz-chip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--viz) 28%, var(--line));
-  background: color-mix(in srgb, var(--deep) 45%, transparent);
-  font-size: 12px;
-  line-height: 1.2;
-  color: var(--ink);
-}
-.viz-chip em {
-  font-style: normal;
-  font-size: 11px;
-  opacity: 0.72;
-  font-weight: 600;
-}
-.viz-chip b {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--viz);
-}
-.viz-chip i {
-  font-style: normal;
-  font-size: 10px;
-  letter-spacing: 0.02em;
-  opacity: 0.62;
-}
+
+
+
+
 .player.is-viz-off .audio-viz { display: none; }
 .nowplay {
   display: grid;
@@ -1818,7 +1729,7 @@ body[data-emotion="neutral"] { --accent: var(--neutral); --accent-2: var(--neutr
   .tagline { display: none; }
 }
 @media (max-width: 980px) {
-  .algo-grid { grid-template-columns: 1fr; }
+
   .layout { grid-template-columns: 1fr; }
   .top { grid-template-columns: 1fr auto; }
   .tagline { display: none; }
@@ -2104,56 +2015,23 @@ body.face-page.is-cam-fill .face-shell {
 .face-page #face-hint { text-align: center; }
 
 body.guide-page { padding-bottom: 48px; }
-.guide-shell { max-width: 980px; margin: 0 auto; display: grid; gap: 16px; }
-.guide-hero h1 {
-  margin: 6px 0 12px;
-  font-family: var(--font-display);
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1.35;
-}
-.guide-hero p { margin: 0; color: var(--muted); line-height: 1.7; }
-.guide-toc {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 16px;
-}
-.guide-toc a {
-  color: var(--accent);
-  text-decoration: none;
-  font-size: 13px;
-  padding: 4px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-}
-.guide-toc a:hover { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
-.guide-steps, .guide-shell ol, .guide-shell ul {
-  margin: 0;
-  padding-left: 20px;
-  line-height: 1.75;
-  font-size: 14px;
-}
-.guide-shell p { line-height: 1.75; font-size: 14px; }
-.guide-shell code {
-  font-size: 12px;
-  padding: 1px 6px;
-  border-radius: 6px;
-  background: var(--chip);
-}
+
+
+
+
+
+
+
+
+
 .guide-strats {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   margin-top: 12px;
 }
-.guide-strats .algo-card p { margin: 0 0 8px; }
-.guide-sub {
-  margin: 22px 0 10px;
-  font-family: var(--font-display);
-  font-size: 18px;
-}
+
+
 .guide-table-wrap { overflow-x: auto; }
 .guide-table {
   width: 100%;
@@ -2167,13 +2045,8 @@ body.guide-page { padding-bottom: 48px; }
   white-space: nowrap;
 }
 .guide-table th { color: var(--muted); font-weight: 500; background: var(--chip); }
-.guide-foot {
-  margin: 8px 4px 24px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.7;
-}
-.guide-nav .primary.mini { padding: 6px 12px; }
+
+
 @media (max-width: 980px) {
   .guide-strats { grid-template-columns: 1fr; }
 }

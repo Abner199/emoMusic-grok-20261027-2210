@@ -503,10 +503,37 @@
     ctx.restore();
   }
 
+  function paintCrowd(ctx, mapped) {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    mapped.forEach((item) => {
+      if (!item || !item.box) return;
+      const b = item.box;
+      ctx.save();
+      if (item.pending) {
+        ctx.strokeStyle = "rgba(255,255,255,0.45)";
+        ctx.lineWidth = 1 * dpr;
+      } else {
+        const emo = item.emo || {};
+        const color = emoHex(emo.id || "idle", emo.color);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2 * dpr;
+        ctx.fillStyle = hexToRgba(color, 0.18);
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+      }
+      ctx.strokeRect(b.x, b.y, b.w, b.h);
+      ctx.restore();
+    });
+  }
+
   function paintFaces(ctx, mapped, opts) {
     const mode = (opts && opts.mode) || "overlay";
     const canvas = (opts && opts.canvas) || ctx.canvas;
     if (!ctx || mode === "off") return;
+    // 大会堂：十几张脸以上只画小彩框，不画关键点和标签，免得糊成一片
+    if ((mapped || []).length > 12) {
+      paintCrowd(ctx, mapped);
+      return;
+    }
     (mapped || []).forEach((item) => {
       if (!item || !item.box) return;
       const emo = item.emo || {};

@@ -208,3 +208,7 @@ body[data-face-mode="crowd"] .guide { display: none; }
 .guide-link:hover { text-decoration: underline; }
 .cam-guide-link { font-size: 13px; color: var(--accent); text-decoration: none; opacity: 0.9; }
 .cam-guide-link:hover { text-decoration: underline; }
+
+/* 热歌入库 */
+.hot-lib { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); width: 100%; }
+.hot-lib #hot-lib-text { flex: 1 1 auto; min-width: 0; }

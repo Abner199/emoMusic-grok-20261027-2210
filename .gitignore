@@ -21,3 +21,8 @@ data/history.db-wal
 data/history.db-shm
 data/history.db
 data/server.log
+
+# 热歌入库：在线下载的试听与封面，各电脑自己抓（启动 20 秒后自动更新）
+data/hot_library.json
+static/audio/hot-*
+static/covers/hot-*

@@ -132,6 +132,7 @@ def main() -> int:
         n = int("".join(ch for ch in txt.split("张脸")[0] if ch.isdigit()) or 0)
         chk("摄像头·大会堂：框出 ≥40 张脸并显示人数分布", n >= 40, txt.replace("\n", " | ")[:60])
         chk("摄像头·大会堂：无脚本错误", not errs, str(errs[:2]))
+        set_face_mode(page, "solo")  # 检测方式会存进服务端偏好，测完改回单人，免得影响后面的测试
         b.close()
 
         # 3) 照片 · 双击示例：大图上画框，认对，进足迹

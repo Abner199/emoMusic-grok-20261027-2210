@@ -633,13 +633,13 @@ def seed_history_from_demo() -> int:
 
     rec = get_recognizer()
     mapping = [
-        ("happy", "01-喜-喜悦-happy.jpg"),
-        ("angry", "02-怒-愤怒-angry.jpg"),
-        ("sad", "03-哀-悲伤-sad.jpg"),
-        ("fear", "04-惧-恐惧-fear.jpg"),
-        ("surprise", "05-惊-惊讶-surprise.jpg"),
-        ("disgust", "06-厌-厌恶-disgust.jpg"),
-        ("neutral", "07-中性-平静-neutral.jpg"),
+        ("happy", "08-喜-喜悦-happy.jpg"),
+        ("angry", "09-怒-愤怒-angry.jpg"),
+        ("sad", "10-哀-悲伤-sad.jpg"),
+        ("fear", "11-惧-恐惧-fear.jpg"),
+        ("surprise", "12-惊-惊讶-surprise.jpg"),
+        ("disgust", "13-厌-厌恶-disgust.jpg"),
+        ("neutral", "14-中性-平静-neutral.jpg"),
     ]
     added = 0
     for eid, named in reversed(mapping):

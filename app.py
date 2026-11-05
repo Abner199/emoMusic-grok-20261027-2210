@@ -19,9 +19,11 @@ from flask import (
     request,
     send_file,
     session,
+    url_for,
 )
 
 from config import (
+    RECOMMEND_COUNT,
     DEMO_DIR,
     EMOTIONS,
     HOST,
@@ -66,13 +68,50 @@ def _session_id() -> str:
     return sid
 
 
+@app.template_global()
+def asset(filename: str) -> str:
+    """静态文件地址带上修改时间做版本号：文件一改浏览器就取新的，没改就一直用缓存。"""
+    try:
+        v = int((STATIC_DIR / filename).stat().st_mtime)
+    except OSError:
+        v = 0
+    return url_for("static", filename=filename, v=v)
+
+
+GZIP_TYPES = ("text/", "application/javascript", "application/json", "image/svg+xml")
+
+
+@app.after_request
+def cache_and_compress(resp):
+    """带版本号的静态文件长期缓存；文本类响应（页面、脚本、样式、接口 JSON）gzip 压缩。"""
+    if request.path.startswith("/static/") and request.args.get("v") and resp.status_code == 200:
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    if (
+        resp.status_code == 200
+        and "gzip" in (request.headers.get("Accept-Encoding") or "")
+        and not resp.headers.get("Content-Encoding")
+        and (resp.mimetype or "").startswith(GZIP_TYPES)
+        and (not resp.is_streamed or request.path.startswith("/static/"))
+    ):
+        if resp.direct_passthrough:
+            resp.direct_passthrough = False
+        data = resp.get_data()
+        if len(data) >= 1024:
+            import gzip
+
+            resp.set_data(gzip.compress(data, 5))
+            resp.headers["Content-Encoding"] = "gzip"
+            resp.headers["Vary"] = "Accept-Encoding"
+    return resp
+
+
 @app.after_request
 def allow_local_lecture(resp):
     """讲堂页面从文件夹打开时，仍可调用本机识别接口。"""
     origin = request.headers.get("Origin")
     if origin:
         resp.headers["Access-Control-Allow-Origin"] = origin
-        resp.headers["Vary"] = "Origin"
+        resp.headers["Vary"] = ", ".join(x for x in (resp.headers.get("Vary"), "Origin") if x)
         resp.headers["Access-Control-Allow-Headers"] = (
             "Content-Type, X-Emo-Source, X-Emo-Online, X-Emo-Strategy, X-Emo-Face-Mode"
         )
@@ -301,6 +340,7 @@ def recognize():
     two_phase = want_online and (request.args.get("two_phase") or request.headers.get("X-Emo-Two-Phase") or "1").strip() == "1"
     recs = recommend(
         emotion_id,
+        count=_read_count(),
         want_online=want_online and not two_phase,
         exclude=exclude,
         skip_played=fresh,
@@ -365,6 +405,37 @@ def track():
     return jsonify(result)
 
 
+def _read_count() -> int:
+    """歌单长度：count=24/48/96…，all（或 0）= 全部曲目。"""
+    raw = (request.args.get("count") or request.headers.get("X-Emo-Count") or "").strip().lower()
+    if raw in ("all", "0"):
+        return 0
+    try:
+        return min(600, max(6, int(raw)))
+    except ValueError:
+        return RECOMMEND_COUNT
+
+
+@app.route("/api/hotlib", methods=["GET", "POST"])
+def hotlib_api():
+    """热歌入库：GET 看入库情况；POST 立刻拉一遍在线热歌 / 榜单（后台下载，不等完成）。"""
+    from backend import hotlib
+
+    if request.method == "POST":
+        threading.Thread(target=hotlib.refresh_now, name="hotlib-now", daemon=True).start()
+        return jsonify({"ok": True, "started": True, **hotlib.status()})
+    return jsonify({"ok": True, **hotlib.status()})
+
+
+@app.route("/api/hotlib/chart")
+def hotlib_chart():
+    """当前热榜歌单（已下载入库，可离线播）。"""
+    from backend.hotlib import chart_songs
+
+    songs = chart_songs(int(request.args.get("limit") or 60))
+    return jsonify({"ok": True, "songs": songs, "count": len(songs)})
+
+
 @app.route("/api/recommend")
 def recommend_api():
     emotion = (request.args.get("emotion") or "neutral").strip()
@@ -373,7 +444,7 @@ def recommend_api():
     played = history.played_keys(emotion)
     fresh = (request.args.get("fresh") or "1").strip() == "1"
     exclude = _history_exclude(emotion) if fresh else []
-    data = recommend(emotion, want_online=want_online, exclude=exclude, strategy=strategy, skip_played=fresh)
+    data = recommend(emotion, count=_read_count(), want_online=want_online, exclude=exclude, strategy=strategy, skip_played=fresh)
     data["played_keys"] = played
     return jsonify({"ok": True, **data})
 
@@ -553,37 +624,16 @@ def prefs_post():
     return jsonify({"ok": True, **prefs})
 
 
-DEMO_PACK = [
-    ("happy", "01-喜-喜悦-happy.jpg", "01 喜"),
-    ("angry", "02-怒-愤怒-angry.jpg", "02 怒"),
-    ("sad", "03-哀-悲伤-sad.jpg", "03 哀"),
-    ("fear", "04-惧-恐惧-fear.jpg", "04 惧"),
-    ("surprise", "05-惊-惊讶-surprise.jpg", "05 惊"),
-    ("disgust", "06-厌-厌恶-disgust.jpg", "06 厌"),
-    ("neutral", "07-中性-平静-neutral.jpg", "07 中性"),
-    ("happy", "08-喜-喜悦-happy-b.jpg", "08 喜"),
-    ("angry", "09-怒-愤怒-angry-b.jpg", "09 怒"),
-    ("sad", "10-哀-悲伤-sad-b.jpg", "10 哀"),
-    ("fear", "11-惧-恐惧-fear-b.jpg", "11 惧"),
-    ("surprise", "12-惊-惊讶-surprise-b.jpg", "12 惊"),
-    ("disgust", "13-厌-厌恶-disgust-b.jpg", "13 厌"),
-    ("neutral", "14-中性-平静-neutral-b.jpg", "14 中性"),
-    ("happy", "15-喜-喜悦-happy-c.jpg", "15 喜"),
-    ("angry", "16-怒-愤怒-angry-c.jpg", "16 怒"),
-    ("sad", "17-哀-悲伤-sad-c.jpg", "17 哀"),
-    ("fear", "18-惧-恐惧-fear-c.jpg", "18 惧"),
-    ("surprise", "19-惊-惊讶-surprise-c.jpg", "19 惊"),
-    ("disgust", "20-厌-厌恶-disgust-c.jpg", "20 厌"),
-    ("neutral", "21-中性-平静-neutral-c.jpg", "21 中性"),
-]
-# 第 4、5、6 组：真人照片，每类 3 张（Wikimedia Commons / Unsplash，见 static/demo/示例照片来源与授权.txt）
-for _suffix, _start in (("d", 22), ("e", 29), ("f", 36)):
-    for _i, (_eid, _zh, _name) in enumerate(
-        (("happy", "喜", "喜悦"), ("angry", "怒", "愤怒"), ("sad", "哀", "悲伤"), ("fear", "惧", "恐惧"),
-         ("surprise", "惊", "惊讶"), ("disgust", "厌", "厌恶"), ("neutral", "中性", "平静"))
-    ):
-        _n = _start + _i
-        DEMO_PACK.append((_eid, f"{_n:02d}-{_zh}-{_name}-{_eid}-{_suffix}.jpg", f"{_n:02d} {_zh} · 真人"))
+# 七种情绪一行，共六行：真人照片在第 1、3、5 行（-d / -e / -f），合成肖像在第 2、4、6 行（无后缀 / -b / -c）
+# 真人照片来自 Wikimedia Commons / Unsplash，见 static/demo/示例照片来源与授权.txt
+DEMO_EMOS = (("happy", "喜", "喜悦"), ("angry", "怒", "愤怒"), ("sad", "哀", "悲伤"), ("fear", "惧", "恐惧"),
+             ("surprise", "惊", "惊讶"), ("disgust", "厌", "厌恶"), ("neutral", "中性", "平静"))
+DEMO_ROWS = (("-d", True), ("", False), ("-e", True), ("-b", False), ("-f", True), ("-c", False))
+DEMO_PACK = []
+for _row, (_suffix, _real) in enumerate(DEMO_ROWS):
+    for _i, (_eid, _zh, _name) in enumerate(DEMO_EMOS):
+        _n = _row * 7 + _i + 1
+        DEMO_PACK.append((_eid, f"{_n:02d}-{_zh}-{_name}-{_eid}{_suffix}.jpg", f"{_n:02d} {_zh}" + (" · 真人" if _real else "")))
 
 
 @app.route("/api/demo")
@@ -591,7 +641,7 @@ def demo_images():
     items = []
     for eid, filename, label in DEMO_PACK:
         p = DEMO_DIR / filename
-        if not p.exists() and filename[0:2] in {"01", "02", "03", "04", "05", "06", "07"}:
+        if not p.exists() and filename[0:2] in {"08", "09", "10", "11", "12", "13", "14"}:
             for ext in (".jpg", ".jpeg", ".png", ".webp"):
                 fallback = DEMO_DIR / f"{eid}{ext}"
                 if fallback.exists():
@@ -630,6 +680,34 @@ if __name__ == "__main__":
     logger.info("正在准备模型与本地曲库…")
     ensure_assets()
     get_recognizer()
+    try:  # 预热：识别一张示例脸、出一次歌单，第一次用的时候不用再多等约 1 秒（不记足迹）
+        from backend.recommender import recommend
+
+        _warm = DEMO_DIR / "happy.jpg"
+        if _warm.exists():
+            get_recognizer().predict_bytes(_warm.read_bytes())
+        recommend("neutral", want_online=False)
+
+        def _warm_music():
+            # 每首歌的曲调分析第一次要读音频（每首约 17 ms），放后台先做完，换情绪时歌单立刻出来
+            from backend.music_emotion import describe_song
+            from backend.recommender import load_catalog
+
+            t0 = time.perf_counter()
+            songs = load_catalog()
+            for song in songs:
+                try:
+                    describe_song(song, song.get("emotion") or "")
+                except Exception:
+                    pass
+            logger.info("曲调分析预热完成：%s 首，%.1f 秒", len(songs), time.perf_counter() - t0)
+
+        threading.Thread(target=_warm_music, name="warm-music", daemon=True).start()
+    except Exception:
+        logger.exception("推荐预热失败（不影响使用）")
+    from backend.hotlib import start_refresher
+
+    start_refresher()  # 在线热歌每 30 分钟自动补进曲库
     seeded = history.seed_history_from_demo()
     if seeded:
         logger.info("已预置 %s 条示例识别历史，复制项目部署时会一起带走", seeded)

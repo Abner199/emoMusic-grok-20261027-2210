@@ -68,6 +68,7 @@
     replayHistory: false,
     voiceOn: localStorage.getItem("emotune-voice") !== "0",
     skipPlayed: localStorage.getItem("emotune-skip-played") !== "0",
+    recCount: ["24", "48", "96", "all"].includes(localStorage.getItem("emotune-rec-count")) ? localStorage.getItem("emotune-rec-count") : "24",
     demoMode: localStorage.getItem("emotune-demo-mode") === "1",
     venue: ["small", "medium", "large"].includes(localStorage.getItem("emotune-venue")) ? localStorage.getItem("emotune-venue") : "large",
     // 1–6：在前 N 首代表曲之间轮换；0：歌单里全部歌曲轮流当第一首
@@ -523,6 +524,7 @@
       "X-Emo-Strategy": state.strategy || "iso",
       "X-Emo-Face-Mode": state.faceMode || "solo",
       "X-Emo-Fresh": state.skipPlayed ? "1" : "0",
+      "X-Emo-Count": state.recCount || "24",
       "X-Emo-Demo": state.demoMode ? "1" : "0",
       "X-Emo-Venue": state.venue || "large",
     };
@@ -1021,7 +1023,7 @@
   const LIVE_SWITCH_HITS = 2;
   const LIVE_NEUTRAL_HITS = 2;
   const LIVE_MIN_PROB = 0.52;
-  const LIVE_FIRST_PROB = { surprise: 0.7, happy: 0.6, fear: 0.64, angry: 0.58, disgust: 0.6, sad: 0.52 };
+  const LIVE_FIRST_PROB = { surprise: 0.7, happy: 0.55, fear: 0.64, angry: 0.58, disgust: 0.6, sad: 0.52 };
   const LIVE_TICK_MS = 1400;
   const TRACK_PERIOD_MS = 90; // 框与关键点约 10 帧/秒取样，网页 60fps 插值
   const TRACK_RETRY_MS = 60;
@@ -1035,8 +1037,8 @@
   const UI_SPIKE_DWELL_MS = 280;
   const UI_DAILY_NEUTRAL_DWELL_MS = 640;
 
-  /* 课堂演示模式：惊讶更容易认出；喜悦要更有把握（孩子紧张时的微笑不算） */
-  const DEMO_FIRST_PROB = { surprise: 0.5, fear: 0.56, happy: 0.68 };
+  /* 课堂演示模式：惊讶更容易认出；喜悦由后端按露齿 / 嘴宽把关，抿嘴微笑仍算平静 */
+  const DEMO_FIRST_PROB = { surprise: 0.5, fear: 0.56, happy: 0.58 };
 
   function liveProbBar(locked, emoId) {
     if (state.demoMode && DEMO_FIRST_PROB[emoId]) {
@@ -2213,6 +2215,7 @@
         online: "1",
         strategy: state.strategy || "iso",
         fresh: state.skipPlayed ? "1" : "0",
+        count: state.recCount || "24",
       });
       const data = await (await fetch(`/api/recommend?${q}`)).json();
       if (token !== state.onlineFillToken || !state.onlineOn || state.lockEmotion !== emoId) return;
@@ -2341,7 +2344,7 @@
   async function loadPlaylist(emo, play) {
     const id = emo || currentEmotionId();
     try {
-      const data = await (await fetch(`/api/recommend?emotion=${encodeURIComponent(id)}&online=${state.onlineOn ? "1" : "0"}&strategy=${encodeURIComponent(state.strategy || "iso")}&fresh=${state.skipPlayed ? "1" : "0"}`)).json();
+      const data = await (await fetch(`/api/recommend?emotion=${encodeURIComponent(id)}&online=${state.onlineOn ? "1" : "0"}&strategy=${encodeURIComponent(state.strategy || "iso")}&fresh=${state.skipPlayed ? "1" : "0"}&count=${encodeURIComponent(state.recCount || "24")}`)).json();
       if (data.strategy && data.strategy.id) {
         state.strategy = data.strategy.id;
         paintStrategyNow(data.strategy);
@@ -4383,6 +4386,58 @@
     if (changed && persist) toast(`场地：${{ small: "小教室", medium: "中会堂", large: "大会堂" }[next]}。${VENUE_HINT[next]}`);
   }
 
+  /* 热歌入库：在线热歌自动下载补进本地曲库，这里显示入库数量并可手动更新 */
+  const EMO_ZH = { happy: "喜", angry: "怒", sad: "哀", fear: "惧", surprise: "惊", disgust: "厌", neutral: "中" };
+  async function refreshHotLib() {
+    const el = $("#hot-lib-text");
+    if (!el) return null;
+    try {
+      const d = await (await fetch("/api/hotlib")).json();
+      const by = Object.entries(d.by_emotion || {}).filter(([e, n]) => n && e !== "pop").map(([e, n]) => `${EMO_ZH[e] || e}${n}`).join(" ");
+      const when = d.refreshed ? new Date(d.refreshed * 1000).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }) : "未更新";
+      el.textContent = `热歌入库 ${d.total} 首 · 当前热榜 ${d.chart || 0}${by ? " · 情绪歌单 " + by : ""} · ${when}${d.pending ? ` · 下载中 ${d.pending}` : ""}`;
+      el.title = (d.latest || []).map((s) => `${s.title} - ${s.artist}`).join("\n");
+      return d;
+    } catch (_) {
+      el.textContent = "热歌入库：读取失败";
+      return null;
+    }
+  }
+  function bindHotLib() {
+    const btn = $("#btn-hot-refresh");
+    if (!btn) return;
+    refreshHotLib();
+    const chartBtn = $("#btn-hot-chart");
+    if (chartBtn) {
+      chartBtn.addEventListener("click", async () => {
+        const d = await (await fetch("/api/hotlib/chart")).json();
+        if (!d.songs || !d.songs.length) {
+          toast("热榜还没入库，点「立即更新」拉一次（要联网）。");
+          return;
+        }
+        state.userPaused = false;
+        renderSongs(d.songs, `当前热榜 ${d.songs.length} 首 · 苹果音乐港台美热歌榜，每 30 分钟自动更新，已存本地`);
+        autoPlayList(true);
+        toast("正在播放当前热榜；下次识别到表情会换回情绪歌单。");
+      });
+    }
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try {
+        await fetch("/api/hotlib", { method: "POST" });
+        toast("正在拉取在线热歌和榜单，下载好的会自动补进曲库。");
+        for (let i = 0; i < 20; i += 1) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const d = await refreshHotLib();
+          if (d && !d.pending && i > 2) break;
+        }
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    $("#btn-settings") && $("#btn-settings").addEventListener("click", () => refreshHotLib());
+  }
+
   function bind() {
     document.querySelectorAll("#venue-picks [data-venue]").forEach((b) => b.addEventListener("click", () => setVenue(b.dataset.venue, true)));
     setVenue(state.venue, false);
@@ -4411,6 +4466,16 @@
         state.skipPlayed = skipTog.checked;
         localStorage.setItem("emotune-skip-played", state.skipPlayed ? "1" : "0");
         toast(state.skipPlayed ? "已打开排除已播：听过的歌排到后面。" : "已关闭排除已播：按匹配度排，听过的也照常靠前。");
+      });
+    }
+    bindHotLib();
+    const cnt = $("#rec-count");
+    if (cnt) {
+      cnt.value = state.recCount;
+      cnt.addEventListener("change", () => {
+        state.recCount = cnt.value;
+        localStorage.setItem("emotune-rec-count", state.recCount);
+        toast(state.recCount === "all" ? "歌单长度：全部曲目，下次识别把这类情绪的整个曲库排进来。" : `歌单长度：${state.recCount} 首，下次识别生效。`);
       });
     }
     const rot = $("#pin-rotate");

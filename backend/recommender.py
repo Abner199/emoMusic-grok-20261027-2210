@@ -211,16 +211,42 @@ def _apple_ids_for(emotion: str) -> list[str]:
     return ids
 
 
+_CATALOG_CACHE: dict = {}
+
+
+def invalidate_catalog() -> None:
+    """热歌入库后调用：下次 load_catalog() 重新合并。"""
+    _CATALOG_CACHE.clear()
+
+
 def load_catalog() -> list[dict]:
-    if not _CATALOG_PATH.exists():
-        return []
+    """本地曲库（catalog.json）+ 热歌入库（hot_library.json）。按文件修改时间缓存。"""
+    from backend.hotlib import HOT_PATH, hot_songs
+
+    def sig(p):
+        try:
+            st = p.stat()
+            return (st.st_mtime_ns, st.st_size)
+        except OSError:
+            return None
+
+    key = (sig(_CATALOG_PATH), sig(HOT_PATH))
+    if _CATALOG_CACHE.get("key") == key:
+        return list(_CATALOG_CACHE["songs"])
+    songs: list[dict] = []
+    if _CATALOG_PATH.exists():
+        try:
+            data = json.loads(_CATALOG_PATH.read_text(encoding="utf-8"))
+            songs = [localize_song(s) for s in data.get("songs", data if isinstance(data, list) else [])]
+        except Exception:
+            logger.exception("读取本地曲库失败")
+            return []
     try:
-        data = json.loads(_CATALOG_PATH.read_text(encoding="utf-8"))
-        songs = data.get("songs", data if isinstance(data, list) else [])
-        return [localize_song(s) for s in songs]
+        songs += [localize_song(s) for s in hot_songs()]
     except Exception:
-        logger.exception("读取本地曲库失败")
-        return []
+        logger.exception("读取热歌库失败")
+    _CATALOG_CACHE.update(key=key, songs=songs)
+    return list(songs)
 
 
 def stream_allowed(url: str) -> bool:
@@ -1597,11 +1623,16 @@ def _rank_bucket(batch: list[dict], face_vec, emotion: str) -> list[dict]:
         item["music"] = public_music(desc)
         item["match"] = match
         pri = play_priority(item.get("title") or "", item.get("artist") or "", emotion)
+        if item.get("hot_new") and pri < 90:
+            pri = 3 if pri >= 2 else 2  # 刚入库的热歌：华语排在代表曲之后，外语与华语老歌同档
         if pri >= 90:
             item["pin"] = 100 - pri + 1  # 代表曲序号 1..N，网页在代表曲之间轮播
         scored.append((pri, match, item))
     scored.sort(key=lambda x: (-x[0], -x[1]))
     return [item for _, _, item in scored]
+
+
+from backend.hotlib import absorb  # noqa: E402
 
 
 def _pool_songs(emotions: list[str], want_online: bool, limit: int) -> tuple[dict[str, list[dict]], dict[str, list[dict]], Optional[str]]:
@@ -1615,6 +1646,7 @@ def _pool_songs(emotions: list[str], want_online: bool, limit: int) -> tuple[dic
         for eid, fut in futs.items():
             try:
                 online_map[eid] = [s for s in (fut.result() or []) if s.get("playable") and s.get("audio")]
+                absorb(eid, online_map[eid])  # 在线拿到的热歌后台下载入库，下次离线也能推荐
             except Exception as exc:
                 online_error = str(exc)
                 logger.warning("在线推荐失败 %s: %s", eid, exc)
@@ -1631,12 +1663,14 @@ def recommend(
     strategy: str = DEFAULT_STRATEGY,
     skip_played: bool = True,
 ) -> dict:
-    """skip_played=False：设置里关掉「排除已播」，歌单按匹配度排，不把听过的挪到后面。"""
+    """skip_played=False：设置里关掉「排除已播」，歌单按匹配度排，不把听过的挪到后面。
+    count=0：全部曲目——涉及到的每类情绪把本地曲库（和在线结果）整类排进歌单。"""
     if emotion not in EMOTIONS:
         emotion = "neutral"
     meta = EMOTIONS[emotion]
     sid = normalize(strategy)
-    count = max(6, int(count or RECOMMEND_COUNT))
+    take_all = int(count or 0) <= 0
+    count = RECOMMEND_COUNT if take_all else max(6, int(count))
     stages = plan(emotion, sid, count)
     emos = involved_emotions(stages) or [emotion]
 
@@ -1653,7 +1687,11 @@ def recommend(
     skip_at = {key: idx for idx, key in enumerate(skip)}
     face_vec = face_vector(face_scores, emotion)
 
-    local_map, online_map, online_error = _pool_songs(emos, want_online, limit=max(count, 96))
+    local_map, online_map, online_error = _pool_songs(emos, want_online, limit=100000 if take_all else max(count, 96))
+    if take_all:
+        # 每段不设上限：同一情绪第一次出现的那段把整类都排进来，后面同情绪的段靠去重自然为空
+        stages = [dict(st, count=100000) for st in stages]
+        count = sum(len(local_map.get(e) or []) + len(online_map.get(e) or []) for e in emos)
 
     def split(batch: list[dict]) -> tuple[list[dict], list[dict]]:
         fresh: list[dict] = []
@@ -1710,6 +1748,16 @@ def recommend(
         extra_stage["count"] = count - len(mixed)
         mixed.extend(fill_stage(extra_stage))
 
+    if take_all:
+        # 全部曲目：最后接上当前热榜里没标情绪的新歌（不混进前面的情绪段）
+        from backend.hotlib import POP, chart_songs
+
+        for song in chart_songs(1000):
+            key = title_key(song.get("title") or "")
+            if song.get("emotion") == POP and not title_seen(key, seen):
+                seen.add(key)
+                mixed.append(dict(song, rec_role="chart", rec_role_zh="当前热榜", rec_from=emotion))
+        count = len(mixed)
     songs = [localize_song(s) for s in mixed[:count]]
     online_count = sum(1 for s in songs if s.get("source") != "local")
     if want_online and online_count == 0 and not online_error:

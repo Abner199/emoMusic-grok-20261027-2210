@@ -1,0 +1,22 @@
+# 本机 2026-11-06 实测可用的精确版本（conda 环境 emotune，Python 3.12.16，Windows 11，CPU）。
+# 想和本机一模一样：pip install -r requirements-lock.txt；装不上某个版本时改用 requirements.txt。
+flask==3.1.3
+werkzeug==3.1.9
+jinja2==3.1.6
+itsdangerous==2.2.0
+click==8.5.0
+blinker==1.9.0
+markupsafe==3.0.4
+opencv-python==4.12.0
+numpy==2.5.4
+pillow==11.3.0
+requests==2.34.2
+certifi==2026.10.23
+charset-normalizer==3.5.2
+idna==3.20
+urllib3==2.8.0
+scipy==1.18.1
+onnxruntime==1.31.1
+flatbuffers==25.12.19
+packaging==26.3
+protobuf==7.36.2

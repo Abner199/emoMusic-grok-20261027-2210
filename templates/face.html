@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>当AI遇见旋律：人脸窗</title>
-  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}?v=50" />
-  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='img/favicon-32.png') }}?v=50" />
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='img/apple-touch-icon.png') }}?v=50" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/fonts.css') }}?v=1" />
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v=88" />
+  <link rel="icon" type="image/svg+xml" href="{{ asset('img/favicon.svg') }}" />
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('img/favicon-32.png') }}" />
+  <link rel="apple-touch-icon" href="{{ asset('img/apple-touch-icon.png') }}" />
+  <link rel="stylesheet" href="{{ asset('css/fonts.css') }}" />
+  <link rel="stylesheet" href="{{ asset('css/app.css') }}" />
 </head>
 <body class="face-page" data-emotion="idle">
   <header class="face-top">
@@ -89,7 +89,7 @@
     <div class="vote-bar" id="vote-bar" hidden></div>
   </section>
   <p class="hint" id="face-hint">YuNet 五点 · FACS 口眼眉线索 · 实拍 / 线框可切换 · 单人精检只取主脸 · 多人远场按多数票推荐</p>
-  <script src="{{ url_for('static', filename='js/face-draw.js') }}?v=88"></script>
-  <script src="{{ url_for('static', filename='js/face.js') }}?v=88"></script>
+  <script src="{{ asset('js/face-draw.js') }}"></script>
+  <script src="{{ asset('js/face.js') }}"></script>
 </body>
 </html>

@@ -231,6 +231,45 @@ def landmark_cues(landmarks5, box=None) -> dict:
     }
 
 
+MOUTH_PIX_MIN = 48  # 脸框比这窄（远场小脸）就不看嘴里的像素，只用五点几何
+
+
+def mouth_pixels(image_bgr: np.ndarray, landmarks5) -> tuple[float, float]:
+    """对齐到 112×112 后看嘴部像素，返回 (露齿比例, 口腔张开比例)。
+
+    露齿：两嘴角之间、唇线下方，比脸颊皮肤明显不红（Lab a 低）、亮度不比皮肤暗太多的像素。
+      42 张示例：露齿笑 0.24–0.27，惊讶 ≤0.05，平静 ≤0.04（呲牙的愤怒 / 厌恶也高，只用来区分喜悦与惊讶、平静）。
+    口腔张开：嘴部区域里比皮肤暗一半以上的像素（张开的口腔是黑的）。
+      示例惊讶中位 0.32（最低 0.14）；足迹里 692 帧被判成惊讶的真实画面中位 0.00——
+      多是摄像头放低、仰头说话的平静脸，嘴根本没张开。
+    """
+    try:
+        a = align_face(image_bgr, np.asarray(landmarks5, dtype=np.float64))
+        lab = cv2.cvtColor(a, cv2.COLOR_BGR2LAB).astype(np.float32)
+        skin = np.concatenate([lab[58:78, 18:34].reshape(-1, 3), lab[58:78, 78:94].reshape(-1, 3)])
+        s_l, s_a = float(np.median(skin[:, 0])), float(np.median(skin[:, 1]))
+        roi = lab[85:106, 46:67]
+        teeth = float(((roi[..., 0] >= s_l - 25) & (roi[..., 1] <= s_a - 5)).mean())
+        cavity = float((lab[84:110, 44:69, 0] < s_l * 0.45).mean())
+        return teeth, cavity
+    except Exception:
+        return 0.0, -1.0
+
+
+def face_metrics(image_bgr: np.ndarray, face: dict) -> dict:
+    """几何校正要用的指标：五点口型；脸够大时再加露齿与口腔张开。没有关键点返回空。"""
+    if not face.get("landmarks"):
+        return {}
+    metrics = dict(landmark_cues(face["landmarks"], face.get("box")).get("metrics") or {})
+    box = face.get("box") or [0, 0, 0, 0]
+    if float(box[2]) >= MOUTH_PIX_MIN:
+        teeth, cavity = mouth_pixels(image_bgr, face["landmarks"])
+        metrics["teeth"] = round(teeth, 3)
+        if cavity >= 0:
+            metrics["cavity"] = round(cavity, 3)
+    return metrics
+
+
 # 课堂演示模式（网页设置里打开，按请求传入）：孩子扮表情时惊讶张口不够大、平静时忍不住笑
 DEMO_MODE: contextvars.ContextVar[bool] = contextvars.ContextVar("emotune_demo_mode", default=False)
 # 多人远场的场地（网页设置，按请求传入）：small 小教室只整图检测；medium 中会堂分块放大 1.3；large 大会堂分块放大 1.6
@@ -239,9 +278,31 @@ VENUE_UP = {"medium": (1.3, 1.15), "large": (1.6, 1.3)}  # (精检放大倍数, 
 
 # 实时识别快速模式（来源带 -live 时由 app 设置）：单次前向 + HSEmotion 单裁剪，不做 4 向 TTA
 FAST_MODE: contextvars.ContextVar[bool] = contextvars.ContextVar("emotune_fast_mode", default=False)
-# 由 static/demo 21 张示例量出：喜悦嘴宽 0.89–0.91，平静 0.84–0.87；惊讶张口 0.58–0.69，平静 ≤0.47
+# 由 static/demo 42 张示例量出：喜悦嘴宽 0.90–0.95，平静 0.87–0.90，惊讶 0.79–0.86（O 型嘴偏窄）
 DEMO_SMILE_W = 0.88
 DEMO_OPEN_DROP = 0.52
+TEETH_SMILE = 0.12  # 露齿比例 ≥ 这个值算「露齿笑」
+CAVITY_OPEN = 0.10  # 口腔张开比例 ≥ 这个值才算真张嘴（惊讶的 O 型嘴）；低于 0.05 基本是闭嘴
+WIDE_SMILE_W = 0.92  # 嘴宽 ≥ 这个值：惊讶的 O 型嘴到不了，按笑开处理
+
+
+def _smile_level(geo: dict) -> float:
+    """笑开的把握 0–1：露齿 + 嘴宽 + 嘴角不下垂。张大嘴大笑时嘴角会被拉低，所以上扬门槛放宽到 -0.30。"""
+    if not geo:
+        return 0.0
+    mouth_w = float(geo.get("mouth_w") or 0.0)
+    lift = float(geo.get("mouth_lift") or 0.0)
+    teeth = float(geo.get("teeth") or 0.0)
+    if lift < -0.30 or mouth_w < 0.84:
+        return 0.0
+    level = 0.0
+    if teeth >= TEETH_SMILE:
+        level = 0.6 + 0.4 * float(np.clip((teeth - TEETH_SMILE) / 0.12, 0.0, 1.0))
+    elif teeth >= 0.06 and mouth_w >= 0.88:
+        level = 0.35
+    if mouth_w >= WIDE_SMILE_W and lift >= -0.25:
+        level = max(level, 0.5)
+    return level
 
 
 def _demo_adjust(vec: np.ndarray, geo: dict) -> np.ndarray:
@@ -251,11 +312,14 @@ def _demo_adjust(vec: np.ndarray, geo: dict) -> np.ndarray:
     i_hap, i_neu, i_sur = 3, 4, 6
     mouth_w = float(geo.get("mouth_w") or 0.0)
     mouth_drop = float(geo.get("mouth_drop") or 0.0)
-    if vec[i_hap] >= 0.12 and mouth_w < DEMO_SMILE_W:
+    smiling = _smile_level(geo) >= 0.5
+    cavity = geo.get("cavity")
+    mouth_open = mouth_drop >= DEMO_OPEN_DROP and (cavity is None or cavity >= CAVITY_OPEN)
+    if vec[i_hap] >= 0.12 and mouth_w < DEMO_SMILE_W and not smiling:
         move = vec[i_hap] * 0.70
         vec[i_hap] -= move
         vec[i_neu] += move
-    if mouth_drop >= DEMO_OPEN_DROP:
+    if mouth_open and not smiling:
         move = vec[i_neu] * 0.45 + vec[i_hap] * 0.50
         vec[i_neu] -= vec[i_neu] * 0.45
         vec[i_hap] -= vec[i_hap] * 0.50
@@ -286,7 +350,8 @@ def calibrate_live_vec(p: np.ndarray, metrics: Optional[dict] = None) -> np.ndar
     i_sur, i_hap, i_neu, i_fear = 6, 3, 4, 2
     # YuNet 只有嘴角，张口主要看口鼻距；合成惊讶图嘴宽往往仍约 0.80
     open_jaw = mouth_w >= 1.02 or mouth_drop >= 0.475
-    clear_smile = mouth_w >= 0.88 and mouth_lift >= -0.22
+    smile = _smile_level(geo)
+    clear_smile = (mouth_w >= 0.88 and mouth_lift >= -0.22) or smile >= 0.5
 
     if vec[i_sur] >= 0.20:
         margin = float(vec[i_sur] - max(vec[i_neu], vec[i_fear]))
@@ -322,6 +387,30 @@ def calibrate_live_vec(p: np.ndarray, metrics: Optional[dict] = None) -> np.ndar
             move = vec[i_hap] * 0.28
             vec[i_hap] -= move
             vec[i_neu] += move
+
+    # 嘴没张开就不是惊讶：摄像头放低、仰头说话时模型常把平静脸判成惊讶，按口腔张开程度退回平静
+    cavity = geo.get("cavity")
+    if cavity is not None and vec[i_sur] >= 0.15 and smile < 0.5:
+        if cavity < 0.05:
+            keep = 0.15
+        elif cavity < CAVITY_OPEN:
+            keep = 0.55
+        else:
+            keep = 1.0
+        if keep < 1.0:
+            move = vec[i_sur] * (1.0 - keep)
+            vec[i_sur] -= move
+            vec[i_neu] += move
+
+    # 露齿 / 笑开：大笑张嘴常被模型看成惊讶或平静，按把握把它们的一部分让给喜悦（不动愤怒、厌恶：呲牙也露齿）
+    if smile > 0:
+        i_sad = 5
+        move = vec[i_sur] * 0.80 * smile + vec[i_neu] * 0.65 * smile + vec[i_fear] * 0.40 * smile + vec[i_sad] * 0.30 * smile
+        vec[i_sur] -= vec[i_sur] * 0.80 * smile
+        vec[i_neu] -= vec[i_neu] * 0.65 * smile
+        vec[i_fear] -= vec[i_fear] * 0.40 * smile
+        vec[i_sad] -= vec[i_sad] * 0.30 * smile
+        vec[i_hap] += move
 
     if DEMO_MODE.get():
         vec = _demo_adjust(vec, geo)
@@ -672,8 +761,10 @@ class EmotionRecognizer:
             score = 0.38 if fast else float(cfg.get("score") or 0.42)
             self._tile_detector()
             futures = [self._tile_exec.submit(self._detect_one_tile, c, x0, y0, up, score, score_min, min_face) for c, x0, y0 in jobs]
+            # 分块只为后排小脸：放大后的块里检出的大框多是近处大脸的局部或衣服纹理，近处大脸整图那一遍已经抓到
+            big_side = max(96.0, 0.12 * long_side)
             for fut in futures:
-                found.extend(fut.result())
+                found.extend(f for f in fut.result() if f["box"][2] < big_side or float(f.get("score") or 0.0) >= 0.75)
         merged = self._nms_faces(found)
         merged.sort(key=lambda f: (f["area"], f["score"]), reverse=True)
         return merged[: int(cfg.get("face_max") or FACE_MAX)]
@@ -988,10 +1079,7 @@ class EmotionRecognizer:
                     p = p / p.sum()
         else:
             p = _softmax(self._mbf_logits(aligned))
-        metrics = {}
-        if face.get("landmarks"):
-            metrics = landmark_cues(face["landmarks"], face.get("box")).get("metrics") or {}
-        p = calibrate_live_vec(p, metrics)
+        p = calibrate_live_vec(p, face_metrics(image_bgr, face))
         scores = self._scores_from_vec(p)
         emo = self._emotion_from_id(scores[0]["id"], scores)
         if precision and len(scores) >= 2:
@@ -1033,11 +1121,7 @@ class EmotionRecognizer:
                 out.append(self._pad7(row))
         results = []
         for face, logit in zip(faces, out):
-            p = _softmax(logit)
-            metrics = {}
-            if face.get("landmarks"):
-                metrics = landmark_cues(face["landmarks"], face.get("box")).get("metrics") or {}
-            p = calibrate_live_vec(p, metrics)
+            p = calibrate_live_vec(_softmax(logit), face_metrics(image_bgr, face))
             scores = self._scores_from_vec(p)
             results.append(self._emotion_from_id(scores[0]["id"], scores))
         return results
@@ -1079,10 +1163,7 @@ class EmotionRecognizer:
             if p_hse is not None:
                 p = self._fuse_probs(p_mbf, p_hse)
         p = self._ema_track_vec(face, p)
-        metrics = {}
-        if face.get("landmarks"):
-            metrics = landmark_cues(face["landmarks"], face.get("box")).get("metrics") or {}
-        p = calibrate_live_vec(p, metrics)
+        p = calibrate_live_vec(p, face_metrics(image_bgr, face))
         if self._track_ema is not None:
             self._track_ema["p"] = p.copy()
         scores = self._scores_from_vec(p)

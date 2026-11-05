@@ -1,4 +1,4 @@
-"""生成真人示例照片：static/demo 第 4、5、6 组（22–28 带 -d，29–35 带 -e，36–42 带 -f），每类 3 张。
+"""生成真人示例照片：static/demo 第 1、3、5 行（01–07 带 -d，15–21 带 -e，29–35 带 -f），每类 3 张；合成肖像在第 2、4、6 行。
 
 照片来源（每张都先经本系统识别为对应表情，再挑“好看、表情典型夸张”的）：
 - local：CC20261023 项目 dist/static/demo_faces 里的 8 张（Wikimedia Commons，CC BY / CC BY-SA / 公有领域）；
@@ -41,17 +41,17 @@ COMMONS_CREDIT = {
     "Scared Girl.jpg": "CC BY 2.0 | Victor Bezrukov | https://commons.wikimedia.org/wiki/File:Scared_Girl.jpg",
 }
 
-# (表情, 汉字, 中文名, [第4组, 第5组, 第6组])，顺序与 01–21 相同；来源写成 "local:文件名" / "commons:文件名" / "unsplash:编号"
+# (表情, 汉字, 中文名, [第1行, 第3行, 第5行])，顺序为 喜怒哀惧惊厌中性；来源写成 "local:文件名" / "commons:文件名" / "unsplash:编号"
 PICKS = [
     ("happy", "喜", "喜悦", ["local:happy_1_喜.jpg", "local:happy_3_喜.jpg", "local:happy_2_喜.jpg"]),
-    ("angry", "怒", "愤怒", ["local:angry_1_怒.jpg", "unsplash:1611689037241-d8dfe4280f2e", "unsplash:1584970658864-242327da66dc"]),
+    ("angry", "怒", "愤怒", ["local:angry_1_怒.jpg", "unsplash:1611689037241-d8dfe4280f2e", "unsplash:1758600434927-17d15574a656"]),
     ("sad", "哀", "悲伤", ["local:sad_1_哀.jpg", "local:sad_2_哀.jpg", "unsplash:1758600588872-3d340e69650f"]),
-    ("fear", "惧", "恐惧", ["unsplash:1758273706205-de3e2f5f5c18", "commons:Scared Girl.jpg", "unsplash:1669627961474-7bff53c5dcb5"]),
+    ("fear", "惧", "恐惧", ["unsplash:1758273706205-de3e2f5f5c18", "commons:Scared Girl.jpg", "unsplash:1578514582607-07868528dcb6"]),
     ("surprise", "惊", "惊讶", ["local:surprised_1_惊.jpg", "local:surprised_2_惊.jpg", "unsplash:1780548705016-3bc8f90dbb93"]),
     ("disgust", "厌", "厌恶", ["unsplash:1601412436518-3c690b92b43f", "unsplash:1525527834147-0f4ff3097029", "unsplash:1758600588802-3da6e4f457e6"]),
     ("neutral", "中性", "平静", ["unsplash:1542909168-82c3e7fdca5c", "unsplash:1628501023521-48cece9a6909", "unsplash:1593260853607-d0e0f639bdab"]),
 ]
-GROUPS = [("d", 22), ("e", 29), ("f", 36)]
+GROUPS = [("d", 1), ("e", 15), ("f", 29)]  # 真人放奇数行，合成肖像放偶数行
 
 
 def load(source: str, local_dir: Path) -> tuple[np.ndarray, str]:
@@ -127,9 +127,9 @@ def main() -> None:
     lines.sort()
     (DEMO_DIR / "示例照片来源与授权.txt").write_text(
         "示例照片来源与授权\n\n"
-        "01–21（A、B、C 三组，文件名无后缀 / -b / -c）\n"
+        "08–14、22–28、36–42（文件名无后缀 / -b / -c，第 2、4、6 行）\n"
         "  合成肖像，供演示用（见 命名说明.txt）。\n\n"
-        "22–42（文件名带 -d / -e / -f）：真人照片，共 21 张（每类 3 张）\n"
+        "01–07、15–21、29–35（文件名带 -d / -e / -f，第 1、3、5 行）：真人照片，共 21 张（每类 3 张）\n"
         "  来源：Wikimedia Commons（各张授权见下，CC BY / CC BY-SA / 公有领域）与 Unsplash（Unsplash License）\n"
         "  改动：以人脸为中心裁成正方形，缩放到 1024×1024，重新压缩为 JPEG（tools/build_real_demo.py）。\n"
         "  CC BY-SA 照片裁剪后的版本同样以 CC BY-SA 授权提供。\n"

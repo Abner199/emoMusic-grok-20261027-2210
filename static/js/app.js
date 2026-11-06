@@ -1802,14 +1802,64 @@
     });
   }
 
+  // 框的延迟补偿：服务器给的是“拍下那一刻”的位置，等结果回来脸已经动了。
+  // 用前后两次结果算出移动速度，再往前推 (结果已过去的时间 + 往返耗时)，最多推 260 ms。
+  function predictOverlay(items, now) {
+    const at = state.overlayTargetAt || now;
+    const lead = Math.min(260, now - at + (state.trackRtt || 0) * 0.8);
+    if (lead <= 0) return items;
+    return items.map((item) => {
+      const v = item.vel;
+      if (!v || !item.box) return item;
+      const dx = v.x * lead;
+      const dy = v.y * lead;
+      return Object.assign({}, item, {
+        box: { x: item.box.x + dx, y: item.box.y + dy, w: item.box.w, h: item.box.h },
+        points: (item.points || []).map((p) => Object.assign({}, p, { x: p.x + dx, y: p.y + dy })),
+      });
+    });
+  }
+
+  function attachVelocity(prev, next, dtMs) {
+    if (!prev || !prev.length || !(dtMs > 15) || dtMs > 1200) return;
+    const used = new Set();
+    next.forEach((item) => {
+      let best = -1;
+      let bestIou = 0.15;
+      prev.forEach((p, i) => {
+        if (used.has(i) || !p.box) return;
+        const v = boxIou(p.box, item.box);
+        if (v > bestIou) {
+          bestIou = v;
+          best = i;
+        }
+      });
+      if (best < 0) return;
+      used.add(best);
+      const p = prev[best];
+      const vx = (item.box.x + item.box.w / 2 - (p.box.x + p.box.w / 2)) / dtMs;
+      const vy = (item.box.y + item.box.h / 2 - (p.box.y + p.box.h / 2)) / dtMs;
+      // 抖动不当成移动：每秒不到 4% 框宽的位移视为静止
+      const still = Math.hypot(vx, vy) * 1000 < item.box.w * 0.04;
+      const pv = p.vel || { x: 0, y: 0 };
+      item.vel = still ? { x: 0, y: 0 } : { x: pv.x * 0.35 + vx * 0.65, y: pv.y * 0.35 + vy * 0.65 };
+    });
+  }
+
   function ensureOverlayPump() {
     if (state.overlayRaf) return;
+    let last = performance.now();
     const step = () => {
       state.overlayRaf = 0;
       if (!state.trackOn) return;
-      const target = state.overlayTarget || [];
+      const now = performance.now();
+      const dt = Math.min(100, Math.max(1, now - last));
+      last = now;
+      const target = predictOverlay(state.overlayTarget || [], now);
+      // 按时间平滑：约 35 ms 时间常数，屏幕刷新率高低都一样跟手
+      const a = 1 - Math.exp(-dt / 35);
       if (target.length && (state.overlaySmooth || []).length) {
-        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, 0.38);
+        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, a);
       } else if (target.length) {
         state.overlaySmooth = target.map(cloneOverlayItem);
       }
@@ -1844,7 +1894,10 @@
       return;
     }
     state.overlayMiss = 0;
+    const at = performance.now();
+    attachVelocity(state.overlayTarget, mapped, at - (state.overlayTargetAt || 0));
     state.overlayTarget = mapped;
+    state.overlayTargetAt = at;
     if (!state.overlaySmooth.length) {
       state.overlaySmooth = mapped.map(cloneOverlayItem);
       paintFaceOverlay();
@@ -1891,6 +1944,7 @@
         state.trackBusy = true;
         try {
           const crowd = state.faceMode === "crowd";
+          const t0 = performance.now();
           const blob = await captureBlob(crowd ? 0.8 : 0.8, crowd ? 1920 : 640);
           if (blob && state.trackOn && isLiveMode()) {
             const fd = new FormData();
@@ -1901,6 +1955,8 @@
               headers: faceHeaders({ "X-Emo-Source": liveSource() }),
             });
             const data = await res.json();
+            const rtt = performance.now() - t0;
+            state.trackRtt = state.trackRtt ? state.trackRtt * 0.7 + rtt * 0.3 : rtt;
             if (state.trackOn && isLiveMode()) drawFaceOverlay(data);
             const elapsed = Number((data && data.elapsed_ms) || 40);
             if (state.trackOn && isLiveMode() && frameReady()) {

@@ -13,7 +13,9 @@
 """
 from __future__ import annotations
 
+import logging
 import math
+import os
 import shutil
 import subprocess
 import threading
@@ -363,8 +365,58 @@ def _wav_pcm(path: Path, max_seconds: float = 8.0) -> Optional[tuple[np.ndarray,
         return None
 
 
+_FFMPEG: list = []  # [路径或 None]，只探测一次
+
+
+def _quiet_errors() -> None:
+    """Windows：子进程缺 DLL / 入口点时不弹系统对话框（子进程继承此错误模式）。"""
+    if os.name != "nt":
+        return
+    try:
+        import ctypes
+
+        k32 = ctypes.windll.kernel32
+        # SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX
+        k32.SetErrorMode(k32.GetErrorMode() | 0x0001 | 0x0002 | 0x8000)
+    except Exception:
+        pass
+
+
+def ffmpeg_bin() -> Optional[str]:
+    """找一个真能运行的 ffmpeg：PATH 里逐个试 `ffmpeg -version`，坏的（如缺 DLL 入口点）跳过。"""
+    if _FFMPEG:
+        return _FFMPEG[0]
+    _quiet_errors()
+    found = None
+    seen = set()
+    first = shutil.which("ffmpeg")
+    cands = [first] if first else []
+    for d in os.environ.get("PATH", "").split(os.pathsep):
+        for name in ("ffmpeg.exe", "ffmpeg"):
+            c = os.path.join(d, name)
+            if os.path.isfile(c):
+                cands.append(c)
+    for c in cands:
+        key = os.path.normcase(os.path.abspath(c))
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            r = subprocess.run([c, "-hide_banner", "-version"], capture_output=True, timeout=8)
+            if r.returncode == 0 and b"ffmpeg" in (r.stdout or b"").lower():
+                found = c
+                break
+            logging.getLogger(__name__).warning("ffmpeg 不可用，已跳过：%s（退出码 %s）", c, r.returncode)
+        except Exception as exc:
+            logging.getLogger(__name__).warning("ffmpeg 不可用，已跳过：%s（%s）", c, exc)
+    if not found and cands:
+        logging.getLogger(__name__).warning("没有可用的 ffmpeg：曲调分析改用歌名 / 标签推断，不影响播放和识别")
+    _FFMPEG.append(found)
+    return found
+
+
 def _ffmpeg_pcm(path: Path, sr: int = _SR, seconds: float = 8.0) -> Optional[tuple[np.ndarray, int]]:
-    bin_path = shutil.which("ffmpeg")
+    bin_path = ffmpeg_bin()
     if not bin_path:
         return None
     try:

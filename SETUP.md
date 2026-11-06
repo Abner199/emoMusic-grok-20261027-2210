@@ -4,8 +4,8 @@
 
 品牌 **心弦 EmoTune**。本页写给要把**这一版原样**装到另一台 Windows 电脑、并从零跑起来的人。**从这一版起，情绪足迹（历史记录、人脸截图、播过的歌、偏好）已经直接提交进仓库**，克隆下来就和本机一模一样。固定版本、标签和如何回到某一版，见 [VERSION.md](VERSION.md)。
 
-**当前快照：2026-11-06 00:10 · 版本 v2026.11.06-0010 · 喜悦识别优化 + 提速预热 + 热歌入库 + 歌单长度 + 示例重排**  
-标签 `snapshot-20261106-0010` · 仓库 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）
+**当前快照：2026-11-06 11:15 · 版本 v2026.11.06-1115 · 实时框跟脸提速 + 一键环境检测 + ffmpeg 弹窗修复（含上一版喜悦识别 / 提速预热 / 热歌入库）**  
+标签 `snapshot-20261106-1115` · 仓库 [Abner199/emoMusic-grok-20261027-2210](https://github.com/Abner199/emoMusic-grok-20261027-2210)（公开）
 
 静态介绍页（不能跑摄像头）：https://emomusic-grok-20261102-1252.surge.sh
 
@@ -20,7 +20,7 @@
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
-git checkout snapshot-20261106-0010
+git checkout snapshot-20261106-1115
 ```
 
 双击 `tools\setup-conda.bat`，等它打印 `PASS onnxruntime CPU`。再双击 `run.bat`。
@@ -110,7 +110,7 @@ conda tos accept
 ```bat
 git clone https://github.com/Abner199/emoMusic-grok-20261027-2210.git
 cd emoMusic-grok-20261027-2210
-git checkout snapshot-20261106-0010
+git checkout snapshot-20261106-1115
 ```
 
 仓库约 1 GB，克隆要几分钟。`main` 一般已指向同一提交；用标签可以精确钉在这一版，以后 `main` 再往前走也不怕。
@@ -277,6 +277,35 @@ python tools\verify_cpu.py
 python -m pip install playwright
 python -m playwright install chromium
 ```
+
+### 5.x 一键检测环境：`check-env.bat`
+
+装完依赖后（或换电脑、升级过包后），双击项目根目录的 **`check-env.bat`**。它会自动找到 conda 环境 `emotune`，逐项检查：
+
+| 检查项 | 合格标准 |
+|---|---|
+| Python | 3.10–3.12，64 位，环境 emotune |
+| 依赖包 | flask、opencv-python、numpy、pillow、requests、scipy、onnxruntime 已装且版本在 requirements.txt 范围内 |
+| 冲突包 | 没装 onnxruntime-gpu / -directml；不和 opencv-python-headless / contrib 混装 |
+| onnxruntime | CPU 版（无 CUDA / DirectML） |
+| OpenCV | 含 FaceDetectorYN（YuNet 人脸检测） |
+| ffmpeg | 可选，没有只提醒 |
+| 模型与数据 | 3 个 onnx 模型、示例照片、曲库音频与封面、data 目录 |
+| 端口 5000 | 空闲（被占用只提醒：多半服务已在运行） |
+| 冒烟测试 | 加载模型，识别示例喜悦照应得 happy，并给出识别 / 实时追踪耗时 |
+
+每项显示 **[通过] / [提醒] / [失败]**。有失败时末尾直接列出修复命令，照着在 Anaconda Prompt 里执行（先 `conda activate emotune`），再双击检测一次。全部通过就可以双击 `run.bat`。
+
+命令行用法（先 `conda activate emotune`，在项目根目录）：
+
+```bat
+python tools\check_env.py             :: 检测当前激活的环境
+python tools\check_env.py --strict    :: 额外要求版本与 requirements-lock.txt 完全一致
+python tools\check_env.py --no-run    :: 只查包和文件，不加载模型（几秒钟）
+check-env.bat --strict                :: 双击版同样可带参数
+```
+
+退出码：0 = 满足，1 = 有失败项（可用于脚本判断）。
 
 ---
 
@@ -465,11 +494,11 @@ git push
 
 ## 10. 从固定版本恢复 / 继续开发
 
-回到**这一版**（`snapshot-20261106-0010`，仍用 conda 环境 `emotune`）：
+回到**这一版**（`snapshot-20261106-1115`，仍用 conda 环境 `emotune`）：
 
 ```bat
 git fetch --tags
-git checkout snapshot-20261106-0010
+git checkout snapshot-20261106-1115
 conda activate emotune
 python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 python tools\verify_cpu.py
@@ -525,14 +554,14 @@ git checkout snapshot-20261027-2210
 在本快照上继续改代码（不要直接改标签指向的提交）：
 
 ```bat
-git checkout -b dev/continue snapshot-20261106-0010
+git checkout -b dev/continue snapshot-20261106-1115
 conda activate emotune
 ```
 
 对比当前与本快照：
 
 ```bat
-git diff snapshot-20261106-0010
+git diff snapshot-20261106-1115
 ```
 
 更完整的标签说明见 [VERSION.md](VERSION.md)。
@@ -595,7 +624,7 @@ python -m pip install --default-timeout=300 -r requirements.txt -i https://pypi.
 关掉系统代理后再试，或关闭「在线热歌」用本地歌。讲座现场建议先关在线。
 
 **换电脑后历史是空的**  
-检出的是早于本版的旧标签（旧标签不含足迹）。`git checkout snapshot-20261106-0010` 或 `main` 即可；仍为空则按第 8 节解包。
+检出的是早于本版的旧标签（旧标签不含足迹）。`git checkout snapshot-20261106-1115` 或 `main` 即可；仍为空则按第 8 节解包。
 
 **重新对齐本地试听歌词（新增歌曲后）**  
 `pip install torch transformers av` 后依次运行 `python toolssr_previews.py`、`python toolslign_lyrics.py`。只在维护曲库时需要，正常运行不要装 torch。

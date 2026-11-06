@@ -584,6 +584,11 @@ class EmotionRecognizer:
         self._last_track_faces: list[dict] = []
         self._track_ema: Optional[dict] = None
         self._track_n = 0
+        self._tile_cache: list[dict] = []  # 实时多人：分块检出的远处小脸，隔一阵才重检
+        self._tile_cache_t = 0.0
+        self._tile_cache_shape = None
+        self._tile_bg_busy = False
+        self._tile_bg_net = None
         self._load_hsemotion()
         logger.info("情绪识别模型已加载")
 
@@ -1367,7 +1372,7 @@ class EmotionRecognizer:
             self.tracker.setNMSThreshold(0.3)
             if hasattr(self.tracker, "setTopK"):
                 self.tracker.setTopK(int(cfg.get("top_k") or 500))
-            return self._detect_tiled(image_bgr, self.tracker, cfg, 0.30, float(cfg.get("min_face") or 10), fast=True)
+            return self._detect_crowd_live(image_bgr, cfg)
         max_side = 640 if solo else 800
         img, scale = resize_for_detect(image_bgr, max_side)
         inv = 1.0 / scale if scale else 1.0
@@ -1388,6 +1393,70 @@ class EmotionRecognizer:
         results.sort(key=lambda f: (f["area"], f["score"]), reverse=True)
         limit = 1 if solo else int(cfg.get("face_max") or FACE_MAX)
         return self._prune_faces(results, min_face)[:limit]
+
+    def _tile_refresh(self, image_bgr: np.ndarray, cfg: dict, min_face: float, net) -> list[dict]:
+        net.setScoreThreshold(0.38)
+        net.setNMSThreshold(0.3)
+        if hasattr(net, "setTopK"):
+            net.setTopK(int(cfg.get("top_k") or 500))
+        faces = self._detect_tiled(image_bgr, net, cfg, 0.30, min_face, fast=True)
+        long_side = float(max(image_bgr.shape[:2]))
+        self._tile_cache = [f for f in faces if f["box"][2] < 0.12 * long_side]
+        self._tile_cache_t = time.perf_counter()
+        self._tile_cache_shape = image_bgr.shape[:2]
+        return faces
+
+    def _detect_crowd_live(self, image_bgr: np.ndarray, cfg: dict) -> list[dict]:
+        """实时多人：整图一遍每帧都做（近处会动的脸跟得紧）；分块找远处小脸约 0.8 秒重做一次，
+        中间沿用上次结果（远处小脸几乎不动）。单帧从约 180 ms 降到约 40 ms。"""
+        min_face = float(cfg.get("min_face") or 10)
+        now = time.perf_counter()
+        shape = image_bgr.shape[:2]
+        venue = VENUE.get()
+        if venue == "small":
+            return self._detect_tiled(image_bgr, self.tracker, cfg, 0.30, min_face, fast=True)
+        if self._tile_cache_shape != shape:
+            # 第一帧 / 换了画面尺寸：同步做一次完整分块
+            faces = self._tile_refresh(image_bgr, cfg, min_face, self.tracker)
+            return faces
+        if (now - self._tile_cache_t) > 0.8 and not self._tile_bg_busy:
+            # 远处小脸后台重找，不拖慢这一帧
+            self._tile_bg_busy = True
+            frame = image_bgr.copy()
+
+            def _bg():
+                try:
+                    if self._tile_bg_net is None:
+                        buf = np.frombuffer(self._yunet_bytes, dtype=np.uint8).copy()
+                        self._tile_bg_net = cv2.FaceDetectorYN.create("onnx", buf, np.array([], dtype=np.uint8), (640, 640), 0.38, 0.3, 500)
+                    self._tile_refresh(frame, cfg, min_face, self._tile_bg_net)
+                except Exception:
+                    pass
+                finally:
+                    self._tile_bg_busy = False
+
+            ctx = contextvars.copy_context()  # 带上本次请求的场地设置
+            threading.Thread(target=ctx.run, args=(_bg,), name="tile-refresh", daemon=True).start()
+        img, scale = resize_for_detect(image_bgr, 1280)
+        ih, iw = img.shape[:2]
+        self.tracker.setInputSize((iw, ih))
+        _, raw = self.tracker.detect(img)
+        found = self._parse_yunet(raw, 1.0 / scale if scale else 1.0, 0.30, min_face)
+        for c in self._tile_cache:
+            if all(self._box_iou(c["box"], f["box"]) < 0.15 for f in found):
+                found.append(dict(c))
+        merged = self._nms_faces(found)
+        merged.sort(key=lambda f: (f["area"], f["score"]), reverse=True)
+        return merged[: int(cfg.get("face_max") or FACE_MAX)]
+
+    def _track_cls_t(self, face: dict) -> float:
+        """上一帧同位置那张脸最近一次做表情分类的时间；没有则为 0（最优先重算）。"""
+        best, best_iou = 0.0, 0.3
+        for prev in self._last_track_faces:
+            v = self._box_iou(face["box"], prev.get("box") or [0, 0, 0, 0])
+            if v > best_iou:
+                best_iou, best = v, float(prev.get("_cls_t") or 0.0)
+        return best
 
     def _reuse_track_match(self, face: dict) -> Optional[dict]:
         """人多时只按位置匹配上一帧同一张脸（不退回“唯一一张脸”的兜底）。"""
@@ -1462,14 +1531,24 @@ class EmotionRecognizer:
                 need = [i for i, f in enumerate(faces) if self._reuse_track_match(f) is None][:40]
                 for i, emo in zip(need, self.classify_faces_batch(image_bgr, [faces[i] for i in need])):
                     fresh[i] = emo
+            budget = set(range(len(faces)))
+            if 1 < len(faces) <= 12:
+                # 几张脸时每帧只重算最久没算过的 3 张，其余沿用上一帧（框每帧都更新，表情约 0.3 秒轮一遍）
+                order = sorted(range(len(faces)), key=lambda i: self._track_cls_t(faces[i]))
+                budget = set(order[:3])
             for idx, face in enumerate(faces):
                 reuse = self._reuse_track_emotion(face) if not crowd_many else self._reuse_track_match(face)
+                if len(faces) > 1 and not crowd_many:
+                    reuse = self._reuse_track_match(face)
                 if crowd_many:
                     emo = fresh.get(idx) or reuse
                     if emo is None:
                         meta = EMOTIONS["neutral"]
                         emo = {"id": "neutral", "zh": meta["zh"], "name": meta["name"], "prob": 0.0, "color": meta["color"], "pending": True}
                     classified.append({**face, "emotion": emo})
+                    continue
+                if len(faces) > 1 and reuse is not None and idx not in budget:
+                    classified.append({**face, "emotion": reuse, "_cls_t": self._track_cls_t(face)})
                     continue
                 stable = False
                 if reuse and ema is not None:
@@ -1494,7 +1573,7 @@ class EmotionRecognizer:
                         "prob": 0.0,
                         "color": meta["color"],
                     }
-                classified.append({**face, "emotion": emo})
+                classified.append({**face, "emotion": emo, "_cls_t": now if (got_fer and not stable) else self._track_cls_t(face)})
         finally:
             if got_fer:
                 self._lock.release()

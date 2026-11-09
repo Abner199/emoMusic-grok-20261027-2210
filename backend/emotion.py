@@ -1394,6 +1394,16 @@ class EmotionRecognizer:
         limit = 1 if solo else int(cfg.get("face_max") or FACE_MAX)
         return self._prune_faces(results, min_face)[:limit]
 
+    @staticmethod
+    def _box_thumb(image_bgr: np.ndarray, box) -> Optional[np.ndarray]:
+        x, y, w, h = [int(round(float(v))) for v in box[:4]]
+        H, W = image_bgr.shape[:2]
+        x0, y0, x1, y1 = max(0, x), max(0, y), min(W, x + w), min(H, y + h)
+        if x1 - x0 < 4 or y1 - y0 < 4:
+            return None
+        g = cv2.cvtColor(image_bgr[y0:y1, x0:x1], cv2.COLOR_BGR2GRAY)
+        return cv2.resize(g, (12, 12), interpolation=cv2.INTER_AREA).astype(np.float32)
+
     def _tile_refresh(self, image_bgr: np.ndarray, cfg: dict, min_face: float, net) -> list[dict]:
         net.setScoreThreshold(0.38)
         net.setNMSThreshold(0.3)
@@ -1401,7 +1411,13 @@ class EmotionRecognizer:
             net.setTopK(int(cfg.get("top_k") or 500))
         faces = self._detect_tiled(image_bgr, net, cfg, 0.30, min_face, fast=True)
         long_side = float(max(image_bgr.shape[:2]))
-        self._tile_cache = [f for f in faces if f["box"][2] < 0.12 * long_side]
+        cache = []
+        for f in faces:
+            if f["box"][2] < 0.12 * long_side:
+                c = dict(f)
+                c["_thumb"] = self._box_thumb(image_bgr, f["box"])
+                cache.append(c)
+        self._tile_cache = cache
         self._tile_cache_t = time.perf_counter()
         self._tile_cache_shape = image_bgr.shape[:2]
         return faces
@@ -1443,8 +1459,16 @@ class EmotionRecognizer:
         _, raw = self.tracker.detect(img)
         found = self._parse_yunet(raw, 1.0 / scale if scale else 1.0, 0.30, min_face)
         for c in self._tile_cache:
-            if all(self._box_iou(c["box"], f["box"]) < 0.15 for f in found):
-                found.append(dict(c))
+            if not all(self._box_iou(c["box"], f["box"]) < 0.15 for f in found):
+                continue
+            # 沿用前先看那块画面还在不在：换了画面 / 人走了，缓存的脸立刻作废，不留旧框
+            ref = c.get("_thumb")
+            now_t = self._box_thumb(image_bgr, c["box"])
+            if ref is None or now_t is None or float(np.mean(np.abs(ref - now_t))) > 22.0:
+                continue
+            item = dict(c)
+            item.pop("_thumb", None)
+            found.append(item)
         merged = self._nms_faces(found)
         merged.sort(key=lambda f: (f["area"], f["score"]), reverse=True)
         return merged[: int(cfg.get("face_max") or FACE_MAX)]

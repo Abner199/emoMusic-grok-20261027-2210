@@ -318,15 +318,18 @@
     return Boolean(state.stream && cam && cam.videoWidth > 0);
   }
 
-  function captureBlob(quality = 0.92, maxSide = 1280) {
+  const trackShot = document.createElement("canvas"); // 实时框专用截帧（不和识别截帧混用），也供浏览器跟脸取模板
+
+  function captureBlob(quality = 0.92, maxSide = 1280, into) {
+    const shotCanvas = into || shot;
     if (!cam.videoWidth) return Promise.resolve(null);
     const scale = Math.min(1, maxSide / Math.max(cam.videoWidth, cam.videoHeight));
     const w = Math.round(cam.videoWidth * scale);
     const h = Math.round(cam.videoHeight * scale);
-    shot.width = w;
-    shot.height = h;
-    shot.getContext("2d").drawImage(cam, 0, 0, w, h);
-    return new Promise((resolve) => shot.toBlob((b) => resolve(b), "image/jpeg", quality));
+    shotCanvas.width = w;
+    shotCanvas.height = h;
+    shotCanvas.getContext("2d").drawImage(cam, 0, 0, w, h);
+    return new Promise((resolve) => shotCanvas.toBlob((b) => resolve(b), "image/jpeg", quality));
   }
 
   function setHint(text) {
@@ -387,6 +390,14 @@
   }
 
   async function startCamera() {
+    if (state.camStarting) return state.camStarting;
+    state.camStarting = startCameraInner().finally(() => {
+      state.camStarting = null;
+    });
+    return state.camStarting;
+  }
+
+  async function startCameraInner() {
     if (cameraReady()) {
       empty.hidden = true;
       startTrack();
@@ -397,7 +408,18 @@
         state.stream.getTracks().forEach((t) => t.stop());
         state.stream = null;
       }
-      const stream = await requestCameraStream();
+      // 主页刚把摄像头让出来时，系统可能还没释放：占用类错误重试几次
+      let stream = null;
+      for (let i = 0; i < 4 && !stream; i += 1) {
+        try {
+          stream = await requestCameraStream();
+        } catch (err) {
+          const busy = err && /NotReadable|Abort|TrackStart|Overconstrained/i.test(err.name || "");
+          if (!busy || i === 3) throw err;
+          setHint("摄像头正在从主页切换过来…");
+          await new Promise((r) => setTimeout(r, 450 * (i + 1)));
+        }
+      }
       state.stream = stream;
       cam.srcObject = stream;
       cam.muted = true;
@@ -635,14 +657,63 @@
     });
   }
 
+  // 框的延迟补偿：按前后两次结果的移动速度，把框往前推（结果已过去的时间 + 往返耗时），最多 260 ms
+  function predictOverlay(items, now) {
+    const shifted = trackerShift(items);
+    if (shifted) return shifted;
+    const at = state.overlayTargetAt || now;
+    const lead = Math.min(260, now - at + (state.trackRtt || 0) * 0.8);
+    if (lead <= 0) return items;
+    return items.map((item) => {
+      const v = item.vel;
+      if (!v || !item.box) return item;
+      const dx = v.x * lead;
+      const dy = v.y * lead;
+      return Object.assign({}, item, {
+        box: { x: item.box.x + dx, y: item.box.y + dy, w: item.box.w, h: item.box.h },
+        points: (item.points || []).map((p) => Object.assign({}, p, { x: p.x + dx, y: p.y + dy })),
+      });
+    });
+  }
+
+  function attachVelocity(prev, next, dtMs) {
+    if (!prev || !prev.length || !(dtMs > 15) || dtMs > 1200) return;
+    const used = new Set();
+    next.forEach((item) => {
+      let best = -1;
+      let bestIou = 0.15;
+      prev.forEach((p, i) => {
+        if (used.has(i) || !p.box) return;
+        const v = iou(p.box, item.box);
+        if (v > bestIou) {
+          bestIou = v;
+          best = i;
+        }
+      });
+      if (best < 0) return;
+      used.add(best);
+      const p = prev[best];
+      const vx = (item.box.x + item.box.w / 2 - (p.box.x + p.box.w / 2)) / dtMs;
+      const vy = (item.box.y + item.box.h / 2 - (p.box.y + p.box.h / 2)) / dtMs;
+      const still = Math.hypot(vx, vy) * 1000 < item.box.w * 0.04;
+      const pv = p.vel || { x: 0, y: 0 };
+      item.vel = still ? { x: 0, y: 0 } : { x: pv.x * 0.35 + vx * 0.65, y: pv.y * 0.35 + vy * 0.65 };
+    });
+  }
+
   function ensureOverlayPump() {
     if (state.overlayRaf) return;
+    let last = performance.now();
     const step = () => {
       state.overlayRaf = 0;
       if (!state.trackOn) return;
-      const target = state.overlayTarget || [];
+      const now = performance.now();
+      const dt = Math.min(100, Math.max(1, now - last));
+      last = now;
+      const target = predictOverlay(state.overlayTarget || [], now);
+      const a = 1 - Math.exp(-dt / (state.trackerOn ? 18 : 35)); // 按时间平滑，约 35 ms 贴上
       if (target.length && (state.overlaySmooth || []).length) {
-        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, 0.38);
+        state.overlaySmooth = blendOverlay(state.overlaySmooth, target, a);
       } else if (target.length) {
         state.overlaySmooth = target.map(cloneOverlayItem);
       }
@@ -652,12 +723,51 @@
     state.overlayRaf = requestAnimationFrame(step);
   }
 
-  function draw(data) {
+  function trackerShift(items) {
+    const tr = state.tracker;
+    if (!tr || !state.trackerOn) return null;
+    tr.sample();
+    const sign = state.mirror ? -1 : 1;
+    return items.map((item, i) => {
+      if (!item.box || !item.vk) return item;
+      const d = tr.delta(i);
+      if (!d.dx && !d.dy) return item;
+      const dx = d.dx * item.vk * sign;
+      const dy = d.dy * item.vk;
+      return Object.assign({}, item, {
+        box: { x: item.box.x + dx, y: item.box.y + dy, w: item.box.w, h: item.box.h },
+        points: (item.points || []).map((p) => Object.assign({}, p, { x: p.x + dx, y: p.y + dy })),
+      });
+    });
+  }
+
+  // 服务器框 → 浏览器逐帧跟脸（与主页同一套 face-track.js）
+  function anchorTracker(mapped, imageSize, t0) {
+    if (!window.EmoTuneTrack || !cam.videoWidth) {
+      state.trackerOn = false;
+      return;
+    }
+    if (!t0) {
+      state.trackerOn = false; // 非实时框结果（如识别此刻）没有截帧时刻，不拿来做跟踪基准
+      return;
+    }
+    if (!state.tracker) state.tracker = EmoTuneTrack.create(cam);
+    const k = cam.videoWidth / (Number(imageSize[0]) || cam.videoWidth);
+    const vboxes = mapped.map((m) => (m.raw ? m.raw.map((v) => v * k) : [0, 0, 1, 1]));
+    mapped.forEach((m, i) => {
+      m.vk = m.box && vboxes[i][2] ? m.box.w / vboxes[i][2] : 0;
+    });
+    state.tracker.anchor(vboxes, t0, trackShot);
+    state.trackerOn = true;
+  }
+
+  function draw(data, t0) {
     updateHud(data);
     if (!data || !data.ok) {
       state.overlayMiss += 1;
       if (state.overlayMiss >= 4) {
         state.overlayTarget = [];
+        state.trackerOn = false;
         state.overlaySmooth = [];
         paintOverlay();
       }
@@ -688,20 +798,25 @@
             return Object.assign({}, p, { zh: mirrorZh(p.zh, !!state.mirror), x: xy.x, y: xy.y });
           })
           .filter(Boolean);
-        return { box, emo, primary: !!f.primary, points, cues: f.cues || [] };
+        return { box, raw: f.box.map(Number), emo, primary: !!f.primary, points, cues: f.cues || [] };
       })
       .filter(Boolean);
     if (!mapped.length) {
       state.overlayMiss += 1;
       if (state.overlayMiss >= 4) {
         state.overlayTarget = [];
+        state.trackerOn = false;
         state.overlaySmooth = [];
         paintOverlay();
       }
       return;
     }
     state.overlayMiss = 0;
+    const at = performance.now();
+    attachVelocity(state.overlayTarget, mapped, at - (state.overlayTargetAt || 0));
+    anchorTracker(mapped, imageSize, t0);
     state.overlayTarget = mapped;
+    state.overlayTargetAt = at;
     if (!state.overlaySmooth.length) {
       state.overlaySmooth = mapped.map(cloneOverlayItem);
       paintOverlay();
@@ -731,7 +846,8 @@
         state.trackBusy = true;
         try {
           const crowd = state.faceMode === "crowd";
-          const blob = await captureBlob(0.8, crowd ? 1920 : 640);
+          const t0 = performance.now();
+          const blob = await captureBlob(0.8, crowd ? 1920 : 640, trackShot);
           if (blob && state.trackOn) {
             const fd = new FormData();
             fd.append("image", blob, "track.jpg");
@@ -742,8 +858,10 @@
                 headers: faceHeaders({ "X-Emo-Source": "camera" }),
               })
             ).json();
+            const rtt = performance.now() - t0;
+            state.trackRtt = state.trackRtt ? state.trackRtt * 0.7 + rtt * 0.3 : rtt;
             if (state.trackOn) {
-              draw(data);
+              draw(data, t0);
               post({ type: "track", data });
             }
             const elapsed = Number((data && data.elapsed_ms) || 40);
@@ -764,11 +882,15 @@
   }
 
   async function recognize(source) {
-    if (state.recognizing || !cameraReady()) return;
+    if (!cameraReady()) return;
+    if (state.recognizing) {
+      if (source === "camera") state.queuedRecognize = "camera"; // 手动识别此刻不丢：本次结束后马上做
+      return;
+    }
     state.recognizing = true;
     try {
       const burst = [];
-      const n = source === "camera-live" ? 1 : 3;
+      const n = source === "camera-live" ? 1 : state.faceMode === "crowd" ? 2 : 3;
       for (let i = 0; i < n; i += 1) {
         const crowdCap = state.faceMode === "crowd";
         const blob = await captureBlob(crowdCap ? 0.88 : 0.94, crowdCap ? 3840 : source === "camera-live" ? 720 : 1280);
@@ -808,10 +930,16 @@
       /* ignore */
     } finally {
       state.recognizing = false;
+      if (state.queuedRecognize) {
+        const q = state.queuedRecognize;
+        state.queuedRecognize = "";
+        setTimeout(() => recognize(q), 0);
+      }
     }
   }
 
   function setLive(on) {
+    if (!!on === state.live && (!on || state.liveTimer)) return; // 状态没变：不重复通知，避免两个窗口互相回传
     state.live = !!on;
     $("#live-toggle").checked = state.live;
     $("#live-emo-dot").hidden = !state.live;
@@ -890,6 +1018,16 @@
     channel.addEventListener("message", (ev) => {
       const msg = ev.data || {};
       if (msg.type === "face-mode" && msg.id) setFaceMode(msg.id, false, true);
+      if (msg.type === "set-live") {
+        if (msg.on) startCamera().then((ok) => ok && setLive(true));
+        else setLive(false);
+      }
+      if (msg.type === "recognize") {
+        const src = msg.source === "camera-live" ? "camera-live" : "camera";
+        if (src === "camera" && state.live) setLive(false);
+        if (cameraReady()) recognize(src);
+        else startCamera().then((ok) => ok && recognize(src));
+      }
       if (msg.type === "cam-chrome") {
         if (msg.landmark) setLandmarkMode(msg.landmark, false);
         if (Number.isFinite(Number(msg.zoom))) setCamZoom(Number(msg.zoom), false);

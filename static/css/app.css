@@ -647,12 +647,6 @@ label.primary {
   border: 1.5px dashed color-mix(in srgb, var(--accent) 55%, white 10%);
   border-radius: 50%; pointer-events: none; opacity: 0.7;
 }
-.scan {
-  position: absolute; left: 0; right: 0; height: 18%; z-index: 3;
-  background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--accent) 35%, transparent), transparent);
-  animation: sweep 1.4s linear infinite; pointer-events: none;
-}
-@keyframes sweep { from { top: -10%; } to { top: 95%; } }
 .cam-empty {
   position: absolute; inset: 0; z-index: 4; display: grid; place-content: center; justify-items: center; gap: 12px; text-align: center;
   padding: 24px; background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 20%, transparent), color-mix(in srgb, var(--bg) 82%, transparent));
@@ -1707,7 +1701,7 @@ body[data-emotion="neutral"] { --accent: var(--neutral); --accent-2: var(--neutr
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .emo-icon.is-pop svg, .emo-tag.is-pulse, .scan { animation: none; }
+  .emo-icon.is-pop svg, .emo-tag.is-pulse { animation: none; }
 }
 
 @container result (max-width: 720px) {

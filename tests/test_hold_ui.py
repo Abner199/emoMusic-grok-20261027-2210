@@ -288,7 +288,11 @@ def main() -> int:
 
             page.evaluate("() => window.__emotune.setLockForTest('surprise', 0)")
             queue[:] = ["neutral"]
-            page.wait_for_timeout(2500)
+            # 模拟接口由 Python 回调逐个应答，速度不稳：等画面此刻转成平静（最多 8 秒），而不是死等固定时长
+            try:
+                page.wait_for_function("() => (document.querySelector('#emo-now').textContent || '').includes('平静')", timeout=8000)
+            except Exception:
+                pass
             page.screenshot(path=str(shots / "relaxed.png"), full_page=True)
             st = page.evaluate("() => window.__emotune.getState()")
             hold_txt = page.locator("#emo-hold").inner_text()

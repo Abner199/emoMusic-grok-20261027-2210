@@ -455,7 +455,6 @@
     overlay: $("#face-overlay"),
     preview: $("#preview"),
     empty: $("#cam-empty"),
-    scan: $("#scan"),
     file: $("#file-input"),
     drop: $("#photo-stage"),
     songs: $("#songs"),
@@ -718,16 +717,19 @@
     return state.faceMode === "crowd" ? [0.88, 3840] : [0.9, 720];
   }
 
-  function captureBlob(quality = 0.92, maxSide = 1280) {
+  const trackShot = document.createElement("canvas"); // 实时框专用截帧（不和识别截帧混用），也供浏览器跟脸取模板
+
+  function captureBlob(quality = 0.92, maxSide = 1280, into) {
+    const shotCanvas = into || ui.shot;
     const video = ui.cam;
     if (!video.videoWidth) return Promise.resolve(null);
     const scale = Math.min(1, maxSide / Math.max(video.videoWidth, video.videoHeight));
     const w = Math.round(video.videoWidth * scale);
     const h = Math.round(video.videoHeight * scale);
-    ui.shot.width = w;
-    ui.shot.height = h;
-    ui.shot.getContext("2d").drawImage(video, 0, 0, w, h);
-    return new Promise((resolve) => ui.shot.toBlob((b) => resolve(b), "image/jpeg", quality));
+    shotCanvas.width = w;
+    shotCanvas.height = h;
+    shotCanvas.getContext("2d").drawImage(video, 0, 0, w, h);
+    return new Promise((resolve) => shotCanvas.toBlob((b) => resolve(b), "image/jpeg", quality));
   }
 
   function waitForVideo(timeout = 5000) {
@@ -1027,10 +1029,10 @@
   const LIVE_TICK_MS = 1400;
   const TRACK_PERIOD_MS = 90; // 框与关键点约 10 帧/秒取样，网页 60fps 插值
   const TRACK_RETRY_MS = 60;
-  const TRACK_KICK_OTHER_MS = 1000;
-  const TRACK_KICK_SPIKE_MS = 480;
+  const TRACK_KICK_OTHER_MS = 700;
+  const TRACK_KICK_SPIKE_MS = 360;
   const TRACK_KICK_NEUTRAL_MS = 1200;
-  const TRACK_KICK_GAP_MS = 1100;
+  const TRACK_KICK_GAP_MS = 750;
   const UI_EMO_HITS = 3;
   const UI_EMO_DWELL_MS = 480;
   const UI_SPIKE_HITS = 2;
@@ -1175,7 +1177,9 @@
 
   function stopLive() {
     hushVoice();
+    const wasLive = state.live;
     state.live = false;
+    if (wasLive && state.facePopActive && faceChannel) faceChannel.postMessage({ type: "set-live", on: false });
     const tog = $("#live-toggle");
     if (tog) tog.checked = false;
     if (state.liveTimer) {
@@ -1359,6 +1363,8 @@
     state.overlaySmooth = [];
     state.overlayTarget = [];
     state.overlayMiss = 0;
+    state.trackerOn = false;
+    if (state.tracker) state.tracker.reset();
     state.lastOverlay = { id: "idle", color: EMO_HEX.idle };
     state.lastVote = null;
     const hud = $("#live-emo-hud");
@@ -1435,10 +1441,26 @@
     return state.uiEmo;
   }
 
+  function trackAgrees(id, ms) {
+    return !!(id && state.trackEmo === id && Date.now() - (state.trackEmoAt || Date.now()) >= ms);
+  }
+
   async function kickLiveRecognize() {
-    if (!state.live || !isLiveMode() || state.recognizing || !frameReady()) return;
+    if (!state.live) return;
     const now = Date.now();
+    if (state.facePopActive) {
+      // 摄像头在人脸窗里：请人脸窗立刻截一帧识别
+      if (now - (state.liveKickAt || 0) < TRACK_KICK_GAP_MS || !faceChannel) return;
+      state.liveKickAt = now;
+      faceChannel.postMessage({ type: "recognize", source: "camera-live" });
+      return;
+    }
+    if (!isLiveMode() || !frameReady()) return;
     if (now - (state.liveKickAt || 0) < TRACK_KICK_GAP_MS) return;
+    if (state.recognizing) {
+      state.kickPending = true; // 正在识别：结束后补一次（仍守最短间隔），不白等下一轮定时
+      return;
+    }
     state.liveKickAt = now;
     const blob = await liveFrameBlob();
     if (blob && state.live) recognize(blob, liveSource());
@@ -1505,6 +1527,8 @@
     if (!hud) return;
     if (ui.empty && !ui.empty.hidden) {
       hud.hidden = true;
+      // 人脸窗里检测时，主页右侧情绪脸与标签跟着实时框走
+      if (state.facePopActive && data && data.ok && data.emotion) commitLiveUi(data.emotion);
       paintEmoNow(data);
       return;
     }
@@ -1705,6 +1729,7 @@
         .filter(Boolean);
       mapped.push({
         box,
+        raw: f.box.map(Number),
         primary: !!f.primary,
         emo: f.emotion || data.emotion || {},
         pending: !!(f.emotion && f.emotion.pending),
@@ -1714,7 +1739,7 @@
     });
     (data.extra_boxes || []).forEach((b) => {
       const box = mapBoxToCanvas(b, imageSize, !!state.mirror);
-      if (box) mapped.push({ box, primary: false, emo: {}, pending: true, points: [], cues: [] });
+      if (box) mapped.push({ box, raw: b.map(Number), primary: false, emo: {}, pending: true, points: [], cues: [] });
     });
     return mapped;
   }
@@ -1804,7 +1829,27 @@
 
   // 框的延迟补偿：服务器给的是“拍下那一刻”的位置，等结果回来脸已经动了。
   // 用前后两次结果算出移动速度，再往前推 (结果已过去的时间 + 往返耗时)，最多推 260 ms。
+  function trackerShift(items) {
+    const tr = state.tracker;
+    if (!tr || !state.trackerOn) return null;
+    tr.sample();
+    const sign = state.mirror ? -1 : 1;
+    return items.map((item, i) => {
+      if (!item.box || !item.vk) return item;
+      const d = tr.delta(i);
+      if (!d.dx && !d.dy) return item;
+      const dx = d.dx * item.vk * sign;
+      const dy = d.dy * item.vk;
+      return Object.assign({}, item, {
+        box: { x: item.box.x + dx, y: item.box.y + dy, w: item.box.w, h: item.box.h },
+        points: (item.points || []).map((p) => Object.assign({}, p, { x: p.x + dx, y: p.y + dy })),
+      });
+    });
+  }
+
   function predictOverlay(items, now) {
+    const shifted = trackerShift(items);
+    if (shifted) return shifted; // 浏览器逐帧跟脸：位移来自画面本身，不靠速度外推
     const at = state.overlayTargetAt || now;
     const lead = Math.min(260, now - at + (state.trackRtt || 0) * 0.8);
     if (lead <= 0) return items;
@@ -1857,7 +1902,7 @@
       last = now;
       const target = predictOverlay(state.overlayTarget || [], now);
       // 按时间平滑：约 35 ms 时间常数，屏幕刷新率高低都一样跟手
-      const a = 1 - Math.exp(-dt / 35);
+      const a = 1 - Math.exp(-dt / (state.trackerOn ? 18 : 35)); // 逐帧跟脸时几乎直接贴上
       if (target.length && (state.overlaySmooth || []).length) {
         state.overlaySmooth = blendOverlay(state.overlaySmooth, target, a);
       } else if (target.length) {
@@ -1869,7 +1914,30 @@
     state.overlayRaf = requestAnimationFrame(step);
   }
 
-  function drawFaceOverlay(data) {
+  // 服务器框 → 浏览器跟踪器：换算成视频像素，补上截帧以来的位移
+  function anchorTracker(mapped, data, t0) {
+    const size = (data.face && data.face.image_size) || [ui.shot.width, ui.shot.height];
+    state.lastTrackSize = size;
+    const vw = (ui.cam && ui.cam.videoWidth) || 0;
+    const k = vw / (Number(size[0]) || vw || 1);
+    const vboxes = mapped.map((m) => (m.raw ? m.raw.map((v) => v * k) : [0, 0, 1, 1]));
+    mapped.forEach((m, i) => {
+      m.vk = m.box && vboxes[i][2] ? m.box.w / vboxes[i][2] : 0; // 画布像素 / 视频像素
+    });
+    if (!window.EmoTuneTrack || !vw || localStorage.getItem("emotune-track-js") === "0") {
+      state.trackerOn = false;
+      return;
+    }
+    if (!t0) {
+      state.trackerOn = false; // 非实时框结果（如识别此刻）没有截帧时刻，不拿来做跟踪基准
+      return;
+    }
+    if (!state.tracker) state.tracker = EmoTuneTrack.create(ui.cam);
+    state.tracker.anchor(vboxes, t0, trackShot);
+    state.trackerOn = true;
+  }
+
+  function drawFaceOverlay(data, t0) {
     updateLiveHud(data);
     if (data && data.ok && data.face && data.face.box && data.face.image_size) {
       state.lastTrackFace = { box: data.face.box.slice(), size: data.face.image_size.slice(), at: Date.now() };
@@ -1878,6 +1946,7 @@
       state.overlayMiss += 1;
       if (state.overlayMiss >= 4) {
         state.overlayTarget = [];
+        state.trackerOn = false;
         state.overlaySmooth = [];
         paintFaceOverlay();
       }
@@ -1888,6 +1957,7 @@
       state.overlayMiss += 1;
       if (state.overlayMiss >= 4) {
         state.overlayTarget = [];
+        state.trackerOn = false;
         state.overlaySmooth = [];
         paintFaceOverlay();
       }
@@ -1896,6 +1966,7 @@
     state.overlayMiss = 0;
     const at = performance.now();
     attachVelocity(state.overlayTarget, mapped, at - (state.overlayTargetAt || 0));
+    anchorTracker(mapped, data, t0);
     state.overlayTarget = mapped;
     state.overlayTargetAt = at;
     if (!state.overlaySmooth.length) {
@@ -1945,7 +2016,7 @@
         try {
           const crowd = state.faceMode === "crowd";
           const t0 = performance.now();
-          const blob = await captureBlob(crowd ? 0.8 : 0.8, crowd ? 1920 : 640);
+          const blob = await captureBlob(0.8, crowd ? 1920 : 640, trackShot);
           if (blob && state.trackOn && isLiveMode()) {
             const fd = new FormData();
             fd.append("image", blob, "track.jpg");
@@ -1957,7 +2028,7 @@
             const data = await res.json();
             const rtt = performance.now() - t0;
             state.trackRtt = state.trackRtt ? state.trackRtt * 0.7 + rtt * 0.3 : rtt;
-            if (state.trackOn && isLiveMode()) drawFaceOverlay(data);
+            if (state.trackOn && isLiveMode()) drawFaceOverlay(data, t0);
             const elapsed = Number((data && data.elapsed_ms) || 40);
             if (state.trackOn && isLiveMode() && frameReady()) {
               state.trackTimer = setTimeout(tick, Math.max(15, TRACK_PERIOD_MS - elapsed));
@@ -3911,7 +3982,8 @@
       } else {
         state.liveGuessCount += 1;
       }
-      if (state.liveGuessCount >= LIVE_NEUTRAL_HITS && !voiceDriven) applyNew();
+      const neutralNeed = trackAgrees("neutral", 1500) ? Math.min(2, LIVE_NEUTRAL_HITS) : LIVE_NEUTRAL_HITS;
+      if (state.liveGuessCount >= neutralNeed && !voiceDriven) applyNew();
       else {
         showFaceCrop(data);
         updateHoldUi(true);
@@ -3923,7 +3995,8 @@
       } else {
         state.liveGuessCount += 1;
       }
-      const need = playlistSwitchNeed(locked, emoId, low);
+      let need = playlistSwitchNeed(locked, emoId, low);
+      if (!low && trackAgrees(emoId, 500)) need = 1; // 实时框也连续认出同一情绪：两路一致，不必再等第二次截帧
       if (state.liveGuessCount >= need && !voiceDriven) applyNew();
       else {
         showFaceCrop(data);
@@ -3943,7 +4016,6 @@
       return;
     }
     state.recognizing = true;
-    ui.scan.hidden = false;
     $("#btn-recognize").disabled = true;
     try {
       const fd = new FormData();
@@ -3970,13 +4042,26 @@
       toast("网络或服务异常，请确认已启动后端。", "err");
     } finally {
       state.recognizing = false;
-      ui.scan.hidden = true;
       $("#btn-recognize").disabled = false;
+      if (state.kickPending) {
+        state.kickPending = false;
+        const wait = Math.max(0, TRACK_KICK_GAP_MS - (Date.now() - (state.liveKickAt || 0)));
+        setTimeout(() => {
+          const id = state.trackEmo;
+          if (state.live && id && id !== state.lockEmotion) kickLiveRecognize();
+        }, wait);
+      }
     }
   }
 
   async function recognizeNow() {
     unlockAudio();
+    if (state.facePopActive) {
+      if (state.live) stopLive();
+      if (faceChannel) faceChannel.postMessage({ type: "recognize", source: "camera" });
+      toast("已请人脸窗识别此刻");
+      return;
+    }
     if (isLiveMode()) {
       if (state.live) {
         stopLive();
@@ -3985,10 +4070,12 @@
       const ok = await ensureLiveSource();
       if (!ok) return;
       const burst = [];
-      for (let i = 0; i < 4; i += 1) {
+      // 多人远场是 4K 分块检测，最费时：连拍 2 张就够挑脸数最多的一张（慢电脑上省一半时间）
+      const shots = state.faceMode === "crowd" ? 2 : 4;
+      for (let i = 0; i < shots; i += 1) {
         const blob = await captureBlob(0.94, state.faceMode === "crowd" ? 3840 : 1280);
         if (blob) burst.push(blob);
-        if (i < 3) await new Promise((r) => setTimeout(r, 70));
+        if (i < shots - 1) await new Promise((r) => setTimeout(r, 70));
       }
       if (!burst.length) {
         const miss = {
@@ -4383,22 +4470,27 @@
       const msg = ev.data || {};
       if (msg.type === "hello") {
         state.facePopActive = true;
+        if (state.live && !state.detectOff) faceChannel.postMessage({ type: "set-live", on: true });
         stopCameraStream();
         ui.empty.hidden = false;
         setCamHint("人脸检测已移到弹出窗口。关闭人脸窗后可回到本页。");
       } else if (msg.type === "bye") {
         onFacePopClosed();
       } else if (msg.type === "live") {
-        if (msg.on) {
+        if (msg.on && !state.live) {
           state.live = true;
+          state.detectOff = false;
+          const tog = $("#live-toggle");
+          if (tog) tog.checked = true;
           syncDetectBtn();
           state.lastSpokenEmo = "";
           hushVoice();
           startHoldTick();
           syncLiveHudDot();
-        } else stopLive();
+        } else if (!msg.on && state.live) stopLive();
       } else if (msg.type === "track") {
-        /* 主画面已让出摄像头，结果在人脸窗里看 */
+        // 人脸窗的实时框结果：更新右侧情绪，并在表情稳定变化时请人脸窗立刻识别换歌
+        if (!state.detectOff && msg.data) updateLiveHud(msg.data);
       } else if (msg.type === "result") {
         handleRecognizeData(msg.data, msg.source || "camera", 0);
       } else if (msg.type === "face-mode" && msg.id) {
@@ -4626,6 +4718,24 @@
       recognizeNow();
     });
     $("#live-toggle").addEventListener("change", async (e) => {
+      if (state.facePopActive) {
+        // 摄像头在人脸窗里：只切换状态，并让人脸窗开始 / 停止定时识别
+        if (e.target.checked) {
+          unlockAudio();
+          state.userPaused = false;
+          state.detectOff = false;
+          state.live = true;
+          syncDetectBtn();
+          state.lastSpokenEmo = "";
+          hushVoice();
+          startHoldTick();
+          updateHoldUi(false);
+          syncLiveHudDot();
+          if (faceChannel) faceChannel.postMessage({ type: "set-live", on: true });
+          toast("实时检测已打开：人脸窗里的表情会同步到这里并自动换歌。");
+        } else stopLive();
+        return;
+      }
       if (e.target.checked) {
         unlockAudio();
         state.userPaused = false;
@@ -4979,6 +5089,30 @@
       state.speakPending = id || state.uiEmo || "";
       state.speakSince = Date.now() - Math.max(0, Number(ageMs) || 0);
       state.speakHits = Number(hits) || 0;
+    },
+    // 测试用：程序此刻认为的主脸位置（视频像素中心），以及是否在用浏览器逐帧跟脸
+    trackProbe: () => {
+      const items = state.overlayTarget || [];
+      const i = items.findIndex((m) => m.primary);
+      const k = i >= 0 ? i : 0;
+      const m = items[k];
+      if (!m || !m.raw || !ui.cam.videoWidth) return null;
+      const size = state.lastTrackSize || [ui.cam.videoWidth, ui.cam.videoHeight];
+      const s = ui.cam.videoWidth / (Number(size[0]) || ui.cam.videoWidth);
+      let cx = (m.raw[0] + m.raw[2] / 2) * s;
+      let cy = (m.raw[1] + m.raw[3] / 2) * s;
+      if (state.trackerOn && state.tracker) {
+        state.tracker.sample(true);
+        const d = state.tracker.delta(k);
+        cx += d.dx;
+        cy += d.dy;
+      } else if (m.vel && m.vk) {
+        const now = performance.now();
+        const lead = Math.min(260, now - (state.overlayTargetAt || now) + (state.trackRtt || 0) * 0.8);
+        cx += (m.vel.x * lead) / m.vk * (state.mirror ? -1 : 1);
+        cy += (m.vel.y * lead) / m.vk;
+      }
+      return { cx, cy, tracker: !!state.trackerOn, dbg: state.tracker ? state.tracker.debug() : null };
     },
     setTrackForTest: (id) => {
       state.trackEmo = id || "";
